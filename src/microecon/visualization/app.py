@@ -116,6 +116,13 @@ class VisualizationApp:
         # Hover tracking
         self.hovered_agent: Optional[Agent] = None
 
+        # Selection tracking (click to select, shows perception radius)
+        self.selected_agent: Optional[Agent] = None
+
+        # Movement trail tracking
+        self.position_history: dict[str, list[Position]] = {}  # agent_id -> recent positions
+        self.TRAIL_LENGTH = 5
+
     def grid_to_canvas(self, pos: Position) -> tuple[float, float]:
         """Convert grid position to canvas coordinates."""
         x = self.canvas_origin[0] + (pos.col + 0.5) * self.cell_size
@@ -236,6 +243,7 @@ class VisualizationApp:
         """Execute a single simulation step."""
         trades = self.sim.step()
         self.record_trades(trades)
+        self.record_positions()
 
     def on_speed_change(self, sender: int, app_data: float) -> None:
         """Handle speed slider change."""
@@ -251,6 +259,8 @@ class VisualizationApp:
             seed=self.seed,
         )
         self.trade_animations.clear()
+        self.position_history.clear()
+        self.selected_agent = None
 
     def record_trades(self, trades: list[TradeEvent]) -> None:
         """Record trades for animation."""
@@ -262,6 +272,22 @@ class VisualizationApp:
                 start_time=current_time,
             ))
 
+    def record_positions(self) -> None:
+        """Record current positions for trail rendering."""
+        for agent in self.sim.agents:
+            pos = self.sim.grid.get_position(agent)
+            if pos is None:
+                continue
+            if agent.id not in self.position_history:
+                self.position_history[agent.id] = []
+            history = self.position_history[agent.id]
+            # Only record if position changed (avoid duplicates when stationary)
+            if not history or history[-1] != pos:
+                history.append(pos)
+            # Trim to TRAIL_LENGTH
+            if len(history) > self.TRAIL_LENGTH:
+                self.position_history[agent.id] = history[-self.TRAIL_LENGTH:]
+
     def update(self) -> None:
         """Update simulation state if playing."""
         if self.playing:
@@ -270,6 +296,7 @@ class VisualizationApp:
             if current_time - self.last_tick_time >= tick_interval:
                 trades = self.sim.step()
                 self.record_trades(trades)
+                self.record_positions()
                 self.last_tick_time = current_time
 
         # Clean up expired animations
@@ -292,6 +319,32 @@ class VisualizationApp:
         local_y = mouse_pos[1] - dl_pos[1]
 
         self.hovered_agent = self.find_agent_at_canvas(local_x, local_y)
+
+    def update_selection(self) -> None:
+        """Handle click on canvas for agent selection."""
+        # Only process on mouse click
+        if not dpg.is_mouse_button_clicked(dpg.mvMouseButton_Left):
+            return
+
+        if not dpg.is_item_hovered("grid_drawlist"):
+            return
+
+        mouse_pos = dpg.get_mouse_pos(local=False)
+        dl_pos = dpg.get_item_pos("grid_drawlist")
+        local_x = mouse_pos[0] - dl_pos[0]
+        local_y = mouse_pos[1] - dl_pos[1]
+
+        clicked_agent = self.find_agent_at_canvas(local_x, local_y)
+
+        if clicked_agent is None:
+            # Clicked empty space - deselect
+            self.selected_agent = None
+        elif clicked_agent == self.selected_agent:
+            # Clicked same agent - toggle off
+            self.selected_agent = None
+        else:
+            # Clicked new agent - select it
+            self.selected_agent = clicked_agent
 
     def render(self) -> None:
         """Render the current simulation state."""
@@ -322,6 +375,8 @@ class VisualizationApp:
         dpg.delete_item(self.drawlist, children_only=True)
 
         self.render_grid()
+        self.render_trails()              # Trails behind agents
+        self.render_perception_overlay()  # Radius behind agents
         self.render_trade_animations()
         self.render_agents()
         self.render_metrics()
@@ -351,6 +406,56 @@ class VisualizationApp:
                 parent=self.drawlist,
             )
 
+    def render_trails(self) -> None:
+        """Draw movement trails for all agents."""
+        for agent in self.sim.agents:
+            history = self.position_history.get(agent.id, [])
+            if len(history) < 2:
+                continue
+
+            # Get current position as trail head
+            current_pos = self.sim.grid.get_position(agent)
+            if current_pos is None:
+                continue
+
+            # Build point list: history + current (oldest to newest)
+            points = history + [current_pos]
+
+            # Draw line segments with fading opacity
+            for i in range(len(points) - 1):
+                # Fade: oldest segments more transparent
+                alpha = int(40 + (i / len(points)) * 80)  # 40 to 120
+                p1 = self.grid_to_canvas(points[i])
+                p2 = self.grid_to_canvas(points[i + 1])
+
+                # Use agent's color but with reduced opacity
+                base_color = alpha_to_color(agent.preferences.alpha)
+                trail_color = (base_color[0], base_color[1], base_color[2], alpha)
+
+                dpg.draw_line(p1, p2, color=trail_color, thickness=2, parent=self.drawlist)
+
+    def render_perception_overlay(self) -> None:
+        """Draw perception radius circle for selected agent."""
+        if self.selected_agent is None:
+            return
+
+        pos = self.sim.grid.get_position(self.selected_agent)
+        if pos is None:
+            return
+
+        cx, cy = self.grid_to_canvas(pos)
+        # Convert perception_radius (grid units) to canvas pixels
+        radius_px = self.selected_agent.perception_radius * self.cell_size
+
+        # Draw semi-transparent circle
+        dpg.draw_circle(
+            (cx, cy),
+            radius_px,
+            color=(100, 150, 255, 60),  # Light blue stroke
+            fill=(100, 150, 255, 30),   # Very subtle fill
+            parent=self.drawlist,
+        )
+
     def render_agents(self) -> None:
         """Render all agents on the grid."""
         # Group agents by position for overlap handling
@@ -372,8 +477,17 @@ class VisualizationApp:
                 agent = agents[0]
                 color = alpha_to_color(agent.preferences.alpha)
 
-                # Highlight if hovered
-                if agent == self.hovered_agent:
+                # Selection ring (thicker, more prominent)
+                if agent == self.selected_agent:
+                    dpg.draw_circle(
+                        (cx, cy),
+                        agent_radius + 5,
+                        color=(255, 255, 255, 255),
+                        thickness=3,
+                        parent=self.drawlist,
+                    )
+                # Hover highlight (thinner)
+                elif agent == self.hovered_agent:
                     dpg.draw_circle(
                         (cx, cy),
                         agent_radius + 3,
@@ -398,19 +512,29 @@ class VisualizationApp:
                     ax = cx + offset * math.cos(angle)
                     ay = cy + offset * math.sin(angle)
                     color = alpha_to_color(agent.preferences.alpha)
+                    small_radius = agent_radius * 0.7
 
-                    # Highlight if hovered
-                    if agent == self.hovered_agent:
+                    # Selection ring (thicker, more prominent)
+                    if agent == self.selected_agent:
                         dpg.draw_circle(
                             (ax, ay),
-                            agent_radius * 0.7 + 3,
+                            small_radius + 4,
+                            color=(255, 255, 255, 255),
+                            thickness=2,
+                            parent=self.drawlist,
+                        )
+                    # Hover highlight (thinner)
+                    elif agent == self.hovered_agent:
+                        dpg.draw_circle(
+                            (ax, ay),
+                            small_radius + 3,
                             color=(255, 255, 255, 200),
                             parent=self.drawlist,
                         )
 
                     dpg.draw_circle(
                         (ax, ay),
-                        agent_radius * 0.7,
+                        small_radius,
                         color=color,
                         fill=color,
                         parent=self.drawlist,
@@ -496,6 +620,7 @@ class VisualizationApp:
         while dpg.is_dearpygui_running():
             self.update()
             self.update_hover()
+            self.update_selection()
             self.render()
             dpg.render_dearpygui_frame()
 

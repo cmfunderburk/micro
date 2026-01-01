@@ -252,11 +252,12 @@ The platform takes inspiration from VMT's problem space:
 This document (**VISION.md**) is the authoritative statement of project identity and direction.
 
 Other documents serve supporting roles:
-- **comprehensive-spec.md**: Technical architecture for core engine
 - **theoretical-foundations.md**: Textbook mappings and implementation notes
 - **CLAUDE.md**: Development guidance and conventions
 
-When documents conflict, this vision document takes precedence on matters of identity, scope, and methodology. The comprehensive spec takes precedence on technical implementation details within the vision's constraints.
+Architecture emerges through development rather than upfront specification.
+
+When documents conflict, this vision document takes precedence on matters of identity, scope, and methodology.
 
 ---
 

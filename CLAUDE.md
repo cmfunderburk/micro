@@ -21,7 +21,7 @@ The core simulation infrastructure in `src/microecon/`:
 | `agent.py` | Agent with private state / observable type separation |
 | `grid.py` | `Grid(size)`, `Position`, movement, spatial queries |
 | `information.py` | `InformationEnvironment` abstraction, `FullInformation` implementation |
-| `bargaining.py` | Nash bargaining solution, surplus calculation, trade execution |
+| `bargaining.py` | Bargaining solutions (Nash, Rubinstein), protocol abstraction |
 | `search.py` | Target evaluation (discounted Nash surplus), movement decisions |
 | `simulation.py` | `Simulation` engine with tick loop, `create_simple_economy()` factory |
 
@@ -50,7 +50,7 @@ Run with: `uv run python -m microecon.visualization`
 
 ### Test Coverage
 
-92 tests covering all core modules. Run with: `uv run pytest`
+112 tests covering all core modules. Run with: `uv run pytest`
 
 ## Architecture
 
@@ -76,6 +76,12 @@ src/microecon/
 **Agent state vs. observable type**: Agents have private state (true preferences, endowments) separate from observable type (what others can see). Currently type = private state (full information), but the architecture supports future information environments.
 
 **Information environment**: `InformationEnvironment` interface determines what agents can observe about each other. `FullInformation` exposes everything; future implementations can restrict visibility.
+
+**Bargaining protocol**: `BargainingProtocol` ABC enables swapping institutional rules. Two implementations:
+- `NashBargainingProtocol`: Axiomatic solution (symmetric, maximizes Nash product)
+- `RubinsteinBargainingProtocol`: Strategic alternating-offers (first-mover advantage, patience = power)
+
+This enables the core research question: "What difference does the institution make?"
 
 **Search with discounted surplus**: Agents evaluate visible others by computing Nash bargaining surplus, discounted by distance. This couples search meaningfully to exchange - agents pursue opportunities that maximize expected gains from trade.
 
@@ -116,12 +122,12 @@ All behavioral rules, bargaining protocols, and institutional mechanisms must ha
 
 ## Next Development Directions
 
-The simulation and visualization foundations are complete. Potential next steps (not prioritized):
+The simulation, visualization, and first institutional comparison (Nash vs Rubinstein bargaining) are complete. Potential next steps (not prioritized):
 
 **Institutional comparisons** (core research value per VISION.md)
-- Alternative bargaining protocols (Rubinstein, TIOLI, posted prices)
+- Additional bargaining protocols (TIOLI, posted prices, double auction)
 - Swappable matching mechanisms
-- Compare outcomes under different institutional rules
+- Systematic comparison studies (parameter sweeps, outcome distributions)
 
 **Information environments**
 - Private information (type ≠ private state)

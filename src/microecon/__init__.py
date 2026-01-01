@@ -11,10 +11,20 @@ from microecon.preferences import CobbDouglas
 from microecon.agent import Agent, AgentPrivateState, AgentType
 from microecon.grid import Grid, Position
 from microecon.information import InformationEnvironment, FullInformation
-from microecon.bargaining import nash_bargaining_solution, compute_nash_surplus
-from microecon.simulation import Simulation
+from microecon.bargaining import (
+    nash_bargaining_solution,
+    compute_nash_surplus,
+    rubinstein_share,
+    rubinstein_bargaining_solution,
+    compute_rubinstein_surplus,
+    BargainingProtocol,
+    NashBargainingProtocol,
+    RubinsteinBargainingProtocol,
+)
+from microecon.simulation import Simulation, create_simple_economy
 
 __all__ = [
+    # Core types
     "Bundle",
     "CobbDouglas",
     "Agent",
@@ -22,9 +32,21 @@ __all__ = [
     "AgentType",
     "Grid",
     "Position",
+    # Information environments
     "InformationEnvironment",
     "FullInformation",
+    # Bargaining - Nash (axiomatic)
     "nash_bargaining_solution",
     "compute_nash_surplus",
+    # Bargaining - Rubinstein (strategic)
+    "rubinstein_share",
+    "rubinstein_bargaining_solution",
+    "compute_rubinstein_surplus",
+    # Bargaining protocols (institutional abstraction)
+    "BargainingProtocol",
+    "NashBargainingProtocol",
+    "RubinsteinBargainingProtocol",
+    # Simulation
     "Simulation",
+    "create_simple_economy",
 ]

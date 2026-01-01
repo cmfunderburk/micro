@@ -17,7 +17,12 @@ import random
 from microecon.agent import Agent, create_agent
 from microecon.grid import Grid, Position
 from microecon.information import InformationEnvironment, FullInformation
-from microecon.bargaining import execute_trade, BargainingOutcome
+from microecon.bargaining import (
+    execute_trade,
+    BargainingOutcome,
+    BargainingProtocol,
+    NashBargainingProtocol,
+)
 from microecon.search import compute_move_target, should_trade
 
 
@@ -58,11 +63,13 @@ class Simulation:
         grid: The spatial grid
         agents: All agents in the simulation
         info_env: Information environment
+        bargaining_protocol: Protocol for bilateral bargaining (Nash, Rubinstein, etc.)
         tick: Current tick number
         trades: History of trades
     """
     grid: Grid
     info_env: InformationEnvironment = field(default_factory=FullInformation)
+    bargaining_protocol: BargainingProtocol = field(default_factory=NashBargainingProtocol)
     agents: list[Agent] = field(default_factory=list)
     tick: int = 0
     trades: list[TradeEvent] = field(default_factory=list)
@@ -164,7 +171,9 @@ class Simulation:
                     continue
 
                 if should_trade(agent, other, self.info_env):
-                    outcome = execute_trade(agent, other)
+                    # The agent who found the other becomes the proposer
+                    # (first-mover advantage in Rubinstein)
+                    outcome = self.bargaining_protocol.execute(agent, other, proposer=agent)
                     if outcome.trade_occurred:
                         event = TradeEvent(
                             tick=self.tick,
@@ -224,6 +233,7 @@ def create_simple_economy(
     perception_radius: float = 7.0,
     discount_factor: float = 0.95,
     seed: Optional[int] = None,
+    bargaining_protocol: Optional[BargainingProtocol] = None,
 ) -> Simulation:
     """
     Create a simple economy with heterogeneous agents.
@@ -241,6 +251,7 @@ def create_simple_economy(
         perception_radius: How far agents can see
         discount_factor: Time preference
         seed: Random seed for reproducibility
+        bargaining_protocol: Protocol for bilateral bargaining (default: Nash)
 
     Returns:
         Configured Simulation ready to run
@@ -251,6 +262,7 @@ def create_simple_economy(
     sim = Simulation(
         grid=Grid(grid_size),
         info_env=FullInformation(),
+        bargaining_protocol=bargaining_protocol or NashBargainingProtocol(),
     )
 
     for i in range(n_agents):

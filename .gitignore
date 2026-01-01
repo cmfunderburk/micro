@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# Project-specific
+references/
+.archived/

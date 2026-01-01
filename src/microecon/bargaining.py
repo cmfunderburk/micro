@@ -171,58 +171,46 @@ def _solve_nash_cobb_douglas(
     """
     Solve for Nash bargaining allocation with Cobb-Douglas preferences.
 
-    Uses the first-order conditions for the Nash product maximization.
+    Uses golden section search for efficient unimodal optimization.
+    The Nash product with Cobb-Douglas utilities is quasiconcave,
+    so golden section search converges to the global optimum.
 
-    The Lagrangian for maximizing ln(u1 - d1) + ln(u2 - d2) subject to
-    feasibility gives FOCs that characterize the solution.
-
-    For numerical stability, we use a grid search over agent 1's share
-    of good x, then solve for optimal y1 given x1.
+    Strategy:
+    1. Define objective: for given x1, find optimal y1, return Nash product
+    2. Use golden section search over x1 to find the optimum
     """
-    best_nash_product = -float('inf')
-    best_allocation = (Bundle(W_x / 2, W_y / 2), Bundle(W_x / 2, W_y / 2))
+    # Small epsilon for numerical stability
+    eps = min(1e-6, W_x * 1e-6, W_y * 1e-6)
 
-    # Grid search over x1 share with refinement
-    for resolution in [100, 1000]:
-        best_x1 = W_x / 2
-        local_best = best_nash_product
+    def objective(x1: float) -> float:
+        """Nash product maximized over y1 for given x1."""
+        if x1 <= eps or x1 >= W_x - eps:
+            return -float('inf')
+        x2 = W_x - x1
+        _, np_val = _optimize_y1(alpha1, alpha2, x1, x2, W_y, d1, d2, eps)
+        return np_val
 
-        for i in range(resolution + 1):
-            x1 = (i / resolution) * W_x
-            x2 = W_x - x1
+    # Golden section search over x1
+    phi = (1 + math.sqrt(5)) / 2
+    a, b = eps, W_x - eps
 
-            if x1 <= 0 or x2 <= 0:
-                continue
+    c = b - (b - a) / phi
+    d_pt = a + (b - a) / phi
 
-            # For given x1, x2, find optimal y1 to maximize Nash product
-            # This is a 1D optimization problem
-            y1_opt, np_val = _optimize_y1(alpha1, alpha2, x1, x2, W_y, d1, d2)
+    # 60 iterations gives ~1e-13 relative precision
+    for _ in range(60):
+        if objective(c) > objective(d_pt):
+            b = d_pt
+        else:
+            a = c
+        c = b - (b - a) / phi
+        d_pt = a + (b - a) / phi
 
-            if np_val > local_best:
-                local_best = np_val
-                best_x1 = x1
+    best_x1 = (a + b) / 2
+    x2 = W_x - best_x1
+    best_y1, _ = _optimize_y1(alpha1, alpha2, best_x1, x2, W_y, d1, d2, eps)
 
-        # Refine around best_x1
-        if resolution == 100:
-            # Narrow the search window
-            delta = W_x / resolution
-            search_min = max(0.001, best_x1 - delta)
-            search_max = min(W_x - 0.001, best_x1 + delta)
-
-            for i in range(resolution + 1):
-                x1 = search_min + (i / resolution) * (search_max - search_min)
-                x2 = W_x - x1
-
-                if x1 <= 0 or x2 <= 0:
-                    continue
-
-                y1_opt, np_val = _optimize_y1(alpha1, alpha2, x1, x2, W_y, d1, d2)
-
-                if np_val > best_nash_product:
-                    best_nash_product = np_val
-                    best_allocation = (Bundle(x1, y1_opt), Bundle(x2, W_y - y1_opt))
-
-    return best_allocation
+    return (Bundle(best_x1, best_y1), Bundle(x2, W_y - best_y1))
 
 
 def _optimize_y1(
@@ -233,6 +221,7 @@ def _optimize_y1(
     W_y: float,
     d1: float,
     d2: float,
+    eps: float = 1e-6,
 ) -> tuple[float, float]:
     """
     Optimize y1 given x1, x2 to maximize Nash product.
@@ -241,7 +230,16 @@ def _optimize_y1(
     NP(y1) = (x1^a1 * y1^(1-a1) - d1) * (x2^a2 * (W_y - y1)^(1-a2) - d2)
 
     We use golden section search for unimodal optimization.
+
+    Args:
+        eps: Small value for numerical bounds. Adapts to small endowments.
     """
+    # Ensure valid search interval even for small W_y
+    bound_eps = min(eps, W_y * 0.01)
+    if bound_eps * 2 >= W_y:
+        # W_y too small for meaningful optimization
+        return W_y / 2, -float('inf')
+
     def nash_product(y1: float) -> float:
         if y1 <= 0 or y1 >= W_y:
             return -float('inf')
@@ -257,7 +255,7 @@ def _optimize_y1(
 
     # Golden section search
     phi = (1 + math.sqrt(5)) / 2
-    a, b = 0.001, W_y - 0.001
+    a, b = bound_eps, W_y - bound_eps
 
     c = b - (b - a) / phi
     d_pt = a + (b - a) / phi

@@ -316,20 +316,54 @@ This enables both real-time exploration and post-hoc analysis of recorded runs.
 
 Primary deployment is a dedicated application window, not embedded in notebooks or web pages.
 
-### Technology Choice
+### Technology Choice: DearPyGui
 
-No strong constraint. Selection should optimize for:
-- Flat design aesthetic capability
-- Smooth animation at scale (100-500+ agents)
-- Export flexibility (static, animated, vector)
-- Event-driven architecture for live + replay modes
+**Selected framework**: [DearPyGui](https://github.com/hoffstadt/DearPyGui) - GPU-accelerated Python GUI framework
 
-Candidate stacks to evaluate:
-- **Python native**: Pygame, PyQt + custom rendering, Arcade
-- **Web-based**: Electron + D3/Canvas, Tauri + web tech
-- **Game engines**: Godot (has Python bindings), custom lightweight
+**Rationale**:
+- **Dashboard-first architecture**: Built for panels, charts, and controls alongside custom drawing
+- **GPU acceleration**: Handles 1M+ datapoints at 60fps; 100-500 agents is well within capability
+- **Drawing API**: Full 2D drawing with layers, transformations, and z-ordering
+- **ImPlot integration**: Native support for real-time charts and time-series visualization
+- **Python-native**: Single language for simulation and visualization
+- **Proven for games**: Tetris, Snake, flow-field simulations built with it
 
-Decision deferred to implementation planning.
+**Key capabilities for this project**:
+- `drawlist` with layers for grid → agents → overlays
+- `draw_node` with transformation matrices for zoom/pan
+- Immediate-mode paradigm enables rapid iteration
+- Built-in widgets for sliders, panels, tabs, docking
+- Viewport drawing for overlays
+
+**Architecture pattern**:
+```
+┌─────────────────────────────────────────────────────────────┐
+│  DearPyGui Viewport                                         │
+├─────────────────────────────────┬───────────────────────────┤
+│                                 │  Metrics Panel            │
+│  Grid Drawlist                  │  ├─ Trade statistics      │
+│  ├─ Layer: Grid lines           │  ├─ Welfare measures      │
+│  ├─ Layer: Agents               │  └─ Spatial statistics    │
+│  ├─ Layer: Trails (toggle)      ├───────────────────────────┤
+│  └─ Layer: Overlays (toggle)    │  Time Series Plot         │
+│                                 │  (ImPlot integration)     │
+│  [Tooltip on hover]             │                           │
+├─────────────────────────────────┼───────────────────────────┤
+│  Playback Controls              │  Config Panel             │
+│  [▶] [⏸] [Speed slider]         │  Parameters, toggles      │
+└─────────────────────────────────┴───────────────────────────┘
+```
+
+**Resources**:
+- [Drawing API documentation](https://dearpygui.readthedocs.io/en/latest/documentation/drawing-api.html)
+- [Showcase with games](https://github.com/hoffstadt/DearPyGui/wiki/Dear-PyGui-Showcase)
+- [Animation add-on](https://github.com/mrtnRitter/DearPyGui_Animate)
+
+**Alternatives considered**:
+- *Arcade*: Better game-feel but weaker dashboard/chart integration
+- *Pygame*: CPU-based, may struggle at scale
+- *Tauri*: Excellent performance but requires JavaScript, separate from simulation code
+- *Godot*: Full game engine, overkill; Python bindings less stable
 
 ---
 
@@ -350,11 +384,11 @@ These may be reconsidered as needs evolve.
 2. **Font and typography**: What typeface supports both game-like feel and scientific clarity?
 3. **Exact layout proportions**: How much screen real estate for grid vs. panels in each mode?
 4. **Animation timing**: Exact tick duration, interpolation curves?
-5. **Technology stack**: Final selection among candidates
 
 These will be resolved during implementation phase.
 
 ---
 
-**Document Version:** 1.0
+**Document Version:** 1.1
 **Created:** 2026-01-01
+**Updated:** 2026-01-01 - Technology decision (DearPyGui)

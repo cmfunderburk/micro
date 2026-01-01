@@ -221,7 +221,7 @@ class Simulation:
 def create_simple_economy(
     n_agents: int,
     grid_size: int = 10,
-    perception_radius: float = 3.0,
+    perception_radius: float = 7.0,
     discount_factor: float = 0.95,
     seed: Optional[int] = None,
 ) -> Simulation:

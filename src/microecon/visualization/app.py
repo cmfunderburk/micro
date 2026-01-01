@@ -295,9 +295,17 @@ class VisualizationApp:
 
     def render(self) -> None:
         """Render the current simulation state."""
-        # Get drawlist dimensions
-        width = dpg.get_item_width("grid_container") - 20
-        height = dpg.get_item_height("grid_container") - 20
+        # Get dimensions from viewport (more reliable with tiling WMs)
+        vp_width = dpg.get_viewport_client_width()
+        vp_height = dpg.get_viewport_client_height()
+
+        # Calculate grid container size (viewport minus metrics panel and controls)
+        width = vp_width - self.METRICS_PANEL_WIDTH - 30
+        height = vp_height - self.CONTROLS_HEIGHT - 30
+
+        # Ensure minimum dimensions
+        width = max(200, width)
+        height = max(200, height)
 
         # Update drawlist size
         dpg.configure_item(self.drawlist, width=width, height=height)

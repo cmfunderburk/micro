@@ -8,12 +8,92 @@ This is a research-first agent-based microeconomics platform that gives canonica
 
 See VISION.md for the authoritative statement of project identity and methodology.
 
-## Architecture (Planned)
+## Current Implementation Status
 
-The platform consists of:
-- **Core Engine**: Agents, simulation loop, events, phases, snapshots
-- **Modules**: Preference foundations, consumer choice, production, bilateral exchange, search markets, signaling (developed as needed)
-- **NxN Grid Visualization**: Spatial grounding for search, matching, and information phenomena
+### Simulation Core (Complete)
+
+The core simulation infrastructure in `src/microecon/`:
+
+| Module | Purpose |
+|--------|---------|
+| `bundle.py` | `Bundle(x, y)` - 2-good economy representation |
+| `preferences.py` | `CobbDouglas(alpha)` - u(x,y) = x^α * y^(1-α) |
+| `agent.py` | Agent with private state / observable type separation |
+| `grid.py` | `Grid(size)`, `Position`, movement, spatial queries |
+| `information.py` | `InformationEnvironment` abstraction, `FullInformation` implementation |
+| `bargaining.py` | Nash bargaining solution, surplus calculation, trade execution |
+| `search.py` | Target evaluation (discounted Nash surplus), movement decisions |
+| `simulation.py` | `Simulation` engine with tick loop, `create_simple_economy()` factory |
+
+### Visualization (MVP Complete)
+
+DearPyGui-based visualization in `src/microecon/visualization/`. See VISUALIZATION.md for full design vision.
+
+**Implemented:**
+- Grid rendering with agents colored by preference parameter (alpha)
+- Play/pause/step/reset controls with speed slider
+- Trade animations (line flash between trading agents)
+- Metrics panel (tick, trades, welfare, gains)
+- Hover tooltips showing agent details
+- Click-to-select with perception radius overlay
+- Movement trails
+
+**From VISUALIZATION.md, not yet implemented:**
+- Trade zoom view / Edgeworth box
+- Time series charts (ImPlot integration)
+- Agent perspective mode (for information asymmetry)
+- Export capabilities (PNG, GIF, CSV, SVG)
+- Config file support (YAML/JSON scenarios)
+- Replay mode (currently live-only)
+
+Run with: `uv run python -m microecon.visualization`
+
+### Test Coverage
+
+92 tests covering all core modules. Run with: `uv run pytest`
+
+## Architecture
+
+```
+src/microecon/
+├── __init__.py          # Public API exports
+├── bundle.py            # 2-good bundles
+├── preferences.py       # Utility functions (Cobb-Douglas)
+├── agent.py             # Agent, AgentPrivateState, AgentType
+├── grid.py              # Spatial grid and positions
+├── information.py       # Information environment abstraction
+├── bargaining.py        # Nash bargaining solution
+├── search.py            # Target selection and movement
+├── simulation.py        # Main simulation engine
+└── visualization/
+    ├── __init__.py
+    ├── __main__.py      # Entry point for -m invocation
+    └── app.py           # DearPyGui visualization
+```
+
+### Key Abstractions
+
+**Agent state vs. observable type**: Agents have private state (true preferences, endowments) separate from observable type (what others can see). Currently type = private state (full information), but the architecture supports future information environments.
+
+**Information environment**: `InformationEnvironment` interface determines what agents can observe about each other. `FullInformation` exposes everything; future implementations can restrict visibility.
+
+**Search with discounted surplus**: Agents evaluate visible others by computing Nash bargaining surplus, discounted by distance. This couples search meaningfully to exchange - agents pursue opportunities that maximize expected gains from trade.
+
+## Development Commands
+
+```bash
+# Run tests
+uv run pytest
+
+# Run tests with coverage
+uv run pytest --cov=microecon
+
+# Run visualization
+uv run python -m microecon.visualization
+
+# Run visualization with custom parameters
+uv run python -c "from microecon.visualization import run_visualization; run_visualization(n_agents=20, grid_size=20, seed=42)"
+```
 
 ## Theoretical Grounding Requirements
 
@@ -29,75 +109,34 @@ All behavioral rules, bargaining protocols, and institutional mechanisms must ha
 ## Document Hierarchy
 
 1. **VISION.md** - Authoritative on identity, scope, methodology
-2. **theoretical-foundations.md** - Textbook mappings
-3. **CLAUDE.md** - Development guidance
+2. **theoretical-foundations.md** - Textbook mappings and derivations
+3. **VISUALIZATION.md** - Full visualization design vision (UI/UX, technology choices, future features)
+4. **VISUALIZATION_MVP_SPEC.md** - MVP requirements (complete, checklist at bottom shows all items done)
+5. **CLAUDE.md** - Development guidance and current status
 
-Architecture emerges through development rather than upfront specification.
+## Next Development Directions
 
-## First Milestone: Grid Search and Matching
+The simulation and visualization foundations are complete. Potential next steps (not prioritized):
 
-Build simulation infrastructure (no visualization yet) for agents searching on an NxN grid.
+**Institutional comparisons** (core research value per VISION.md)
+- Alternative bargaining protocols (Rubinstein, TIOLI, posted prices)
+- Swappable matching mechanisms
+- Compare outcomes under different institutional rules
 
-**Agent capabilities:**
-- **Perception radius**: How much of the grid an agent can observe (configurable)
-- **Movement budget**: Squares-per-tick (default: 1)
-- **Target selection**: Agents search for other agents/opportunities that maximize expected utility, discounted per tick
+**Information environments**
+- Private information (type ≠ private state)
+- Signaling and screening
+- Partial observability
+- Agent perspective mode in visualization (see what agent X sees)
 
-**Economic grounding:**
-- Perception radius = information structure (limited vs complete information)
-- Movement budget = search cost (time/opportunity cost)
-- Discounting = patience / time preference
-- Target selection = utility maximization under constraints
+**Visualization enhancements** (see VISUALIZATION.md §4-9 for full specs)
+- Trade zoom view with Edgeworth box (§4)
+- Time series charts via ImPlot (§9)
+- Export: PNG/SVG frames, GIF/MP4 animations, CSV data logs (§12)
+- Replay mode from logged history (§14)
 
-**Coupling search and bargaining:**
-
-Search is only meaningful when agents can anticipate gains from trade. Agents need to evaluate potential partners by computing expected surplus. The Nash bargaining solution serves as the default "reduced form" for expected outcomes:
-- Axiomatic foundation (not tied to specific protocol mechanics)
-- Unique prediction given preferences and disagreement point
-- Agents use this to evaluate opportunities even if actual bargaining protocol differs
-
-Target selection logic:
-```
-For each agent j in perception radius:
-    expected_surplus[j] = nash_bargaining_surplus(self, j)
-    discounted_value[j] = expected_surplus[j] * δ^(ticks_to_reach_j)
-Move toward argmax(discounted_value)
-```
-
-**Economic structure:**
-- 2-good economy
-- Cobb-Douglas preferences: u(x,y) = x^α * y^(1-α)
-- Heterogeneous endowments (drives gains from trade)
-
-**Agent state vs. observable type:**
-
-Agents have two distinct components:
-
-1. **Private state**: The agent's true characteristics
-   - Utility function (Cobb-Douglas α parameter)
-   - Endowments (holdings of each good)
-   - These determine actual behavior and payoffs
-
-2. **Type**: Publicly observable characteristics
-   - What other agents can perceive within their perception radius
-   - The information available for evaluating potential trade partners
-   - Content depends on the information environment
-
-This separation is architecturally critical:
-- **Full information**: Type exposes preferences and endowments (MVP default)
-- **Private information**: Type may be hidden or partially revealed
-- **Signaling**: Agents take costly actions to reveal type
-- **Mechanism design**: Institutions elicit type reports
-
-For the first milestone, type = private state (complete information). But the abstraction must keep them separate to support future information environments.
-
-This aligns with game-theoretic foundations where "type" specifically means the publicly-relevant characteristics that other players can condition on (O&R-G Ch 11, Kreps II Ch 20-21).
-
-**Scope:**
-- Grid representation and agent placement
-- Agent with private state (utility function, endowments) and observable type
-- Information environment configuration (MVP: full information, type = private state)
-- Simulation tick loop
-- Movement and meeting mechanics
-- Nash bargaining surplus calculation (for search evaluation, based on observed types)
-- Exchange mechanics when agents meet (Nash bargaining outcome)
+**Analysis infrastructure**
+- Equilibrium benchmarks (Walrasian prices for comparison)
+- Statistical summaries across runs
+- Config files for reproducible scenarios (YAML/JSON)
+- Parameter sweep tools

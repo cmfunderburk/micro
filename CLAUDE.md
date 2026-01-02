@@ -23,7 +23,8 @@ The core simulation infrastructure in `src/microecon/`:
 | `information.py` | `InformationEnvironment` abstraction, `FullInformation` implementation |
 | `bargaining.py` | Bargaining solutions (Nash, Rubinstein), protocol abstraction |
 | `search.py` | Target evaluation (discounted Nash surplus), movement decisions |
-| `simulation.py` | `Simulation` engine with tick loop, `create_simple_economy()` factory |
+| `matching.py` | Matching protocols (Opportunistic, StableRoommates), commitment state |
+| `simulation.py` | `Simulation` engine with four-phase tick loop, `create_simple_economy()` factory |
 | `batch.py` | `BatchRunner` for parameter sweeps and systematic comparisons |
 
 ### Logging & Analysis (Complete)
@@ -66,7 +67,7 @@ Run with: `uv run python -m microecon.visualization`
 
 ### Test Coverage
 
-160 tests covering all core modules. Run with: `uv run pytest`
+341 tests covering all core modules. Run with: `uv run pytest`
 
 ## Architecture
 
@@ -80,7 +81,8 @@ src/microecon/
 ├── information.py       # Information environment abstraction
 ├── bargaining.py        # Nash bargaining solution
 ├── search.py            # Target selection and movement
-├── simulation.py        # Main simulation engine
+├── matching.py          # Matching protocols (Opportunistic, StableRoommates)
+├── simulation.py        # Main simulation engine (four-phase tick)
 ├── batch.py             # BatchRunner for parameter sweeps
 ├── logging/
 │   ├── __init__.py
@@ -110,7 +112,11 @@ src/microecon/
 - `NashBargainingProtocol`: Axiomatic solution (symmetric, maximizes Nash product)
 - `RubinsteinBargainingProtocol`: Strategic alternating-offers (first-mover advantage, patience = power)
 
-This enables the core research question: "What difference does the institution make?"
+**Matching protocol**: `MatchingProtocol` ABC determines how agents form trading pairs. Two implementations:
+- `OpportunisticMatchingProtocol`: Any co-located pair can trade (default, myopic)
+- `StableRoommatesMatchingProtocol`: Irving's algorithm forms committed pairs (stable, globally optimal)
+
+Both abstractions enable the core research question: "What difference does the institution make?"
 
 **Search with discounted surplus**: Agents evaluate visible others by computing Nash bargaining surplus, discounted by distance. This couples search meaningfully to exchange - agents pursue opportunities that maximize expected gains from trade.
 

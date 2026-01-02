@@ -1,7 +1,7 @@
 # Current Project Status
 
 **Version:** 0.0.1 (pre-release)
-**Date:** 2026-01-01
+**Date:** 2026-01-02
 **Purpose:** Definitive reference for current capabilities
 
 This document describes what exists and works today. For the long-term vision, see VISION.md. For the full visualization design, see VISUALIZATION.md.
@@ -23,7 +23,8 @@ A complete simulation engine for bilateral exchange in a spatial economy:
 | `information.py` | Information environment abstraction (`FullInformation` implemented) |
 | `bargaining.py` | Nash and Rubinstein bargaining protocols |
 | `search.py` | Target evaluation (discounted surplus), movement decisions |
-| `simulation.py` | Tick-based simulation loop, `create_simple_economy()` factory |
+| `matching.py` | Matching protocols (Opportunistic, StableRoommates) with commitment state |
+| `simulation.py` | Four-phase tick loop, `create_simple_economy()` factory |
 
 ### Bargaining Protocols
 
@@ -38,6 +39,23 @@ Two complete implementations with theoretical grounding:
 - Strategic extensive-form game solution
 - First-mover advantage based on discount factors
 - Converges to Nash as patience approaches 1
+
+### Matching Protocols
+
+Two complete implementations enabling institutional comparison:
+
+**Opportunistic Matching** (`OpportunisticMatchingProtocol`)
+- Default behavior: any co-located pair can trade
+- No commitment phase required
+- Simple, myopic matching
+
+**Stable Roommates Matching** (`StableRoommatesMatchingProtocol`)
+- Irving's algorithm (1985) for stable matching
+- Agents form committed pairs before trading
+- Only committed + co-located pairs can trade
+- Produces stable matching (no blocking pairs)
+
+**Empirical finding**: In trading chain scenario (4 agents), committed matching achieves 2.2% higher welfare than opportunistic matching. Matching protocols affect outcomes, not just paths.
 
 ### Batch Runs & Logging
 
@@ -87,7 +105,7 @@ Run with: `uv run python -m microecon.visualization`
 
 ### Test Coverage
 
-163 tests covering all core modules. Run with: `uv run pytest`
+341 tests covering all core modules. Run with: `uv run pytest`
 
 ---
 
@@ -170,12 +188,15 @@ class BargainingProtocol(ABC):
 
 New protocols (TIOLI, posted prices, double auction) implement this interface.
 
-### Simulation Phases
+### Simulation Phases (Four-Phase Tick)
 
 Each tick executes in order:
-1. **Search**: Agents evaluate visible others, select targets
-2. **Move**: Agents move toward targets (or random if none)
-3. **Exchange**: Co-located agents execute bargaining protocol
+1. **Evaluate**: Agents observe visible others, compute surplus rankings
+2. **Decide**: Form commitments (committed mode) or select targets (opportunistic)
+3. **Move**: Agents move toward committed partner or selected target
+4. **Exchange**: Execute bargaining (commitment-gated or any co-located)
+
+Pre-tick: Commitment maintenance breaks stale commitments when partners exit perception radius.
 
 ---
 
@@ -214,10 +235,10 @@ uv run pytest --cov=microecon
 
 | Vision Goal | Status |
 |-------------|--------|
-| Institutional visibility (swap protocols) | **Implemented** for bargaining |
+| Institutional visibility (swap protocols) | **Implemented** for bargaining and matching |
 | Equilibrium benchmarks | Bargaining only; no Walrasian/GE |
 | Information regimes | Architecture ready; only FullInformation |
-| Search/matching mechanisms | Single implementation; not modular |
+| Search/matching mechanisms | **Implemented** (Opportunistic, StableRoommates) |
 | Agent sophistication levels | Single level; no learning agents |
 | Market emergence metrics | Basic welfare only; no price/network analysis |
 
@@ -254,6 +275,7 @@ src/microecon/
 ├── information.py
 ├── bargaining.py
 ├── search.py
+├── matching.py
 ├── simulation.py
 ├── batch.py
 ├── logging/
@@ -277,4 +299,4 @@ src/microecon/
 ---
 
 **Document Version:** 0.0.1
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-01-02

@@ -1,12 +1,13 @@
 """
 Simulation engine for grid-based search and exchange.
 
-The simulation runs in discrete ticks. Each tick:
-1. Agents evaluate visible targets
-2. Agents move toward best targets
-3. Agents at same position may trade (Nash bargaining)
+The simulation runs in discrete ticks with four phases:
+1. EVALUATE - Observe visible agents, compute surplus rankings
+2. DECIDE   - Form commitments (committed mode) or select targets (opportunistic)
+3. MOVE     - Move toward committed partner or selected target
+4. EXCHANGE - Execute bargaining (commitment-gated or any co-located)
 
-Reference: CLAUDE.md (First Milestone)
+Reference: CLAUDE.md, DESIGN_matching_protocol.md
 """
 
 from __future__ import annotations
@@ -26,9 +27,11 @@ from microecon.bargaining import (
 from microecon.search import (
     compute_move_target,
     should_trade,
+    evaluate_targets,
     evaluate_targets_detailed,
     TargetEvaluationResult,
 )
+from microecon.bargaining import compute_nash_surplus
 from microecon.matching import (
     MatchingProtocol,
     OpportunisticMatchingProtocol,
@@ -117,56 +120,147 @@ class Simulation:
 
     def step(self) -> list[TradeEvent]:
         """
-        Execute one simulation tick.
+        Execute one simulation tick with four phases.
+
+        Phases:
+        1. EVALUATE - Observe visible agents, compute surplus rankings
+        2. DECIDE   - Form commitments (committed mode) or select targets (opportunistic)
+        3. MOVE     - Move toward committed partner or selected target
+        4. EXCHANGE - Execute bargaining (commitment-gated or any co-located)
 
         Returns:
             List of trades that occurred this tick
         """
         self.tick += 1
-        tick_trades = []
+        tick_trades: list[TradeEvent] = []
 
         # For logging: collect search decisions and movement events
         search_decisions_data: list[tuple[str, Position, int, list[TargetEvaluationResult], Optional[str], float]] = []
         movement_events_data: list[tuple[str, Position, Position, Optional[str], str]] = []
 
-        # Phase 1: Determine movement for all agents and store old positions
-        move_targets: dict[str, Optional[Position]] = {}
-        move_target_ids: dict[str, Optional[str]] = {}  # Track target agent ID for logging
-        old_positions: dict[str, Position] = {}
+        # Store old positions for crossing detection
+        old_positions: dict[str, Position] = {
+            agent.id: self.grid.get_position(agent)
+            for agent in self.agents
+            if self.grid.get_position(agent) is not None
+        }
+
+        # =====================================================================
+        # PRE-TICK: Commitment maintenance (break stale commitments)
+        # =====================================================================
+        if self.matching_protocol.requires_commitment:
+            self._maintain_commitments()
+
+        # =====================================================================
+        # PHASE 1: EVALUATE - Observe visible agents, compute surplus rankings
+        # =====================================================================
+        # Build visibility map: agent_id -> set of visible agent_ids
+        visibility: dict[str, set[str]] = {}
+        # Store evaluation results for Decide phase and logging
+        agent_evaluations: dict[str, tuple[Optional[str], Optional[Position], float, int, list[TargetEvaluationResult]]] = {}
 
         for agent in self.agents:
-            old_pos = self.grid.get_position(agent)
-            old_positions[agent.id] = old_pos
+            agent_pos = self.grid.get_position(agent)
+            if agent_pos is None:
+                visibility[agent.id] = set()
+                agent_evaluations[agent.id] = (None, None, 0.0, 0, [])
+                continue
 
+            # Use detailed evaluation to get visibility info and rankings
+            result, evaluations = evaluate_targets_detailed(
+                agent, self.grid, self.info_env, self._agents_by_id
+            )
+
+            # Build visibility set from evaluations
+            visibility[agent.id] = {e.target_id for e in evaluations}
+
+            # Store for Decide phase
+            agent_evaluations[agent.id] = (
+                result.best_target_id,
+                result.best_target_position,
+                result.discounted_value,
+                result.visible_agents,
+                evaluations,
+            )
+
+            # Record for logging
             if self.logger is not None:
-                # Use detailed evaluation for logging
-                result, evaluations = evaluate_targets_detailed(
-                    agent, self.grid, self.info_env, self._agents_by_id
-                )
-                move_targets[agent.id] = result.best_target_position
-                move_target_ids[agent.id] = result.best_target_id
                 search_decisions_data.append((
                     agent.id,
-                    old_pos,
+                    agent_pos,
                     result.visible_agents,
                     evaluations,
                     result.best_target_id,
                     result.discounted_value,
                 ))
-            else:
-                # Use simple evaluation when not logging
-                target = compute_move_target(
-                    agent, self.grid, self.info_env, self._agents_by_id
-                )
-                move_targets[agent.id] = target
 
-        # Phase 2: Execute movement (simultaneous)
+        # =====================================================================
+        # PHASE 2: DECIDE - Form commitments or select targets
+        # =====================================================================
+        move_targets: dict[str, Optional[Position]] = {}
+        move_target_ids: dict[str, Optional[str]] = {}
+
+        if self.matching_protocol.requires_commitment:
+            # Committed mode: run matching for uncommitted agents
+            uncommitted_ids = self.commitments.get_uncommitted_agents(
+                {a.id for a in self.agents}
+            )
+            uncommitted_agents = [
+                self._agents_by_id[aid] for aid in uncommitted_ids
+                if aid in self._agents_by_id
+            ]
+
+            # Define surplus function for matching
+            def surplus_fn(a: Agent, b: Agent) -> float:
+                type_a = self.info_env.get_observable_type(a)
+                type_b = self.info_env.get_observable_type(b)
+                return compute_nash_surplus(type_a, type_b)
+
+            # Compute new matches
+            new_pairs = self.matching_protocol.compute_matches(
+                uncommitted_agents, visibility, surplus_fn
+            )
+
+            # Form new commitments
+            for agent_a_id, agent_b_id in new_pairs:
+                self.commitments.form_commitment(agent_a_id, agent_b_id)
+
+            # Set movement targets based on commitment status
+            for agent in self.agents:
+                partner_id = self.commitments.get_partner(agent.id)
+                if partner_id is not None:
+                    # Committed: move toward partner
+                    partner = self._agents_by_id.get(partner_id)
+                    if partner is not None:
+                        partner_pos = self.grid.get_position(partner)
+                        move_targets[agent.id] = partner_pos
+                        move_target_ids[agent.id] = partner_id
+                    else:
+                        # Partner not found, use fallback
+                        best_id, best_pos, _, _, _ = agent_evaluations.get(agent.id, (None, None, 0, 0, []))
+                        move_targets[agent.id] = best_pos
+                        move_target_ids[agent.id] = best_id
+                else:
+                    # Uncommitted/unmatched: use fallback (best surplus target)
+                    best_id, best_pos, _, _, _ = agent_evaluations.get(agent.id, (None, None, 0, 0, []))
+                    move_targets[agent.id] = best_pos
+                    move_target_ids[agent.id] = best_id
+        else:
+            # Opportunistic mode: select best surplus target
+            for agent in self.agents:
+                best_id, best_pos, _, _, _ = agent_evaluations.get(agent.id, (None, None, 0, 0, []))
+                move_targets[agent.id] = best_pos
+                move_target_ids[agent.id] = best_id
+
+        # =====================================================================
+        # PHASE 3: MOVE - Move toward partner or target
+        # =====================================================================
         for agent in self.agents:
             target = move_targets.get(agent.id)
             if target is not None:
                 self.grid.move_toward(agent, target, steps=agent.movement_budget)
 
-        # Phase 2.5: Detect crossing paths - if two agents swapped positions or
+        # Detect crossing paths - if two agents swapped positions or
         # crossed through each other, place them at the same position (meeting)
         new_positions: dict[str, Position] = {
             a.id: self.grid.get_position(a) for a in self.agents
@@ -214,10 +308,11 @@ class Simulation:
                     agent.id, old_pos, new_pos, target_id, reason
                 ))
 
-        # Phase 3: Execute trades for agents at same position
-        # Track which agents have traded this tick to avoid double-trading
+        # =====================================================================
+        # PHASE 4: EXCHANGE - Execute bargaining
+        # =====================================================================
         traded_this_tick: set[str] = set()
-        trade_events_data: list[tuple] = []  # For logging
+        trade_events_data: list[tuple] = []
 
         for agent in self.agents:
             if agent.id in traded_this_tick:
@@ -235,6 +330,12 @@ class Simulation:
                 other = self._agents_by_id.get(other_id)
                 if other is None:
                     continue
+
+                # Check if trade is allowed under current matching protocol
+                if self.matching_protocol.requires_commitment:
+                    # Committed mode: only committed pairs can trade
+                    if self.commitments.get_partner(agent.id) != other_id:
+                        continue  # Not committed to this agent
 
                 if should_trade(agent, other, self.info_env):
                     # Capture pre-trade endowments for logging
@@ -255,6 +356,10 @@ class Simulation:
                         self.trades.append(event)
                         traded_this_tick.add(agent.id)
                         traded_this_tick.add(other.id)
+
+                        # Break commitment after successful trade (committed mode)
+                        if self.matching_protocol.requires_commitment:
+                            self.commitments.break_commitment(agent.id, other.id)
 
                         # Record for logging
                         if self.logger is not None:
@@ -281,6 +386,38 @@ class Simulation:
             )
 
         return tick_trades
+
+    def _maintain_commitments(self) -> None:
+        """
+        Check and break stale commitments.
+
+        A commitment is broken if the partner is no longer within perception radius.
+        Called at the start of each tick (before Evaluate phase).
+        """
+        to_break: list[tuple[str, str]] = []
+
+        for agent_a_id, agent_b_id in self.commitments.get_all_committed_pairs():
+            agent_a = self._agents_by_id.get(agent_a_id)
+            agent_b = self._agents_by_id.get(agent_b_id)
+
+            if agent_a is None or agent_b is None:
+                to_break.append((agent_a_id, agent_b_id))
+                continue
+
+            pos_a = self.grid.get_position(agent_a)
+            pos_b = self.grid.get_position(agent_b)
+
+            if pos_a is None or pos_b is None:
+                to_break.append((agent_a_id, agent_b_id))
+                continue
+
+            # Check if partner is still within perception radius
+            distance = pos_a.distance_to(pos_b)
+            if distance > agent_a.perception_radius or distance > agent_b.perception_radius:
+                to_break.append((agent_a_id, agent_b_id))
+
+        for agent_a_id, agent_b_id in to_break:
+            self.commitments.break_commitment(agent_a_id, agent_b_id)
 
     def _log_tick(
         self,

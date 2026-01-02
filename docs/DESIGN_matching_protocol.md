@@ -1,10 +1,10 @@
 # Design Document: Matching Protocol Abstraction
 
 **Date:** 2026-01-02
-**Status:** Revised (Phase 1 complete, Phase 2 refined)
+**Status:** Implementation Complete (Phase 1-2 done, empirical findings documented)
 **Addresses:** Trading chain path-crossing design question (see SESSION_REVIEW_2026_01_01_trading_chain.md)
 
-**Revision Note (2026-01-02):** Design discussion refined the tick structure to four explicit phases (Evaluate → Decide → Move → Exchange) with clarified semantics for both committed and opportunistic modes. Phase 1 implementation is complete; this revision informs Phase 2 integration.
+**Revision Note (2026-01-02):** Design discussion refined the tick structure to four explicit phases (Evaluate → Decide → Move → Exchange) with clarified semantics for both committed and opportunistic modes. Phases 1-2 implementation complete. Trading chain tests reveal significant welfare gap: opportunistic matching produces 2.2% lower welfare than committed matching.
 
 ---
 
@@ -391,7 +391,48 @@ Documented for future reference, not part of current implementation:
 
 ---
 
-## 8. Rationale Summary
+## 8. Empirical Findings: Trading Chain Scenario
+
+The trading chain scenario (4 agents in a line, α ∈ {0.2, 0.4, 0.6, 0.8}) provides a concrete demonstration of how matching protocols affect outcomes.
+
+### 8.1 Committed Mode (StableRoommatesMatchingProtocol)
+
+Irving's algorithm forms optimal pairs simultaneously:
+- **Pairs formed**: (A,D) and (B,C)
+- **Trade sequence**: B-C first (closer), A-D second
+- **Final MRS**: All agents reach MRS = 1.0
+- **Total welfare**: 26.80 (competitive equilibrium)
+- **Trade count**: 2
+
+### 8.2 Opportunistic Mode (OpportunisticMatchingProtocol)
+
+Agents trade with whomever they meet:
+- **Trade sequence**: B-C (path crossing) → B-D → A-B
+- **Mechanism**: After B-C trade, B continues toward D and trades; A then trades with B instead of optimal partner D
+- **Final MRS**: C = 1.0, A = 0.94, B = 0.66, D = 1.88
+- **Total welfare**: 26.20 (suboptimal)
+- **Trade count**: 3
+
+### 8.3 Welfare Comparison
+
+| Metric | Committed | Opportunistic |
+|--------|-----------|---------------|
+| Trades | 2 | 3 |
+| Equilibrium | Competitive (MRS=1) | Non-competitive |
+| Welfare | 26.80 | 26.20 |
+| Efficiency loss | 0% | 2.2% |
+
+### 8.4 Key Finding
+
+**Matching protocols affect outcomes, not just paths.**
+
+The intuition that "any order of trades reaches the same equilibrium" is **false** in spatial settings. Opportunistic matching leads to suboptimal pairings that cannot be undone—D is "used up" before A arrives.
+
+This validates the core research value of the `MatchingProtocol` abstraction: institutional rules for forming trading pairs have measurable welfare consequences.
+
+---
+
+## 10. Rationale Summary
 
 ### Why MatchingProtocol Abstraction?
 
@@ -415,16 +456,17 @@ Documented for future reference, not part of current implementation:
 
 ---
 
-## 9. Open Questions
+## 11. Open Questions
 
-1. **Irving's algorithm library**: Implement from scratch or use existing package?
-2. **Partial matching**: When no stable solution exists, what partial matching to return?
+1. ~~**Irving's algorithm library**: Implement from scratch or use existing package?~~ **RESOLVED**: Implemented from scratch in `matching.py`
+2. **Partial matching**: When no stable solution exists, what partial matching to return? (Current: greedy from reduced lists)
 3. **Visualization**: How to show commitment status in the UI?
-4. **Performance**: Irving's is O(n²)—acceptable for expected agent counts?
+4. **Performance**: Irving's is O(n²)—acceptable for expected agent counts? (Appears fine in tests)
+5. **NEW**: Can agents re-trade after initial equilibrium? (Currently no—agents move past each other)
 
 ---
 
-## 10. References
+## 12. References
 
 - Irving, R.W. (1985). "An efficient algorithm for the stable roommates problem." *Journal of Algorithms* 6(4): 577-595.
 - VISION.md §4 (Spatial Grounding), §5 (Research Agenda)
@@ -433,6 +475,6 @@ Documented for future reference, not part of current implementation:
 
 ---
 
-**Document Version:** 1.1
+**Document Version:** 1.2
 **Authors:** Discussion session 2026-01-02
-**Revised:** 2026-01-02 (tick structure refinement)
+**Revised:** 2026-01-02 (empirical findings from trading chain scenario)

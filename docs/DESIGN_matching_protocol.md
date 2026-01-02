@@ -1,8 +1,10 @@
 # Design Document: Matching Protocol Abstraction
 
 **Date:** 2026-01-02
-**Status:** Proposed
+**Status:** Revised (Phase 1 complete, Phase 2 refined)
 **Addresses:** Trading chain path-crossing design question (see SESSION_REVIEW_2026_01_01_trading_chain.md)
+
+**Revision Note (2026-01-02):** Design discussion refined the tick structure to four explicit phases (Evaluate → Decide → Move → Exchange) with clarified semantics for both committed and opportunistic modes. Phase 1 implementation is complete; this revision informs Phase 2 integration.
 
 ---
 
@@ -118,31 +120,61 @@ The research question extends: *Same preferences, same endowments, same bargaini
 
 ### 4.4 Agent Behavior by State
 
-| State | Matching Phase | Movement | Can Trade? |
-|-------|----------------|----------|------------|
-| **Uncommitted** | Participate | Toward best target (fallback if unmatched) | No (under committed mode) |
-| **Committed** | Skip | Toward committed partner | Yes (if co-located with partner) |
-| **Unmatched** | Attempted, failed | Toward best visible target | No |
+**Under Committed Mode:**
 
-### 4.5 Timing
+| State | Decide Phase | Movement | Can Trade? |
+|-------|--------------|----------|------------|
+| **Uncommitted** | Participates in Irving's | Toward fallback target | No |
+| **Committed** | Skips (has partner) | Toward committed partner | Yes (if co-located with partner) |
+| **Unmatched** | Attempted Irving's, no match | Toward best visible target | No |
 
-Matching phase runs **every tick** for uncommitted agents:
+**Under Opportunistic Mode:**
+
+| State | Decide Phase | Movement | Can Trade? |
+|-------|--------------|----------|------------|
+| **All agents** | Select best surplus target | Toward selected target | Yes (if co-located with anyone) |
+
+Note: Under opportunistic mode, there is no "committed" or "unmatched" state—all agents follow the same logic.
+
+### 4.5 Tick Structure
+
+The simulation tick has four phases:
 
 ```
 Each Tick:
-1. MATCH PHASE
-   - Committed agents: skip
+1. EVALUATE PHASE
+   - All agents observe visible others (within perception radius)
+   - Compute surplus rankings for visible agents
+   - Information gathering—no decisions yet
+
+2. DECIDE PHASE
+   Semantics depend on matching protocol:
+
+   Committed mode:
+   - Committed agents: skip (already have partner)
    - Uncommitted agents: run Irving's on visible subgraph
    - Result: some form commitments, some remain unmatched
+   - Unmatched agents select fallback targets
 
-2. MOVE PHASE
-   - Committed: move toward partner
-   - Unmatched: move toward best visible target (fallback)
+   Opportunistic mode:
+   - All agents select movement targets (best surplus partner)
+   - No commitments formed
+   - Target guides movement but does not gate trade
 
-3. EXCHANGE PHASE
+3. MOVE PHASE
+   - Committed: move toward committed partner
+   - Opportunistic/Unmatched: move toward selected target
+
+4. EXCHANGE PHASE
    - Committed mode: only committed + co-located pairs trade
    - Opportunistic mode: any co-located pairs trade
+   - After trade, endowments change—target re-evaluation
+     happens at start of next tick's Evaluate phase
 ```
+
+**Key insight:** The Decide phase has dual semantics:
+- Under committed protocols: forms binding commitments that gate trade
+- Under opportunistic protocols: selects targets that guide movement (trade ungated)
 
 ### 4.6 Edge Cases
 
@@ -281,23 +313,37 @@ class CommitmentState:
 3. **Add `matching_protocol` parameter to `Simulation`**
 4. **Verify all existing tests pass** (opportunistic is default)
 
-### Phase 2: Committed Matching
+### Phase 2: Tick Structure Integration
 
-1. **Implement Irving's stable roommates algorithm**
-   - Can use existing library or implement from scratch
-   - Handle "no stable solution" case gracefully
+Modify `Simulation.step()` to implement the four-phase tick structure:
 
-2. **Add `CommitmentState` tracking to Simulation**
-   - Track committed pairs
-   - Track commitment formation/breaking events
+1. **EVALUATE phase:**
+   - Compute visible agents for each agent (within perception radius)
+   - Calculate surplus rankings for visible partners
+   - Store rankings for use in Decide phase
 
-3. **Modify tick phases:**
-   - Add matching phase before movement
-   - Modify exchange phase to respect `requires_mutual_commitment`
-   - Modify movement to handle committed vs unmatched agents
+2. **DECIDE phase:**
+   - If `matching_protocol.requires_commitment`:
+     - Committed agents: skip
+     - Uncommitted agents: run `matching_protocol.compute_matches()`
+     - Form new commitments via `CommitmentState`
+     - Unmatched agents select fallback targets
+   - If opportunistic:
+     - All agents select best surplus target (no commitments)
 
-4. **Add commitment-breaking logic:**
-   - Check perception radius each tick
+3. **MOVE phase:**
+   - Committed agents: move toward committed partner
+   - Others: move toward selected target
+
+4. **EXCHANGE phase:**
+   - If `matching_protocol.requires_commitment`:
+     - Only committed + co-located pairs execute bargaining
+   - If opportunistic:
+     - Any co-located pairs execute bargaining
+   - Break commitments after successful trades
+
+5. **Commitment maintenance:**
+   - At start of tick (before Evaluate): check perception radius
    - Break commitments when partner exits visibility
 
 ### Phase 3: Testing
@@ -387,5 +433,6 @@ Documented for future reference, not part of current implementation:
 
 ---
 
-**Document Version:** 1.0
+**Document Version:** 1.1
 **Authors:** Discussion session 2026-01-02
+**Revised:** 2026-01-02 (tick structure refinement)

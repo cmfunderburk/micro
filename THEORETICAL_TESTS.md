@@ -397,8 +397,9 @@ uv run pytest tests/test_theoretical_scenarios.py --cov=microecon.bargaining
 
 ---
 
-**Document Version:** 1.2
+**Document Version:** 1.3
 **Last Updated:** 2026-01-01
 **Changes:**
+- v1.3: Added trading chain scenario (3 test classes, 29 tests, SKIPPED). These tests surfaced a design ambiguity: should agents trade opportunistically when paths cross, or remain committed to their selected target? See `docs/SESSION_REVIEW_2026_01_01_trading_chain.md` for detailed analysis.
 - v1.2: Added mixed hub-and-spoke scenario (3 test classes, 29 tests). Tests surplus ordering with asymmetric endowments - complementary pairs (A↔D) have 3.6x more surplus than balanced pairs (C↔A).
 - v1.1: Added 4 new test classes (20 tests), bilateral vs competitive equilibrium discussion, updated future coverage priorities

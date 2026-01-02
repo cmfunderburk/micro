@@ -875,12 +875,14 @@ class DualVisualizationApp:
     WINDOW_WIDTH = 1400
     WINDOW_HEIGHT = 800
     METRICS_PANEL_WIDTH = 180
-    CONTROLS_HEIGHT = 80
+    CONTROLS_HEIGHT = 120  # Increased to fit timeline markers
     GRID_MARGIN = 15
+    TIMELINE_HEIGHT = 30
 
     # Colors
     GRID_LINE_COLOR = (200, 200, 200, 100)
     BACKGROUND_COLOR = (30, 30, 30, 255)
+    TRADE_LINE_COLOR = (255, 200, 0, 255)
 
     def __init__(
         self,
@@ -942,23 +944,76 @@ class DualVisualizationApp:
         # Agent caches
         self._agents_a: list[AgentProxy] = []
         self._agents_b: list[AgentProxy] = []
+        self._agents_a_by_id: dict[str, AgentProxy] = {}
+        self._agents_b_by_id: dict[str, AgentProxy] = {}
+
+        # Trade animations (one list per viewport)
+        self.trade_animations_a: list[TradeAnimation] = []
+        self.trade_animations_b: list[TradeAnimation] = []
+
+        # Movement trails (one dict per viewport)
+        self.position_history_a: dict[str, list[Position]] = {}
+        self.position_history_b: dict[str, list[Position]] = {}
+        self.TRAIL_LENGTH = 5
+
+        # Track last tick to detect when we've stepped
+        self._last_tick = -1
+
+        # Precompute event ticks for timeline markers
+        self.events_a = self._precompute_events(run_a)
+        self.events_b = self._precompute_events(run_b)
+
+        # Timeline drawlist reference
+        self.timeline_drawlist: int = 0
+        self.timeline_width = 400  # Will be updated in render
+
+    @staticmethod
+    def _precompute_events(run_data: RunData) -> dict[str, list[int]]:
+        """Precompute which ticks have trades and commitment events.
+
+        Returns dict with 'trades', 'commitments_formed', 'commitments_broken'
+        keys, each containing list of tick indices.
+        """
+        events: dict[str, list[int]] = {
+            'trades': [],
+            'commitments_formed': [],
+            'commitments_broken': [],
+        }
+
+        for i, tick in enumerate(run_data.ticks):
+            if tick.trades:
+                # Only count ticks with actual trades (trade_occurred=True)
+                if any(t.trade_occurred for t in tick.trades):
+                    events['trades'].append(i)
+            if tick.commitments_formed:
+                events['commitments_formed'].append(i)
+            if tick.commitments_broken:
+                events['commitments_broken'].append(i)
+
+        return events
 
     def _build_agent_proxies(self) -> None:
         """Rebuild agent proxy caches for both runs."""
         self._agents_a = []
         self._agents_b = []
+        self._agents_a_by_id = {}
+        self._agents_b_by_id = {}
 
         state_a, state_b = self.controller.get_states()
 
         if state_a is not None:
             perception_radius = self.controller.replay_a.run.config.perception_radius
             for snapshot in state_a.agent_snapshots:
-                self._agents_a.append(AgentProxy.from_snapshot(snapshot, perception_radius))
+                proxy = AgentProxy.from_snapshot(snapshot, perception_radius)
+                self._agents_a.append(proxy)
+                self._agents_a_by_id[proxy.id] = proxy
 
         if state_b is not None:
             perception_radius = self.controller.replay_b.run.config.perception_radius
             for snapshot in state_b.agent_snapshots:
-                self._agents_b.append(AgentProxy.from_snapshot(snapshot, perception_radius))
+                proxy = AgentProxy.from_snapshot(snapshot, perception_radius)
+                self._agents_b.append(proxy)
+                self._agents_b_by_id[proxy.id] = proxy
 
     def setup(self) -> None:
         """Set up the DearPyGui context and windows."""
@@ -1038,6 +1093,23 @@ class DualVisualizationApp:
                 no_scrollbar=True,
                 tag="controls_panel",
             ):
+                # Timeline with event markers
+                with dpg.group(horizontal=True):
+                    dpg.add_text("Timeline: ", color=(150, 150, 150))
+                    self.timeline_drawlist = dpg.add_drawlist(
+                        width=600,
+                        height=self.TIMELINE_HEIGHT,
+                        tag="timeline_drawlist",
+                    )
+                    dpg.add_text("  ")
+                    # Legend
+                    dpg.add_text("T", color=(255, 200, 0))
+                    dpg.add_text("=Trade ", color=(150, 150, 150))
+                    dpg.add_text("C", color=(100, 200, 100))
+                    dpg.add_text("=Commit ", color=(150, 150, 150))
+
+                dpg.add_spacer(height=5)
+
                 with dpg.group(horizontal=True):
                     dpg.add_text("[COMPARISON]", color=(150, 150, 255))
                     dpg.add_text("  ")
@@ -1102,11 +1174,17 @@ class DualVisualizationApp:
         """Step forward one tick."""
         self.controller.step()
         self._update_timeline_slider()
+        self._on_tick_changed()
 
     def step_back(self) -> None:
         """Step backward one tick."""
         self.controller.step_back()
         self._update_timeline_slider()
+        # Clear trails and animations when going backwards
+        self.position_history_a.clear()
+        self.position_history_b.clear()
+        self.trade_animations_a.clear()
+        self.trade_animations_b.clear()
 
     def on_speed_change(self, sender: int, app_data: float) -> None:
         """Handle speed slider change."""
@@ -1115,6 +1193,11 @@ class DualVisualizationApp:
     def on_timeline_change(self, sender: int, app_data: int) -> None:
         """Handle timeline slider change."""
         self.controller.seek(app_data)
+        # Clear trails and animations when scrubbing
+        self.position_history_a.clear()
+        self.position_history_b.clear()
+        self.trade_animations_a.clear()
+        self.trade_animations_b.clear()
 
     def _update_timeline_slider(self) -> None:
         """Update timeline slider to match current tick."""
@@ -1127,6 +1210,62 @@ class DualVisualizationApp:
         dpg.set_item_label(self.play_button, "Play")
         self.controller.reset()
         self._update_timeline_slider()
+        # Clear trails and animations
+        self.position_history_a.clear()
+        self.position_history_b.clear()
+        self.trade_animations_a.clear()
+        self.trade_animations_b.clear()
+        self._last_tick = -1
+
+    def _on_tick_changed(self) -> None:
+        """Handle tick advancement - detect trades and record positions."""
+        current_tick = self.controller.current_tick
+        if current_tick == self._last_tick:
+            return
+        self._last_tick = current_tick
+
+        state_a, state_b = self.controller.get_states()
+        current_time = time.time()
+
+        # Record trades for animations
+        if state_a is not None:
+            for trade in state_a.trades:
+                if trade.trade_occurred:
+                    self.trade_animations_a.append(TradeAnimation(
+                        agent1_id=trade.agent1_id,
+                        agent2_id=trade.agent2_id,
+                        start_time=current_time,
+                    ))
+
+        if state_b is not None:
+            for trade in state_b.trades:
+                if trade.trade_occurred:
+                    self.trade_animations_b.append(TradeAnimation(
+                        agent1_id=trade.agent1_id,
+                        agent2_id=trade.agent2_id,
+                        start_time=current_time,
+                    ))
+
+        # Record positions for trails (need to rebuild proxies first)
+        self._build_agent_proxies()
+
+        for agent in self._agents_a:
+            if agent.id not in self.position_history_a:
+                self.position_history_a[agent.id] = []
+            history = self.position_history_a[agent.id]
+            if not history or history[-1] != agent.position:
+                history.append(agent.position)
+            if len(history) > self.TRAIL_LENGTH:
+                self.position_history_a[agent.id] = history[-self.TRAIL_LENGTH:]
+
+        for agent in self._agents_b:
+            if agent.id not in self.position_history_b:
+                self.position_history_b[agent.id] = []
+            history = self.position_history_b[agent.id]
+            if not history or history[-1] != agent.position:
+                history.append(agent.position)
+            if len(history) > self.TRAIL_LENGTH:
+                self.position_history_b[agent.id] = history[-self.TRAIL_LENGTH:]
 
     def update(self) -> None:
         """Update playback state."""
@@ -1138,11 +1277,23 @@ class DualVisualizationApp:
                 if not self.controller.at_end:
                     self.controller.step()
                     self._update_timeline_slider()
+                    self._on_tick_changed()
                 else:
                     self.playing = False
                     dpg.set_item_label(self.play_button, "Play")
 
                 self.last_tick_time = current_time
+
+        # Clean up expired animations
+        current_time = time.time()
+        self.trade_animations_a = [
+            anim for anim in self.trade_animations_a
+            if current_time - anim.start_time < anim.duration
+        ]
+        self.trade_animations_b = [
+            anim for anim in self.trade_animations_b
+            if current_time - anim.start_time < anim.duration
+        ]
 
     def grid_to_canvas(self, pos: Position, origin: tuple[float, float]) -> tuple[float, float]:
         """Convert grid position to canvas coordinates."""
@@ -1177,19 +1328,33 @@ class DualVisualizationApp:
 
         # Render both grids
         origin = (self.GRID_MARGIN, self.GRID_MARGIN)
-        self._render_grid(self.drawlist_a, origin, self._agents_a)
-        self._render_grid(self.drawlist_b, origin, self._agents_b)
+        self._render_grid(
+            self.drawlist_a, origin, self._agents_a,
+            self.position_history_a, self.trade_animations_a,
+            self._agents_a_by_id
+        )
+        self._render_grid(
+            self.drawlist_b, origin, self._agents_b,
+            self.position_history_b, self.trade_animations_b,
+            self._agents_b_by_id
+        )
 
         # Render metrics
         self._render_metrics()
+
+        # Render timeline with event markers
+        self._render_timeline()
 
     def _render_grid(
         self,
         drawlist: int,
         origin: tuple[float, float],
         agents: list[AgentProxy],
+        position_history: dict[str, list[Position]],
+        trade_animations: list[TradeAnimation],
+        agents_by_id: dict[str, AgentProxy],
     ) -> None:
-        """Render a single grid viewport."""
+        """Render a single grid viewport with trails and trade animations."""
         dpg.delete_item(drawlist, children_only=True)
 
         ox, oy = origin
@@ -1210,6 +1375,62 @@ class DualVisualizationApp:
                 (ox, y),
                 (ox + self.canvas_size, y),
                 color=self.GRID_LINE_COLOR,
+                parent=drawlist,
+            )
+
+        # Draw movement trails (behind agents)
+        for agent in agents:
+            history = position_history.get(agent.id, [])
+            if len(history) < 2:
+                continue
+
+            # Build point list: history + current (oldest to newest)
+            points = history + [agent.position]
+
+            # Draw line segments with fading opacity
+            for i in range(len(points) - 1):
+                opacity = int(40 + (i / len(points)) * 80)  # 40 to 120
+                p1 = self.grid_to_canvas(points[i], origin)
+                p2 = self.grid_to_canvas(points[i + 1], origin)
+
+                base_color = alpha_to_color(agent.alpha)
+                trail_color = (base_color[0], base_color[1], base_color[2], opacity)
+
+                dpg.draw_line(p1, p2, color=trail_color, thickness=2, parent=drawlist)
+
+        # Draw trade animations
+        current_time = time.time()
+        for anim in trade_animations:
+            agent1 = agents_by_id.get(anim.agent1_id)
+            agent2 = agents_by_id.get(anim.agent2_id)
+            if agent1 is None or agent2 is None:
+                continue
+
+            progress = (current_time - anim.start_time) / anim.duration
+            opacity = int(255 * (1 - progress))
+
+            c1 = self.grid_to_canvas(agent1.position, origin)
+            c2 = self.grid_to_canvas(agent2.position, origin)
+
+            dpg.draw_line(
+                c1, c2,
+                color=(255, 200, 0, opacity),
+                thickness=3,
+                parent=drawlist,
+            )
+
+            # Draw highlight circles
+            radius = self.cell_size * 0.45
+            dpg.draw_circle(
+                c1, radius,
+                color=(255, 200, 0, opacity),
+                thickness=2,
+                parent=drawlist,
+            )
+            dpg.draw_circle(
+                c2, radius,
+                color=(255, 200, 0, opacity),
+                thickness=2,
                 parent=drawlist,
             )
 
@@ -1284,6 +1505,122 @@ class DualVisualizationApp:
 
         dpg.set_value(self.welfare_diff_text, f"  Welfare: {welfare_sign}{welfare_diff:.1f}")
         dpg.set_value(self.trades_diff_text, f"  Trades: {trades_sign}{trades_diff}")
+
+    def _render_timeline(self) -> None:
+        """Render timeline with event markers for both runs."""
+        if not self.timeline_drawlist:
+            return
+
+        dpg.delete_item(self.timeline_drawlist, children_only=True)
+
+        # Get drawlist dimensions
+        width = dpg.get_item_width(self.timeline_drawlist)
+        height = self.TIMELINE_HEIGHT
+
+        # Track dimensions (with padding)
+        padding = 10
+        track_width = width - 2 * padding
+        track_y_a = 8   # Run A track (top)
+        track_y_b = 22  # Run B track (bottom)
+        track_height = 6
+
+        total_ticks = self.controller.total_ticks
+        if total_ticks <= 1:
+            return
+
+        # Helper to convert tick to x position
+        def tick_to_x(tick: int) -> float:
+            return padding + (tick / (total_ticks - 1)) * track_width
+
+        # Draw track backgrounds
+        track_bg_color = (60, 60, 60, 255)
+        dpg.draw_rectangle(
+            (padding, track_y_a - track_height // 2),
+            (padding + track_width, track_y_a + track_height // 2),
+            color=track_bg_color,
+            fill=track_bg_color,
+            parent=self.timeline_drawlist,
+        )
+        dpg.draw_rectangle(
+            (padding, track_y_b - track_height // 2),
+            (padding + track_width, track_y_b + track_height // 2),
+            color=track_bg_color,
+            fill=track_bg_color,
+            parent=self.timeline_drawlist,
+        )
+
+        # Draw run labels
+        dpg.draw_text(
+            (2, track_y_a - 4),
+            "A",
+            color=(100, 200, 100, 200),
+            size=10,
+            parent=self.timeline_drawlist,
+        )
+        dpg.draw_text(
+            (2, track_y_b - 4),
+            "B",
+            color=(200, 150, 100, 200),
+            size=10,
+            parent=self.timeline_drawlist,
+        )
+
+        # Colors for events
+        trade_color = (255, 200, 0, 255)       # Yellow for trades
+        commit_color = (100, 200, 100, 255)   # Green for commitments
+
+        # Draw event markers for Run A
+        for tick in self.events_a['trades']:
+            x = tick_to_x(tick)
+            dpg.draw_circle(
+                (x, track_y_a),
+                3,
+                color=trade_color,
+                fill=trade_color,
+                parent=self.timeline_drawlist,
+            )
+
+        for tick in self.events_a['commitments_formed']:
+            x = tick_to_x(tick)
+            # Draw small diamond for commitment
+            dpg.draw_polygon(
+                [(x, track_y_a - 3), (x + 2, track_y_a), (x, track_y_a + 3), (x - 2, track_y_a)],
+                color=commit_color,
+                fill=commit_color,
+                parent=self.timeline_drawlist,
+            )
+
+        # Draw event markers for Run B
+        for tick in self.events_b['trades']:
+            x = tick_to_x(tick)
+            dpg.draw_circle(
+                (x, track_y_b),
+                3,
+                color=trade_color,
+                fill=trade_color,
+                parent=self.timeline_drawlist,
+            )
+
+        for tick in self.events_b['commitments_formed']:
+            x = tick_to_x(tick)
+            dpg.draw_polygon(
+                [(x, track_y_b - 3), (x + 2, track_y_b), (x, track_y_b + 3), (x - 2, track_y_b)],
+                color=commit_color,
+                fill=commit_color,
+                parent=self.timeline_drawlist,
+            )
+
+        # Draw playhead (current position)
+        current_x = tick_to_x(self.controller.current_tick)
+        playhead_color = (255, 255, 255, 255)
+        # Vertical line spanning both tracks
+        dpg.draw_line(
+            (current_x, 2),
+            (current_x, height - 2),
+            color=playhead_color,
+            thickness=2,
+            parent=self.timeline_drawlist,
+        )
 
     def run(self) -> None:
         """Main application loop."""
@@ -1426,6 +1763,44 @@ def run_protocol_comparison(
         run_comparison(nash_run, rubinstein_run, "Nash", "Rubinstein")
     else:
         raise ValueError("Could not pair runs by protocol")
+
+
+def run_matching_protocol_comparison(
+    n_agents: int = 10,
+    grid_size: int = 15,
+    ticks: int = 100,
+    seed: int = 42,
+) -> None:
+    """
+    Run Opportunistic vs StableRoommates comparison with same initial conditions.
+
+    Convenience function that runs both matching protocols and launches
+    the dual viewport comparison. Uses Nash bargaining for both.
+
+    Args:
+        n_agents: Number of agents
+        grid_size: Size of the grid
+        ticks: Number of simulation ticks
+        seed: Random seed (same for both runs)
+    """
+    from microecon.batch import run_matching_comparison as batch_matching_comparison
+
+    # Run both matching protocols
+    results = batch_matching_comparison(
+        n_agents=n_agents,
+        grid_size=grid_size,
+        ticks=ticks,
+        seeds=[seed],
+    )
+
+    # Get run data (results alternate: opportunistic, stable_roommates)
+    runs = [r.run_data for r in results if r.run_data is not None]
+
+    if len(runs) >= 2:
+        # First run is opportunistic, second is stable_roommates
+        run_comparison(runs[0], runs[1], "Opportunistic", "StableRoommates")
+    else:
+        raise ValueError("Could not get both matching protocol runs")
 
 
 # Allow running as: python -m microecon.visualization.app

@@ -63,7 +63,7 @@ Infrastructure for systematic experiments:
 
 | Module | Capability |
 |--------|------------|
-| `batch.py` | `BatchRunner` for parameter sweeps, protocol comparisons |
+| `batch.py` | `BatchRunner` for parameter sweeps, bargaining and matching protocol comparisons |
 | `logging/events.py` | Structured event types (`TickRecord`, `TradeEvent`, `SearchDecision`) |
 | `logging/logger.py` | `SimulationLogger` captures full simulation state |
 | `logging/formats.py` | JSON lines format for human-readable logs |
@@ -83,7 +83,7 @@ Post-hoc analysis of logged runs:
 
 ### Visualization
 
-DearPyGui-based visualization with two modes:
+DearPyGui-based visualization with three modes:
 
 **Live Mode**
 - Real-time simulation display
@@ -99,9 +99,31 @@ DearPyGui-based visualization with two modes:
 - Load and playback logged runs
 - Timeline scrubbing with slider
 - Step forward/backward
-- Synchronized dual viewport for side-by-side comparison
+
+**Comparison Mode** (Phase 1 Dashboard - NEW)
+- Side-by-side dual viewport for protocol comparison
+- Synchronized playback across both runs
+- Trade animations and movement trails in both viewports
+- Timeline with event markers:
+  - Yellow circles for trades
+  - Green diamonds for commitments
+  - White playhead showing current position
+  - Dual track (one per run)
+- Real-time welfare/trade difference display
+- Entry points for both bargaining and matching protocol comparisons
 
 Run with: `uv run python -m microecon.visualization`
+
+**Comparison Entry Points:**
+```python
+# Compare bargaining protocols (Nash vs Rubinstein)
+from microecon.visualization import run_protocol_comparison
+run_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
+
+# Compare matching protocols (Opportunistic vs StableRoommates)
+from microecon.visualization import run_matching_protocol_comparison
+run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
+```
 
 ### Test Coverage
 
@@ -212,12 +234,32 @@ from microecon.visualization import run_visualization
 run_visualization(n_agents=20, grid_size=20, seed=42)
 "
 
-# Run batch comparison (Nash vs Rubinstein)
+# Run bargaining protocol comparison (Nash vs Rubinstein) with visualization
+uv run python -c "
+from microecon.visualization import run_protocol_comparison
+run_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
+"
+
+# Run matching protocol comparison (Opportunistic vs StableRoommates) with visualization
+uv run python -c "
+from microecon.visualization import run_matching_protocol_comparison
+run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
+"
+
+# Run batch comparison (bargaining protocols)
 uv run python -c "
 from microecon.batch import run_comparison
 results = run_comparison(n_agents=10, ticks=100, seeds=range(5))
 for r in results:
     print(f'{r.config.protocol_name}: {r.summary}')
+"
+
+# Run batch comparison (matching protocols)
+uv run python -c "
+from microecon.batch import run_matching_comparison
+results = run_matching_comparison(n_agents=10, ticks=100, seeds=range(5))
+for r in results:
+    print(f'Trades: {r.summary[\"total_trades\"]}, Welfare: {r.summary[\"final_welfare\"]:.2f}')
 "
 
 # Run tests
@@ -253,13 +295,25 @@ uv run pytest --cov=microecon
 | Trade animations | **Implemented** |
 | Replay mode | **Implemented** |
 | Dual viewport comparison | **Implemented** |
+| Timeline event markers | **Implemented** (trades, commitments) |
+| Comparison mode entry points | **Implemented** (bargaining + matching) |
 | Setup/Run/Analyze modes | Not implemented |
 | Overlay toggles | Not implemented |
 | Trade zoom (Edgeworth box) | Not implemented |
-| Time-series charts | Not implemented |
+| Time-series charts | Not implemented (Phase 3) |
 | Agent perspective mode | Not implemented |
-| Export (PNG/GIF/MP4) | Not implemented |
-| Config files (YAML/JSON) | Not implemented |
+| Export (PNG/GIF/MP4) | Not implemented (Phase 4) |
+| Config files (YAML/JSON) | Not implemented (Phase 2) |
+| Scenario browser | Not implemented (Phase 2) |
+
+### vs DESIGN_dashboard_integration.md
+
+| Phase | Status |
+|-------|--------|
+| Phase 1: Comparison View MVP | **Complete** |
+| Phase 2: Scenario Pipeline | Not started |
+| Phase 3: Timeline & Charts | Not started |
+| Phase 4: Polish & Export | Not started |
 
 ---
 

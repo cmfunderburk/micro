@@ -19,6 +19,11 @@ from microecon.bargaining import (
     NashBargainingProtocol,
     RubinsteinBargainingProtocol,
 )
+from microecon.matching import (
+    MatchingProtocol,
+    OpportunisticMatchingProtocol,
+    StableRoommatesMatchingProtocol,
+)
 from microecon.logging import (
     SimulationConfig,
     SimulationLogger,
@@ -43,6 +48,16 @@ def _get_protocol_name(protocol: BargainingProtocol) -> str:
         return "nash"
     elif isinstance(protocol, RubinsteinBargainingProtocol):
         return "rubinstein"
+    else:
+        return protocol.__class__.__name__.lower()
+
+
+def _get_matching_protocol_name(protocol: MatchingProtocol) -> str:
+    """Get a string name for a matching protocol."""
+    if isinstance(protocol, OpportunisticMatchingProtocol):
+        return "opportunistic"
+    elif isinstance(protocol, StableRoommatesMatchingProtocol):
+        return "stable_roommates"
     else:
         return protocol.__class__.__name__.lower()
 
@@ -105,7 +120,8 @@ class BatchRunner:
         perception_radius = config.get("perception_radius", 7.0)
         discount_factor = config.get("discount_factor", 0.95)
         seed = config.get("seed")
-        protocol = config.get("protocol", NashBargainingProtocol())
+        bargaining_protocol = config.get("protocol", NashBargainingProtocol())
+        matching_protocol = config.get("matching_protocol", OpportunisticMatchingProtocol())
 
         # Create simulation using factory function but inject logger
         if seed is not None:
@@ -117,7 +133,8 @@ class BatchRunner:
             perception_radius=perception_radius,
             discount_factor=discount_factor,
             seed=seed,
-            bargaining_protocol=protocol,
+            bargaining_protocol=bargaining_protocol,
+            matching_protocol=matching_protocol,
         )
 
         # Inject logger
@@ -145,9 +162,19 @@ class BatchRunner:
         """Generate a unique name for a run directory."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         seed = config.get("seed", index)
-        protocol = config.get("protocol", NashBargainingProtocol())
-        protocol_name = _get_protocol_name(protocol)
-        return f"run_{timestamp}_seed{seed}_{protocol_name}_{index:04d}"
+
+        # Include bargaining protocol if varying
+        bargaining = config.get("protocol", NashBargainingProtocol())
+        bargaining_name = _get_protocol_name(bargaining)
+
+        # Include matching protocol if varying
+        matching = config.get("matching_protocol", OpportunisticMatchingProtocol())
+        matching_name = _get_matching_protocol_name(matching)
+
+        # Build name with both protocols if non-default matching
+        if matching_name != "opportunistic":
+            return f"run_{timestamp}_seed{seed}_{bargaining_name}_{matching_name}_{index:04d}"
+        return f"run_{timestamp}_seed{seed}_{bargaining_name}_{index:04d}"
 
     def _run_single(
         self, config: dict[str, Any], ticks: int, index: int
@@ -274,6 +301,49 @@ def run_comparison(
             "protocol": [
                 NashBargainingProtocol(),
                 RubinsteinBargainingProtocol(),
+            ],
+            "seed": seeds,
+        },
+        output_dir=output_dir,
+    )
+
+    return runner.run(ticks=ticks)
+
+
+def run_matching_comparison(
+    n_agents: int = 10,
+    grid_size: int = 15,
+    ticks: int = 100,
+    seeds: list[int] | None = None,
+    output_dir: Path | None = None,
+) -> list[RunResult]:
+    """Quick comparison of Opportunistic vs StableRoommates matching.
+
+    Convenience function for comparing matching protocols. Uses Nash
+    bargaining as the default bargaining protocol.
+
+    Args:
+        n_agents: Number of agents per run
+        grid_size: Size of the grid
+        ticks: Number of simulation ticks
+        seeds: List of seeds to run (default: [0, 1, 2, 3, 4])
+        output_dir: Optional directory to save logs
+
+    Returns:
+        List of RunResult objects (alternating Opportunistic/StableRoommates for each seed)
+    """
+    if seeds is None:
+        seeds = list(range(5))
+
+    runner = BatchRunner(
+        base_config={
+            "n_agents": n_agents,
+            "grid_size": grid_size,
+        },
+        variations={
+            "matching_protocol": [
+                OpportunisticMatchingProtocol(),
+                StableRoommatesMatchingProtocol(),
             ],
             "seed": seeds,
         },

@@ -587,6 +587,7 @@ def create_simple_economy(
     discount_factor: float = 0.95,
     seed: Optional[int] = None,
     bargaining_protocol: Optional[BargainingProtocol] = None,
+    matching_protocol: Optional[MatchingProtocol] = None,
 ) -> Simulation:
     """
     Create a simple economy with heterogeneous agents.
@@ -605,6 +606,7 @@ def create_simple_economy(
         discount_factor: Time preference
         seed: Random seed for reproducibility
         bargaining_protocol: Protocol for bilateral bargaining (default: Nash)
+        matching_protocol: Protocol for forming trading pairs (default: Opportunistic)
 
     Returns:
         Configured Simulation ready to run
@@ -616,6 +618,7 @@ def create_simple_economy(
         grid=Grid(grid_size),
         info_env=FullInformation(),
         bargaining_protocol=bargaining_protocol or NashBargainingProtocol(),
+        matching_protocol=matching_protocol or OpportunisticMatchingProtocol(),
     )
 
     for i in range(n_agents):

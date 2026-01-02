@@ -16,6 +16,7 @@ from microecon.visualization.app import (
     run_comparison,
     run_comparison_from_paths,
     run_protocol_comparison,
+    run_matching_protocol_comparison,
     VisualizationApp,
     DualVisualizationApp,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "run_comparison",
     "run_comparison_from_paths",
     "run_protocol_comparison",
+    "run_matching_protocol_comparison",
     # App classes
     "VisualizationApp",
     "DualVisualizationApp",

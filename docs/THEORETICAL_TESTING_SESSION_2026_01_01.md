@@ -1,7 +1,7 @@
 # Theoretical Testing Session Summary
 
 **Date:** 2026-01-01
-**Focus:** 4-agent scenarios, tie-breaking determinism, bilateral exchange equilibrium, surplus ordering
+**Focus:** 4-agent scenarios, tie-breaking determinism, bilateral exchange equilibrium, surplus ordering, test organization
 
 ---
 
@@ -62,6 +62,55 @@ Peripheral D: (7,2), α=0.5, endowment=(2,10)  MRS=5.0  ← DIFFERENT
 - **Stage 2:** Post A-D trade, all three (A, D, C) have (6,6) bundles → B is only remaining opportunity
 - **Stage 3:** Equilibrium verification (all agents participate, zero bilateral surplus)
 
+### 4. Trading Chain Scenario (Tests Written, Skipped Pending Design Decision)
+
+**Setup:**
+```
+Agent A: (2,5),  α=0.2, endowment=(10,2)  [y-preferring]
+Agent B: (7,5),  α=0.4, endowment=(8,4)
+Agent C: (12,5), α=0.6, endowment=(4,8)
+Agent D: (17,5), α=0.8, endowment=(2,10)  [x-preferring]
+```
+
+Linear spatial arrangement with heterogeneous preferences. Tests how preference gradients affect trading dynamics.
+
+**Key insight discovered:** Trading chains surface a fundamental design question about agent behavior:
+
+**Scenario:** A and B are moving toward each other. D is also moving toward B. A and D will cross paths.
+- **Option 1 (Opportunistic):** A trades with D when they cross, even though A was headed to B
+- **Option 2 (Committed):** A continues to B (original target) and doesn't trade with D en route
+
+**Current behavior:** Opportunistic (agents trade with whoever they're co-located with)
+
+**Why this matters:** The trading sequence changes dramatically:
+- Opportunistic: A-D first (high surplus complementary types), then B-C
+- Committed: A-B first (spatial), then cascading trades
+
+**Resolution deferred:** All 29 trading chain tests marked `@pytest.mark.skip(reason="Pending design decision: opportunistic vs committed trading")`. See `docs/SESSION_REVIEW_2026_01_01_trading_chain.md` for full analysis.
+
+### 5. Test File Restructuring
+
+**Problem:** `tests/test_theoretical_scenarios.py` had grown to 3200+ lines with 17 test classes - a maintenance burden.
+
+**Solution:** Split into logical constituent parts in `tests/scenarios/`:
+
+| File | Classes | Tests | Purpose |
+|------|---------|-------|---------|
+| `test_two_agent.py` | 4 | 37 | Symmetric, NoTrade, Asymmetric, Rubinstein |
+| `test_three_agent.py` | 1 | 6 | Sequential trading dynamics |
+| `test_properties.py` | 3 | 8 | Nash symmetry, perception, tie-breaking |
+| `test_hub_and_spoke.py` | 6 | 46 | Symmetric + mixed (stages 1-3 each) |
+| `test_trading_chain.py` | 3 | 29 | Uniform scenario (all skipped) |
+| `conftest.py` | - | - | Shared imports |
+
+**Organizational decisions made:**
+- **Hybrid approach:** Organize by agent count, but keep multi-stage scenarios together
+- **Rubinstein with scenarios:** Keep protocol tests with their scenario type (two-agent)
+- **Single properties file:** All behavioral invariant tests in one place
+- **Clean break:** Deleted original monolith (git history preserves it)
+
+**Total:** 126 tests in `tests/scenarios/` (97 passing, 29 skipped)
+
 ---
 
 ## Key Theoretical Insights
@@ -119,8 +168,11 @@ Bilateral surpluses: ALL = 0.0000
 | TestMixedHubAndSpokeStage1 | 14 | Surplus ordering, A-D first trade |
 | TestMixedHubAndSpokeStage2 | 8 | Post A-D dynamics, B as sole opportunity |
 | TestMixedHubAndSpokeStage3 | 7 | Final equilibrium verification |
+| TestTradingChainUniformStage1 | 11 | Initial state, surplus ordering (SKIPPED) |
+| TestTradingChainUniformStage2 | 9 | Trade dynamics (SKIPPED) |
+| TestTradingChainUniformStage3 | 9 | Equilibrium verification (SKIPPED) |
 
-**Total:** 68 → 97 tests (+29 in mixed hub-and-spoke, +20 in symmetric hub-and-spoke)
+**Total:** 126 tests in `tests/scenarios/` (97 passing, 29 skipped pending design decision)
 
 ---
 
@@ -141,16 +193,25 @@ Different market structures have different equilibrium definitions:
 ### 4. Small Gains May Be Numerically Missed
 When investigating why some trades didn't occur, we found cases where gains existed (~0.02 utility) but weren't captured by the Nash bargaining solver. This may warrant investigation of numerical tolerances in `_solve_nash_cobb_douglas`.
 
+### 5. Test File Organization Matters
+A 3200-line test file with 17 classes becomes unwieldy. Splitting by scenario type (agent count + multi-stage grouping) keeps related tests together while maintaining navigability. The hybrid approach—organize by agent count but keep multi-stage scenarios together—proved effective.
+
+### 6. Design Questions Surface Through Testing
+The trading chain scenario revealed a fundamental ambiguity: should agents trade opportunistically (with whoever they meet) or commit to targets? This wasn't obvious from the theoretical foundations but emerged clearly when writing concrete test expectations. Tests that "don't know what to assert" are often surfacing real design decisions.
+
 ---
 
 ## Next Steps for Theoretical Test Coverage
 
-### High Priority
+### Immediate (Blocking)
 
-1. **Trading chain scenario**
-   - 4 agents with α = 0.2, 0.4, 0.6, 0.8
-   - Linear spatial arrangement
-   - Tests preference heterogeneity effects on trade sequence
+1. **Resolve opportunistic vs committed trading design question**
+   - See `docs/SESSION_REVIEW_2026_01_01_trading_chain.md` for full analysis
+   - Decision unblocks 29 trading chain tests
+   - Options: (a) Keep current opportunistic behavior, (b) Add commitment mechanism
+   - Consider: What does the theoretical literature say? (Search costs, commitment devices)
+
+### High Priority
 
 2. **Clustered pairs scenario**
    - Two pairs of nearby agents, far apart from each other
@@ -190,19 +251,31 @@ When investigating why some trades didn't occur, we found cases where gains exis
 ```
 src/microecon/search.py              # Tie-breaking logic
 src/microecon/simulation.py          # Trade partner ordering
-tests/test_theoretical_scenarios.py  # 49 new tests total
-THEORETICAL_TESTS.md                 # Updated documentation
+tests/test_theoretical_scenarios.py  # DELETED (replaced by scenarios/)
+tests/scenarios/conftest.py          # Shared imports
+tests/scenarios/test_two_agent.py    # 4 classes, 37 tests
+tests/scenarios/test_three_agent.py  # 1 class, 6 tests
+tests/scenarios/test_properties.py   # 3 classes, 8 tests
+tests/scenarios/test_hub_and_spoke.py # 6 classes, 46 tests
+tests/scenarios/test_trading_chain.py # 3 classes, 29 tests (skipped)
+docs/THEORETICAL_TESTS.md            # Updated documentation
+docs/SESSION_REVIEW_2026_01_01_trading_chain.md  # Design question analysis
 ```
 
-**Commits:**
-- `0a29217` - Symmetric hub-and-spoke tests (branch `tweaking`)
-- TBD - Mixed hub-and-spoke tests (this session continuation)
+**Commits (branch `tweaking`):**
+- `0a29217` - Add lexicographic tie-breaking and 4-agent hub-and-spoke tests
+- `60535a2` - Add session summary for theoretical testing work
+- `f1a8238` - Update THEORETICAL_TESTS.md with new test classes
+- `186a35c` - Add mixed hub-and-spoke theoretical tests (29 new tests)
+- `23caeec` - Add trading chain tests (skipped) - surfaces path-crossing design question
+- `84edbaa` - Restructure theoretical tests into tests/scenarios/ directory
 
 ---
 
 ## References
 
-- THEORETICAL_TESTS.md - Documents all theoretical scenario tests
-- theoretical-foundations.md - Textbook derivations
+- `docs/THEORETICAL_TESTS.md` - Documents all theoretical scenario tests
+- `docs/SESSION_REVIEW_2026_01_01_trading_chain.md` - Design question analysis
+- `docs/theoretical-foundations.md` - Textbook derivations
 - O&R-B Ch 2-3 - Nash and Rubinstein bargaining
 - MWG Ch 16 - Pareto efficiency and competitive equilibrium

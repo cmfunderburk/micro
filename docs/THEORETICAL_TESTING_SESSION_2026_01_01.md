@@ -1,7 +1,7 @@
 # Theoretical Testing Session Summary
 
 **Date:** 2026-01-01
-**Focus:** 4-agent scenarios, tie-breaking determinism, bilateral exchange equilibrium
+**Focus:** 4-agent scenarios, tie-breaking determinism, bilateral exchange equilibrium, surplus ordering
 
 ---
 
@@ -34,11 +34,39 @@ This creates a TRUE 3-way tie: all peripherals have identical preferences, endow
 - **Stage 2:** Post-trade dynamics (MRS equilibration, further trades with B and D)
 - **Stage 3:** Equilibrium verification (zero bilateral surplus, welfare improvement, feasibility)
 
+### 3. Created Mixed Hub-and-Spoke Test Scenario (Continuation)
+
+Building on the symmetric hub-and-spoke, we introduced **asymmetric endowments** to test surplus ordering:
+
+**Setup:**
+```
+Center C:     (7,7), α=0.5, endowment=(6,6)   MRS=1.0
+Peripheral A: (2,7), α=0.5, endowment=(10,2)  MRS=0.2
+Peripheral B: (12,7), α=0.5, endowment=(10,2) MRS=0.2
+Peripheral D: (7,2), α=0.5, endowment=(2,10)  MRS=5.0  ← DIFFERENT
+```
+
+**Key difference:** D has complementary endowment to A and B, creating different surplus values.
+
+**Hand-computed Nash surplus:**
+| Pair | Surplus (each) | Notes |
+|------|----------------|-------|
+| A↔D, B↔D | **1.53** | Complementary endowments |
+| C↔A, C↔B, C↔D | 0.42 | C is indifferent |
+| A↔B | 0.0 | Identical types |
+
+**Key insight:** A↔D surplus is 3.6x higher than C↔A. Despite C being at the spatial hub, A and D should find each other and trade first. This tests that surplus-driven search works correctly.
+
+**Staged testing approach:**
+- **Stage 1:** Surplus ordering verification, A and D target each other, first trade is A-D
+- **Stage 2:** Post A-D trade, all three (A, D, C) have (6,6) bundles → B is only remaining opportunity
+- **Stage 3:** Equilibrium verification (all agents participate, zero bilateral surplus)
+
 ---
 
-## Key Theoretical Insight
+## Key Theoretical Insights
 
-### Bilateral Exchange Equilibrium ≠ Competitive Equilibrium
+### 1. Bilateral Exchange Equilibrium ≠ Competitive Equilibrium
 
 **Discovery:** When testing the final state, we found that zero bilateral surplus for all pairs does NOT imply MRS equality across all agents.
 
@@ -63,6 +91,21 @@ Bilateral surpluses: ALL = 0.0000
 - The correct criterion is `compute_nash_surplus() ≈ 0` for all pairs
 - MRS equality is too strict; we only test that MRS variance decreases (convergence)
 
+### 2. Surplus-Driven Search Correctly Prioritizes Partners
+
+**Discovery:** In the mixed hub-and-spoke scenario, agents correctly pursue highest-surplus partners rather than spatially convenient ones.
+
+**Verification:**
+- A and D (with complementary endowments) have 3.6x higher surplus than C↔A
+- Despite C being at the spatial "hub", A and D target each other
+- First trade is A-D, not C-A (which would happen if search were purely spatial)
+
+**Post-trade dynamics insight:**
+- After A-D trade, both have (6,6) bundles with MRS=1
+- C also has (6,6) with MRS=1
+- All three have identical bundles → no gains from trading with each other
+- B becomes the "last man standing" - sole remaining trade opportunity
+
 ---
 
 ## Test Coverage Added
@@ -73,8 +116,11 @@ Bilateral surpluses: ALL = 0.0000
 | TestFourAgentHubAndSpokeStage1 | 8 | First trade and tie-breaking |
 | TestFourAgentHubAndSpokeStage2 | 3 | Post-trade dynamics |
 | TestFourAgentHubAndSpokeStage3 | 6 | Equilibrium verification |
+| TestMixedHubAndSpokeStage1 | 14 | Surplus ordering, A-D first trade |
+| TestMixedHubAndSpokeStage2 | 8 | Post A-D dynamics, B as sole opportunity |
+| TestMixedHubAndSpokeStage3 | 7 | Final equilibrium verification |
 
-**Total:** 211 → 231 tests (20 new)
+**Total:** 68 → 97 tests (+29 in mixed hub-and-spoke, +20 in symmetric hub-and-spoke)
 
 ---
 
@@ -101,43 +147,38 @@ When investigating why some trades didn't occur, we found cases where gains exis
 
 ### High Priority
 
-1. **Mixed hub-and-spoke scenario**
-   - Two peripherals with (10,2), one with (2,10)
-   - Tests surplus ordering + partial tie-breaking
-   - Setup discussed but not implemented
-
-2. **Trading chain scenario**
+1. **Trading chain scenario**
    - 4 agents with α = 0.2, 0.4, 0.6, 0.8
    - Linear spatial arrangement
    - Tests preference heterogeneity effects on trade sequence
 
-3. **Clustered pairs scenario**
+2. **Clustered pairs scenario**
    - Two pairs of nearby agents, far apart from each other
    - Tests intra-cluster vs inter-cluster dynamics
    - When do agents leave their cluster to trade with distant partners?
 
 ### Medium Priority
 
-4. **Path dependence investigation**
+3. **Path dependence investigation**
    - Same agents, different initial positions
    - Does final allocation depend on meeting order?
    - Statistical comparison across random initializations
 
-5. **Rubinstein protocol with 4+ agents**
+4. **Rubinstein protocol with 4+ agents**
    - Test proposer advantage in multi-agent settings
    - How does first-mover advantage compound across trades?
 
-6. **Numerical precision audit**
+5. **Numerical precision audit**
    - Investigate cases where small gains exist but Nash solver returns no trade
    - Consider tightening tolerances in bargaining.py
 
 ### Lower Priority
 
-7. **N-agent scaling tests**
+6. **N-agent scaling tests**
    - Verify equilibrium properties with 10, 50, 100 agents
    - Performance benchmarking
 
-8. **Edge cases**
+7. **Edge cases**
    - Extreme α values (0.01, 0.99)
    - Very unequal endowments
    - Agents with zero of one good
@@ -147,12 +188,15 @@ When investigating why some trades didn't occur, we found cases where gains exis
 ## Files Modified
 
 ```
-src/microecon/search.py        # Tie-breaking logic
-src/microecon/simulation.py    # Trade partner ordering
-tests/test_theoretical_scenarios.py  # 20 new tests
+src/microecon/search.py              # Tie-breaking logic
+src/microecon/simulation.py          # Trade partner ordering
+tests/test_theoretical_scenarios.py  # 49 new tests total
+THEORETICAL_TESTS.md                 # Updated documentation
 ```
 
-**Commit:** `0a29217` on branch `tweaking`
+**Commits:**
+- `0a29217` - Symmetric hub-and-spoke tests (branch `tweaking`)
+- TBD - Mixed hub-and-spoke tests (this session continuation)
 
 ---
 

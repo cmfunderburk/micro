@@ -10,7 +10,7 @@
 
 The file `tests/test_theoretical_scenarios.py` contains scenarios simple enough to compute by hand, encoding expected economic outcomes as test assertions. These "theoretical unit tests" verify that simulation outcomes match analytically-derived predictions.
 
-**Test count:** 68 tests across 11 test classes
+**Test count:** 97 tests across 14 test classes
 
 ---
 
@@ -216,6 +216,84 @@ The simulation reaches **bilateral exchange equilibrium** (no pair has positive 
 
 ---
 
+### 2.12 TestMixedHubAndSpokeStage1 (14 tests)
+
+**Setup (Asymmetric endowments):**
+```
+Center C:     (7,7), α=0.5, endowment=(6,6)   MRS=1.0
+Peripheral A: (2,7), α=0.5, endowment=(10,2)  MRS=0.2
+Peripheral B: (12,7), α=0.5, endowment=(10,2) MRS=0.2
+Peripheral D: (7,2), α=0.5, endowment=(2,10)  MRS=5.0  ← DIFFERENT
+```
+
+Unlike the symmetric hub-and-spoke, D has **complementary endowment** to A and B.
+
+**Hand-computed Nash surplus:**
+| Pair | Surplus (each) | Notes |
+|------|----------------|-------|
+| A↔D, B↔D | 1.53 | Complementary endowments |
+| C↔A, C↔B, C↔D | 0.42 | C is indifferent |
+| A↔B | 0.0 | Identical types |
+
+**Key insight:** A↔D surplus is 3.6x higher than C↔A. Despite C being at the spatial hub, A and D should find each other and trade first.
+
+**Tests:**
+| Phase | Tests | Verifications |
+|-------|-------|---------------|
+| Initial state | 3 | Utilities, MRS values, distances |
+| Surplus ordering | 4 | A↔D >> C↔A, A↔B = 0, C indifferent |
+| Target selection | 2 | A→D, D→A (tie-break to p_a) |
+| First trade | 5 | A-D trade first, (6,6) allocations |
+
+---
+
+### 2.13 TestMixedHubAndSpokeStage2 (8 tests)
+
+**State after A-D trade:**
+```
+A: (6, 6), MRS = 1.0, utility = 6.0
+D: (6, 6), MRS = 1.0, utility = 6.0
+C: (6, 6), MRS = 1.0, utility = 6.0 (unchanged)
+B: (10, 2), MRS = 0.2, utility = √20 (unchanged)
+```
+
+**Key insight:** A, D, and C all now have identical (6, 6) bundles. They have NO gains from trading with each other. B is the ONLY remaining trade opportunity.
+
+**Hand-computed surplus:**
+- A↔C = A↔D = C↔D = 0 (identical bundles)
+- A↔B = D↔B = C↔B ≈ 0.42 each
+
+**Tests:**
+| Test | Verification |
+|------|--------------|
+| Post-trade MRS | A, D have MRS=1 after trade |
+| C unchanged | Still at (6,6) with MRS=1 |
+| B unchanged | Still at (10,2) with MRS=0.2 |
+| Zero internal surplus | A, D, C cannot trade with each other |
+| Positive B surplus | All have ~0.42 surplus with B |
+| B eventually trades | B's endowment changes |
+| B in trade log | B appears in trade records |
+| Welfare improves | Total welfare increases |
+
+---
+
+### 2.14 TestMixedHubAndSpokeStage3 (7 tests)
+
+**Purpose:** Verify equilibrium properties after all trades complete.
+
+**Tests:**
+| Test | Verification |
+|------|--------------|
+| Zero bilateral surplus | No pair has remaining gains |
+| Welfare improved | Total utility > initial + 2.0 |
+| Feasibility | (28, 20) total preserved |
+| Multiple trades | At least 2 trades occurred |
+| All participated | All 4 agents traded |
+| Stasis | No trades after equilibrium |
+| MRS convergence | Variance decreased from (0.2, 1.0, 0.2, 5.0) |
+
+---
+
 ## 3. Theoretical Grounding
 
 All scenarios derive from canonical microeconomic theory:
@@ -244,11 +322,6 @@ The simulation implements bilateral exchange. The correct equilibrium criterion 
 ## 4. Future Test Coverage
 
 ### 4.1 High Priority
-
-**Mixed hub-and-spoke scenario:**
-- Two peripherals with (10,2), one with (2,10)
-- Tests surplus ordering + partial tie-breaking
-- Setup discussed, not yet implemented
 
 **Trading chain scenario:**
 - 4 agents with α = 0.2, 0.4, 0.6, 0.8
@@ -324,6 +397,8 @@ uv run pytest tests/test_theoretical_scenarios.py --cov=microecon.bargaining
 
 ---
 
-**Document Version:** 1.1
+**Document Version:** 1.2
 **Last Updated:** 2026-01-01
-**Changes:** Added 4 new test classes (20 tests), bilateral vs competitive equilibrium discussion, updated future coverage priorities
+**Changes:**
+- v1.2: Added mixed hub-and-spoke scenario (3 test classes, 29 tests). Tests surplus ordering with asymmetric endowments - complementary pairs (A↔D) have 3.6x more surplus than balanced pairs (C↔A).
+- v1.1: Added 4 new test classes (20 tests), bilateral vs competitive equilibrium discussion, updated future coverage priorities

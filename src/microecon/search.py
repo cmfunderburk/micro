@@ -126,7 +126,12 @@ def evaluate_targets(
         # Discount by time to reach
         discounted_value = expected_surplus * (agent.discount_factor ** ticks_to_reach)
 
-        if discounted_value > best_value:
+        # Update if this is the best target, or tie-break by lexicographic agent ID
+        if discounted_value > best_value or (
+            discounted_value == best_value
+            and best_target_id is not None
+            and target_id < best_target_id
+        ):
             best_value = discounted_value
             best_target_id = target_id
             best_target_pos = target_pos
@@ -218,7 +223,14 @@ def evaluate_targets_detailed(
             )
         )
 
-        if expected_surplus > 0 and discounted_value > best_value:
+        # Update if this is the best target, or tie-break by lexicographic agent ID
+        if expected_surplus > 0 and (
+            discounted_value > best_value or (
+                discounted_value == best_value
+                and best_target_id is not None
+                and target_id < best_target_id
+            )
+        ):
             best_value = discounted_value
             best_target_id = target_id
             best_target_pos = target_pos

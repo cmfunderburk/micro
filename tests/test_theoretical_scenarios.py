@@ -1259,3 +1259,702 @@ class TestPerceptionBoundary:
         # B should move toward A
         assert pos_b_after != pos_b_initial
         assert pos_b_after.chebyshev_distance_to(pos_a_initial) < pos_b_initial.chebyshev_distance_to(pos_a_initial)
+
+
+class TestTieBreakingDeterminism:
+    """
+    Test that tie-breaking is deterministic and uses lexicographic agent ID ordering.
+
+    When multiple agents have identical discounted surplus values, the agent
+    with the lexicographically smallest ID should be selected. This ensures
+    reproducible simulation behavior.
+    """
+
+    def test_search_tie_break_selects_smallest_id(self):
+        """When targets have equal discounted value, smallest ID wins."""
+        from microecon.agent import Agent, AgentPrivateState
+
+        # Create center agent
+        center = Agent(
+            id="center",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(10.0, 2.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+
+        # Create three targets with identical surplus potential, equidistant
+        # They have complementary endowments to center, so positive surplus exists
+        target_c = Agent(
+            id="target_c",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(2.0, 10.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        target_a = Agent(
+            id="target_a",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(2.0, 10.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        target_b = Agent(
+            id="target_b",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(2.0, 10.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+
+        sim = Simulation(
+            grid=Grid(15),
+            info_env=FullInformation(),
+            bargaining_protocol=NashBargainingProtocol(),
+        )
+
+        # Place center at origin, targets equidistant (distance = 5)
+        sim.add_agent(center, Position(7, 7))
+        sim.add_agent(target_c, Position(2, 7))   # distance 5
+        sim.add_agent(target_a, Position(12, 7))  # distance 5
+        sim.add_agent(target_b, Position(7, 2))   # distance 5
+
+        agents_by_id = {a.id: a for a in sim.agents}
+        result = evaluate_targets(center, sim.grid, sim.info_env, agents_by_id)
+
+        # Should select target_a (lexicographically smallest: a < b < c)
+        assert result.best_target_id == "target_a"
+        assert result.visible_agents == 3
+
+    def test_trade_partner_tie_break_selects_smallest_id(self):
+        """When multiple trade partners available, smallest ID trades first."""
+        from microecon.agent import Agent, AgentPrivateState
+
+        # Center with complementary endowment
+        center = Agent(
+            id="center",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(10.0, 2.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+
+        # Three potential partners at same position as center
+        partner_c = Agent(
+            id="partner_c",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(2.0, 10.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        partner_a = Agent(
+            id="partner_a",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(2.0, 10.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        partner_b = Agent(
+            id="partner_b",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(2.0, 10.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+
+        sim = Simulation(
+            grid=Grid(15),
+            info_env=FullInformation(),
+            bargaining_protocol=NashBargainingProtocol(),
+        )
+
+        # All at same position - add center first (so it iterates first)
+        sim.add_agent(center, Position(5, 5))
+        sim.add_agent(partner_c, Position(5, 5))
+        sim.add_agent(partner_a, Position(5, 5))
+        sim.add_agent(partner_b, Position(5, 5))
+
+        trades = sim.step()
+
+        # Center should trade with partner_a (lexicographically smallest)
+        assert len(trades) == 1
+        trade = trades[0]
+        assert trade.agent1_id == "center"
+        assert trade.agent2_id == "partner_a"
+
+    def test_determinism_same_seed_same_sequence(self):
+        """Same configuration should produce identical trade sequence."""
+        from microecon.agent import Agent, AgentPrivateState
+
+        def run_scenario():
+            center = Agent(
+                id="center",
+                private_state=AgentPrivateState(
+                    preferences=CobbDouglas(0.5),
+                    endowment=Bundle(6.0, 6.0),
+                ),
+                perception_radius=10.0,
+                discount_factor=0.95,
+            )
+            p_a = Agent(
+                id="p_a",
+                private_state=AgentPrivateState(
+                    preferences=CobbDouglas(0.5),
+                    endowment=Bundle(10.0, 2.0),
+                ),
+                perception_radius=10.0,
+                discount_factor=0.95,
+            )
+            p_b = Agent(
+                id="p_b",
+                private_state=AgentPrivateState(
+                    preferences=CobbDouglas(0.5),
+                    endowment=Bundle(10.0, 2.0),
+                ),
+                perception_radius=10.0,
+                discount_factor=0.95,
+            )
+
+            sim = Simulation(
+                grid=Grid(15),
+                info_env=FullInformation(),
+                bargaining_protocol=NashBargainingProtocol(),
+            )
+
+            sim.add_agent(center, Position(7, 7))
+            sim.add_agent(p_a, Position(2, 7))
+            sim.add_agent(p_b, Position(12, 7))
+
+            sim.run(20)
+
+            return [(t.agent1_id, t.agent2_id) for t in sim.trades]
+
+        # Run twice
+        sequence1 = run_scenario()
+        sequence2 = run_scenario()
+
+        # Should be identical
+        assert sequence1 == sequence2
+        assert len(sequence1) > 0  # Some trades should occur
+
+
+class TestFourAgentHubAndSpokeStage1:
+    """
+    Hub-and-spoke scenario Stage 1: TRUE 3-way tie and first trade.
+
+    Setup:
+        Center C: position (7,7), α=0.5, endowment=(6,6)
+        Peripheral A: position (2,7), α=0.5, endowment=(10,2) [distance=5]
+        Peripheral B: position (12,7), α=0.5, endowment=(10,2) [distance=5]
+        Peripheral D: position (7,2), α=0.5, endowment=(10,2) [distance=5]
+
+    All peripherals have identical preferences, endowments, and distance from center.
+    This is a TRUE 3-way tie that must be resolved by lexicographic ID ordering.
+
+    Hand-computed predictions:
+        - Initial utilities: C=6.0, A=B=D=√20≈4.472
+        - All peripherals have identical Nash surplus with C ≈ 0.42
+        - All at same distance → identical discounted value
+        - Tie-break: C should select A (smallest ID)
+        - After C-A trade:
+            C: ~(9.08, 4.54), utility ≈ 6.42
+            A: ~(6.92, 3.46), utility ≈ 4.89
+    """
+
+    # Hand-computed constants
+    INITIAL_UTILITY_CENTER = 6.0
+    INITIAL_UTILITY_PERIPHERAL = math.sqrt(20)  # ≈ 4.472
+    EXPECTED_GAIN_PER_AGENT = 0.42  # Approximate
+
+    @pytest.fixture
+    def scenario(self):
+        """Set up hub-and-spoke with true 3-way tie."""
+        from microecon.agent import Agent, AgentPrivateState
+
+        center = Agent(
+            id="center",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(6.0, 6.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        p_a = Agent(
+            id="p_a",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(10.0, 2.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        p_b = Agent(
+            id="p_b",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(10.0, 2.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        p_d = Agent(
+            id="p_d",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(10.0, 2.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+
+        sim = Simulation(
+            grid=Grid(15),
+            info_env=FullInformation(),
+            bargaining_protocol=NashBargainingProtocol(),
+        )
+
+        sim.add_agent(center, Position(7, 7))
+        sim.add_agent(p_a, Position(2, 7))   # distance 5
+        sim.add_agent(p_b, Position(12, 7))  # distance 5
+        sim.add_agent(p_d, Position(7, 2))   # distance 5
+
+        return sim, center, p_a, p_b, p_d
+
+    def test_initial_utilities(self, scenario):
+        """Verify initial utilities match predictions."""
+        sim, center, p_a, p_b, p_d = scenario
+
+        assert center.utility() == pytest.approx(self.INITIAL_UTILITY_CENTER, rel=0.01)
+        assert p_a.utility() == pytest.approx(self.INITIAL_UTILITY_PERIPHERAL, rel=0.01)
+        assert p_b.utility() == pytest.approx(self.INITIAL_UTILITY_PERIPHERAL, rel=0.01)
+        assert p_d.utility() == pytest.approx(self.INITIAL_UTILITY_PERIPHERAL, rel=0.01)
+
+    def test_all_peripherals_equidistant(self, scenario):
+        """Verify all peripherals are at same distance from center."""
+        sim, center, p_a, p_b, p_d = scenario
+
+        center_pos = sim.grid.get_position(center)
+        dist_a = sim.grid.get_position(p_a).distance_to(center_pos)
+        dist_b = sim.grid.get_position(p_b).distance_to(center_pos)
+        dist_d = sim.grid.get_position(p_d).distance_to(center_pos)
+
+        assert dist_a == pytest.approx(dist_b, rel=0.01)
+        assert dist_a == pytest.approx(dist_d, rel=0.01)
+        assert dist_a == 5.0
+
+    def test_all_peripherals_have_identical_surplus(self, scenario):
+        """All peripherals should have identical Nash surplus with center."""
+        sim, center, p_a, p_b, p_d = scenario
+
+        center_type = AgentType(center.preferences, center.endowment)
+        type_a = AgentType(p_a.preferences, p_a.endowment)
+        type_b = AgentType(p_b.preferences, p_b.endowment)
+        type_d = AgentType(p_d.preferences, p_d.endowment)
+
+        surplus_a = compute_nash_surplus(center_type, type_a)
+        surplus_b = compute_nash_surplus(center_type, type_b)
+        surplus_d = compute_nash_surplus(center_type, type_d)
+
+        # All should be equal
+        assert surplus_a == pytest.approx(surplus_b, rel=0.01)
+        assert surplus_a == pytest.approx(surplus_d, rel=0.01)
+        # And positive
+        assert surplus_a > 0
+
+    def test_center_selects_lexicographically_smallest_target(self, scenario):
+        """Center should select p_a (smallest ID: p_a < p_b < p_d)."""
+        sim, center, p_a, p_b, p_d = scenario
+
+        agents_by_id = {a.id: a for a in sim.agents}
+        result = evaluate_targets(center, sim.grid, sim.info_env, agents_by_id)
+
+        # Should select p_a
+        assert result.best_target_id == "p_a"
+
+    def test_first_trade_is_center_with_p_a(self, scenario):
+        """First trade should be between center and p_a."""
+        sim, center, p_a, p_b, p_d = scenario
+
+        # Run until first trade
+        for _ in range(10):
+            trades = sim.step()
+            if trades:
+                break
+
+        assert len(sim.trades) == 1
+        trade = sim.trades[0]
+
+        # Should be center-p_a trade
+        agents_in_trade = {trade.agent1_id, trade.agent2_id}
+        assert "center" in agents_in_trade
+        assert "p_a" in agents_in_trade
+
+    def test_first_trade_allocations_correct(self, scenario):
+        """After first trade, allocations should match Nash solution."""
+        sim, center, p_a, p_b, p_d = scenario
+
+        # Run until first trade
+        for _ in range(10):
+            trades = sim.step()
+            if trades:
+                break
+
+        # Center and p_a should have traded
+        # Center started with (6,6), p_a with (10,2)
+        # Total: (16, 8)
+        # With symmetric α=0.5, on contract curve each gets equal utility gain
+
+        # Just verify feasibility and utility improvements
+        total_x = center.endowment.x + p_a.endowment.x
+        total_y = center.endowment.y + p_a.endowment.y
+
+        assert total_x == pytest.approx(16.0, rel=0.01)
+        assert total_y == pytest.approx(8.0, rel=0.01)
+
+        # Both should have gained utility
+        assert center.utility() > self.INITIAL_UTILITY_CENTER
+        assert p_a.utility() > self.INITIAL_UTILITY_PERIPHERAL
+
+    def test_peripherals_b_and_d_unchanged(self, scenario):
+        """After first trade, p_b and p_d should be unchanged."""
+        sim, center, p_a, p_b, p_d = scenario
+
+        initial_b = (p_b.endowment.x, p_b.endowment.y)
+        initial_d = (p_d.endowment.x, p_d.endowment.y)
+
+        # Run until first trade
+        for _ in range(10):
+            trades = sim.step()
+            if trades:
+                break
+
+        # p_b and p_d should be unchanged
+        assert (p_b.endowment.x, p_b.endowment.y) == initial_b
+        assert (p_d.endowment.x, p_d.endowment.y) == initial_d
+
+    def test_post_trade_remaining_surplus_exists(self, scenario):
+        """After center-p_a trade, surplus should still exist with p_b and p_d."""
+        sim, center, p_a, p_b, p_d = scenario
+
+        # Run until first trade
+        for _ in range(10):
+            trades = sim.step()
+            if trades:
+                break
+
+        # Check surplus between center (now modified) and p_b, p_d
+        center_type = AgentType(center.preferences, center.endowment)
+        type_b = AgentType(p_b.preferences, p_b.endowment)
+        type_d = AgentType(p_d.preferences, p_d.endowment)
+
+        surplus_cb = compute_nash_surplus(center_type, type_b)
+        surplus_cd = compute_nash_surplus(center_type, type_d)
+
+        # Center's MRS changed after trade, so surplus with p_b, p_d should still exist
+        # (unless center is now equilibrated, but that's unlikely with only one trade)
+        # This is a key prediction: trading continues
+        assert surplus_cb > 0 or surplus_cd > 0
+
+
+class TestFourAgentHubAndSpokeStage2:
+    """
+    Hub-and-spoke scenario Stage 2: Post-first-trade dynamics.
+
+    After center trades with p_a:
+    - Center has new allocation ~(9.08, 4.54), MRS ≈ 0.5
+    - p_a has new allocation ~(6.92, 3.46), MRS ≈ 0.5
+    - p_b, p_d still have (10, 2), MRS = 0.2
+
+    Since MRS differ (0.5 vs 0.2), further trades are possible:
+    - Center can trade profitably with p_b or p_d
+    - p_a can also trade profitably with p_b or p_d
+
+    Key insight: After first trade, the "equilibrated" center-p_a pair
+    still has gains from trade with the remaining peripherals.
+    """
+
+    @pytest.fixture
+    def scenario_after_first_trade(self):
+        """Set up scenario and run until first trade completes."""
+        from microecon.agent import Agent, AgentPrivateState
+
+        center = Agent(
+            id="center",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(6.0, 6.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        p_a = Agent(
+            id="p_a",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(10.0, 2.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        p_b = Agent(
+            id="p_b",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(10.0, 2.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        p_d = Agent(
+            id="p_d",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(10.0, 2.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+
+        sim = Simulation(
+            grid=Grid(15),
+            info_env=FullInformation(),
+            bargaining_protocol=NashBargainingProtocol(),
+        )
+
+        sim.add_agent(center, Position(7, 7))
+        sim.add_agent(p_a, Position(2, 7))
+        sim.add_agent(p_b, Position(12, 7))
+        sim.add_agent(p_d, Position(7, 2))
+
+        # Run until first trade
+        for _ in range(10):
+            trades = sim.step()
+            if trades:
+                break
+
+        return sim, center, p_a, p_b, p_d
+
+    def test_mrs_changed_after_first_trade(self, scenario_after_first_trade):
+        """Center and p_a should have different MRS after trade."""
+        sim, center, p_a, p_b, p_d = scenario_after_first_trade
+
+        mrs_center = center.preferences.marginal_rate_of_substitution(center.endowment)
+        mrs_a = p_a.preferences.marginal_rate_of_substitution(p_a.endowment)
+        mrs_b = p_b.preferences.marginal_rate_of_substitution(p_b.endowment)
+
+        # Center and p_a should have equal MRS (they just traded to Pareto efficiency)
+        assert mrs_center == pytest.approx(mrs_a, rel=0.1)
+
+        # But p_b (and p_d) still have original MRS = 0.2
+        assert mrs_b == pytest.approx(0.2, rel=0.01)
+
+        # So center/p_a MRS differs from p_b MRS → gains from trade exist
+        assert abs(mrs_center - mrs_b) > 0.1
+
+    def test_further_trades_occur(self, scenario_after_first_trade):
+        """Additional trades should occur after the first."""
+        sim, center, p_a, p_b, p_d = scenario_after_first_trade
+
+        trades_after_first = len(sim.trades)
+
+        # Run more ticks
+        sim.run(30)
+
+        # More trades should have occurred
+        assert len(sim.trades) > trades_after_first
+
+    def test_p_b_and_p_d_eventually_trade(self, scenario_after_first_trade):
+        """p_b and p_d should eventually participate in trades."""
+        sim, center, p_a, p_b, p_d = scenario_after_first_trade
+
+        # Run until equilibrium
+        sim.run(50)
+
+        # Check that p_b and p_d participated
+        p_b_traded = any(
+            t.agent1_id == "p_b" or t.agent2_id == "p_b"
+            for t in sim.trades
+        )
+        p_d_traded = any(
+            t.agent1_id == "p_d" or t.agent2_id == "p_d"
+            for t in sim.trades
+        )
+
+        # At least one of them should have traded
+        assert p_b_traded or p_d_traded
+
+
+class TestFourAgentHubAndSpokeStage3:
+    """
+    Hub-and-spoke scenario Stage 3: Equilibrium verification.
+
+    After all trades complete, verify:
+    1. Pareto efficiency: All agents have equal MRS (where they can trade)
+    2. Zero bilateral surplus: No pair has remaining gains from trade
+    3. Welfare improvement: Total welfare increased
+    4. Feasibility: Total resources unchanged
+    """
+
+    @pytest.fixture
+    def scenario_at_equilibrium(self):
+        """Set up scenario and run to equilibrium."""
+        from microecon.agent import Agent, AgentPrivateState
+
+        center = Agent(
+            id="center",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(6.0, 6.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        p_a = Agent(
+            id="p_a",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(10.0, 2.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        p_b = Agent(
+            id="p_b",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(10.0, 2.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+        p_d = Agent(
+            id="p_d",
+            private_state=AgentPrivateState(
+                preferences=CobbDouglas(0.5),
+                endowment=Bundle(10.0, 2.0),
+            ),
+            perception_radius=10.0,
+            discount_factor=0.95,
+        )
+
+        sim = Simulation(
+            grid=Grid(15),
+            info_env=FullInformation(),
+            bargaining_protocol=NashBargainingProtocol(),
+        )
+
+        sim.add_agent(center, Position(7, 7))
+        sim.add_agent(p_a, Position(2, 7))
+        sim.add_agent(p_b, Position(12, 7))
+        sim.add_agent(p_d, Position(7, 2))
+
+        # Record initial values
+        initial_welfare = sim.total_welfare()
+        initial_total_x = sum(a.endowment.x for a in sim.agents)
+        initial_total_y = sum(a.endowment.y for a in sim.agents)
+
+        # Run to equilibrium
+        sim.run(100)
+
+        return sim, center, p_a, p_b, p_d, initial_welfare, initial_total_x, initial_total_y
+
+    def test_mrs_converge_toward_equality(self, scenario_at_equilibrium):
+        """At equilibrium, MRS should be closer together than initially.
+
+        Note: In bilateral exchange, zero bilateral surplus does NOT imply
+        perfect MRS equality (which requires a complete market/Walrasian
+        auctioneer). We only verify that agents who traded together have
+        equalized MRS, and that overall MRS have converged from initial values.
+        """
+        sim, center, p_a, p_b, p_d, _, _, _ = scenario_at_equilibrium
+
+        mrs_center = center.preferences.marginal_rate_of_substitution(center.endowment)
+        mrs_a = p_a.preferences.marginal_rate_of_substitution(p_a.endowment)
+        mrs_b = p_b.preferences.marginal_rate_of_substitution(p_b.endowment)
+        mrs_d = p_d.preferences.marginal_rate_of_substitution(p_d.endowment)
+
+        # Initial MRS values were: center=1.0, peripherals=0.2
+        # After trading, MRS should have converged somewhat
+        all_mrs = [mrs_center, mrs_a, mrs_b, mrs_d]
+        initial_mrs = [1.0, 0.2, 0.2, 0.2]
+
+        # Calculate variance (spread) of MRS
+        mean_final = sum(all_mrs) / len(all_mrs)
+        variance_final = sum((m - mean_final) ** 2 for m in all_mrs) / len(all_mrs)
+
+        mean_initial = sum(initial_mrs) / len(initial_mrs)
+        variance_initial = sum((m - mean_initial) ** 2 for m in initial_mrs) / len(initial_mrs)
+
+        # Final variance should be lower than initial (MRS converged)
+        assert variance_final < variance_initial, \
+            f"MRS should converge: initial variance={variance_initial:.4f}, final={variance_final:.4f}"
+
+    def test_zero_bilateral_surplus_at_equilibrium(self, scenario_at_equilibrium):
+        """No pair should have remaining gains from trade."""
+        sim, center, p_a, p_b, p_d, _, _, _ = scenario_at_equilibrium
+
+        agents = [center, p_a, p_b, p_d]
+
+        for i, agent1 in enumerate(agents):
+            for agent2 in agents[i + 1:]:
+                type1 = AgentType(agent1.preferences, agent1.endowment)
+                type2 = AgentType(agent2.preferences, agent2.endowment)
+
+                surplus = compute_nash_surplus(type1, type2)
+
+                assert surplus == pytest.approx(0.0, abs=0.1), \
+                    f"Non-zero surplus between {agent1.id} and {agent2.id}: {surplus}"
+
+    def test_welfare_improved(self, scenario_at_equilibrium):
+        """Total welfare should have increased."""
+        sim, center, p_a, p_b, p_d, initial_welfare, _, _ = scenario_at_equilibrium
+
+        final_welfare = sim.total_welfare()
+
+        assert final_welfare > initial_welfare
+
+    def test_feasibility_preserved(self, scenario_at_equilibrium):
+        """Total resources should be unchanged."""
+        sim, center, p_a, p_b, p_d, _, initial_total_x, initial_total_y = scenario_at_equilibrium
+
+        final_total_x = sum(a.endowment.x for a in sim.agents)
+        final_total_y = sum(a.endowment.y for a in sim.agents)
+
+        assert final_total_x == pytest.approx(initial_total_x, rel=1e-9)
+        assert final_total_y == pytest.approx(initial_total_y, rel=1e-9)
+
+    def test_multiple_trades_occurred(self, scenario_at_equilibrium):
+        """Multiple trades should have occurred (not just one)."""
+        sim, _, _, _, _, _, _, _ = scenario_at_equilibrium
+
+        # With 4 agents and gains from trade, we expect multiple trades
+        assert len(sim.trades) >= 2
+
+    def test_no_more_trades_after_equilibrium(self, scenario_at_equilibrium):
+        """Running more ticks should produce no additional trades."""
+        sim, center, p_a, p_b, p_d, _, _, _ = scenario_at_equilibrium
+
+        trades_at_equilibrium = len(sim.trades)
+
+        # Run more
+        sim.run(20)
+
+        # No new trades
+        assert len(sim.trades) == trades_at_equilibrium

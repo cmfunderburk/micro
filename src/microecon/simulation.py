@@ -221,8 +221,8 @@ class Simulation:
             if not others:
                 continue
 
-            # Trade with first available partner
-            for other_id in others:
+            # Trade with first available partner (sorted by ID for determinism)
+            for other_id in sorted(others):
                 other = self._agents_by_id.get(other_id)
                 if other is None:
                     continue

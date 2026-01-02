@@ -11,7 +11,7 @@ Reference: CLAUDE.md (First Milestone)
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Optional, Callable
+from typing import Optional, Callable, TYPE_CHECKING
 import random
 
 from microecon.agent import Agent, create_agent
@@ -23,7 +23,15 @@ from microecon.bargaining import (
     BargainingProtocol,
     NashBargainingProtocol,
 )
-from microecon.search import compute_move_target, should_trade
+from microecon.search import (
+    compute_move_target,
+    should_trade,
+    evaluate_targets_detailed,
+    TargetEvaluationResult,
+)
+
+if TYPE_CHECKING:
+    from microecon.logging import SimulationLogger
 
 
 @dataclass
@@ -66,6 +74,7 @@ class Simulation:
         bargaining_protocol: Protocol for bilateral bargaining (Nash, Rubinstein, etc.)
         tick: Current tick number
         trades: History of trades
+        logger: Optional SimulationLogger for capturing detailed state
     """
     grid: Grid
     info_env: InformationEnvironment = field(default_factory=FullInformation)
@@ -74,6 +83,7 @@ class Simulation:
     tick: int = 0
     trades: list[TradeEvent] = field(default_factory=list)
     _agents_by_id: dict[str, Agent] = field(default_factory=dict, repr=False)
+    logger: Optional["SimulationLogger"] = field(default=None, repr=False)
 
     def add_agent(self, agent: Agent, position: Position) -> None:
         """Add an agent to the simulation at the given position."""
@@ -106,15 +116,40 @@ class Simulation:
         self.tick += 1
         tick_trades = []
 
+        # For logging: collect search decisions and movement events
+        search_decisions_data: list[tuple[str, Position, int, list[TargetEvaluationResult], Optional[str], float]] = []
+        movement_events_data: list[tuple[str, Position, Position, Optional[str], str]] = []
+
         # Phase 1: Determine movement for all agents and store old positions
         move_targets: dict[str, Optional[Position]] = {}
+        move_target_ids: dict[str, Optional[str]] = {}  # Track target agent ID for logging
         old_positions: dict[str, Position] = {}
+
         for agent in self.agents:
-            old_positions[agent.id] = self.grid.get_position(agent)
-            target = compute_move_target(
-                agent, self.grid, self.info_env, self._agents_by_id
-            )
-            move_targets[agent.id] = target
+            old_pos = self.grid.get_position(agent)
+            old_positions[agent.id] = old_pos
+
+            if self.logger is not None:
+                # Use detailed evaluation for logging
+                result, evaluations = evaluate_targets_detailed(
+                    agent, self.grid, self.info_env, self._agents_by_id
+                )
+                move_targets[agent.id] = result.best_target_position
+                move_target_ids[agent.id] = result.best_target_id
+                search_decisions_data.append((
+                    agent.id,
+                    old_pos,
+                    result.visible_agents,
+                    evaluations,
+                    result.best_target_id,
+                    result.discounted_value,
+                ))
+            else:
+                # Use simple evaluation when not logging
+                target = compute_move_target(
+                    agent, self.grid, self.info_env, self._agents_by_id
+                )
+                move_targets[agent.id] = target
 
         # Phase 2: Execute movement (simultaneous)
         for agent in self.agents:
@@ -149,9 +184,31 @@ class Simulation:
                     self.grid.move_agent(agent2, new1)
                     new_positions[agent2.id] = new1
 
+        # Record movement events for logging
+        if self.logger is not None:
+            for agent in self.agents:
+                old_pos = old_positions.get(agent.id)
+                new_pos = new_positions.get(agent.id)
+                target_id = move_target_ids.get(agent.id)
+
+                if old_pos is None or new_pos is None:
+                    continue
+
+                if old_pos == new_pos:
+                    reason = "at_target" if target_id is not None else "no_target"
+                elif target_id is not None:
+                    reason = "toward_target"
+                else:
+                    reason = "stayed"
+
+                movement_events_data.append((
+                    agent.id, old_pos, new_pos, target_id, reason
+                ))
+
         # Phase 3: Execute trades for agents at same position
         # Track which agents have traded this tick to avoid double-trading
         traded_this_tick: set[str] = set()
+        trade_events_data: list[tuple] = []  # For logging
 
         for agent in self.agents:
             if agent.id in traded_this_tick:
@@ -171,6 +228,10 @@ class Simulation:
                     continue
 
                 if should_trade(agent, other, self.info_env):
+                    # Capture pre-trade endowments for logging
+                    pre_endowment1 = (agent.endowment.x, agent.endowment.y)
+                    pre_endowment2 = (other.endowment.x, other.endowment.y)
+
                     # The agent who found the other becomes the proposer
                     # (first-mover advantage in Rubinstein)
                     outcome = self.bargaining_protocol.execute(agent, other, proposer=agent)
@@ -185,9 +246,125 @@ class Simulation:
                         self.trades.append(event)
                         traded_this_tick.add(agent.id)
                         traded_this_tick.add(other.id)
+
+                        # Record for logging
+                        if self.logger is not None:
+                            trade_events_data.append((
+                                agent.id,
+                                other.id,
+                                agent.id,  # proposer_id
+                                (pre_endowment1, pre_endowment2),
+                                ((outcome.allocation_1.x, outcome.allocation_1.y),
+                                 (outcome.allocation_2.x, outcome.allocation_2.y)),
+                                (outcome.utility_1, outcome.utility_2),
+                                (outcome.gains_1, outcome.gains_2),
+                                outcome.trade_occurred,
+                            ))
+
                         break  # Agent can only trade once per tick
 
+        # Log the complete tick record
+        if self.logger is not None:
+            self._log_tick(
+                search_decisions_data,
+                movement_events_data,
+                trade_events_data,
+            )
+
         return tick_trades
+
+    def _log_tick(
+        self,
+        search_decisions_data: list,
+        movement_events_data: list,
+        trade_events_data: list,
+    ) -> None:
+        """Create and log a complete tick record."""
+        from microecon.logging import (
+            create_agent_snapshot,
+            create_search_decision,
+            create_target_evaluation,
+            create_movement_event,
+            create_trade_event,
+            create_tick_record,
+            TargetEvaluation,
+        )
+
+        # Create agent snapshots
+        agent_snapshots = []
+        for agent in self.agents:
+            pos = self.grid.get_position(agent)
+            if pos is not None:
+                agent_snapshots.append(create_agent_snapshot(
+                    agent_id=agent.id,
+                    position=(pos.row, pos.col),
+                    endowment=(agent.endowment.x, agent.endowment.y),
+                    alpha=agent.preferences.alpha,
+                    utility=agent.utility(),
+                ))
+
+        # Create search decisions
+        search_decisions = []
+        for agent_id, pos, visible, evals, chosen_id, chosen_val in search_decisions_data:
+            evaluations = [
+                create_target_evaluation(
+                    target_id=e.target_id,
+                    target_position=(e.target_position.row, e.target_position.col),
+                    distance=e.distance,
+                    ticks_to_reach=e.ticks_to_reach,
+                    expected_surplus=e.expected_surplus,
+                    discounted_value=e.discounted_value,
+                )
+                for e in evals
+            ]
+            search_decisions.append(create_search_decision(
+                agent_id=agent_id,
+                position=(pos.row, pos.col),
+                visible_agents=visible,
+                evaluations=evaluations,
+                chosen_target_id=chosen_id,
+                chosen_value=chosen_val,
+            ))
+
+        # Create movement events
+        movements = [
+            create_movement_event(
+                agent_id=agent_id,
+                from_pos=(from_pos.row, from_pos.col),
+                to_pos=(to_pos.row, to_pos.col),
+                target_id=target_id,
+                reason=reason,
+            )
+            for agent_id, from_pos, to_pos, target_id, reason in movement_events_data
+        ]
+
+        # Create trade events
+        trades = [
+            create_trade_event(
+                agent1_id=a1,
+                agent2_id=a2,
+                proposer_id=proposer,
+                pre_endowments=pre,
+                post_allocations=post,
+                utilities=utils,
+                gains=gains,
+                trade_occurred=occurred,
+            )
+            for a1, a2, proposer, pre, post, utils, gains, occurred in trade_events_data
+        ]
+
+        # Create and log the tick record
+        tick_record = create_tick_record(
+            tick=self.tick,
+            agent_snapshots=agent_snapshots,
+            search_decisions=search_decisions,
+            movements=movements,
+            trades=trades,
+            total_welfare=self.total_welfare(),
+            cumulative_trades=len(self.trades),
+        )
+
+        self.logger.log_tick(tick_record)
 
     def run(self, ticks: int, callback: Optional[Callable[[int, list[TradeEvent]], None]] = None) -> None:
         """

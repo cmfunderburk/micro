@@ -25,6 +25,22 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class TargetEvaluationResult:
+    """
+    Evaluation of a single potential trade partner.
+
+    Captures all information computed when evaluating a target,
+    enabling analysis of search decisions and missed opportunities.
+    """
+    target_id: str
+    target_position: Position
+    distance: float  # Euclidean distance
+    ticks_to_reach: int  # Chebyshev distance (movement ticks)
+    expected_surplus: float  # Nash bargaining surplus
+    discounted_value: float  # surplus * delta^ticks
+
+
+@dataclass
 class SearchResult:
     """
     Result of an agent's search for trade partners.
@@ -121,6 +137,100 @@ def evaluate_targets(
         discounted_value=best_value,
         visible_agents=visible_count,
     )
+
+
+def evaluate_targets_detailed(
+    agent: Agent,
+    grid: Grid,
+    info_env: InformationEnvironment,
+    agents_by_id: dict[str, Agent],
+) -> tuple[SearchResult, list[TargetEvaluationResult]]:
+    """
+    Evaluate all visible agents and return detailed evaluation data.
+
+    Like evaluate_targets(), but also returns evaluation details for every
+    visible target, enabling analysis of search decisions and missed opportunities.
+
+    Args:
+        agent: The searching agent
+        grid: The grid with agent positions
+        info_env: Information environment for observing types
+        agents_by_id: Map from agent ID to Agent object
+
+    Returns:
+        Tuple of (SearchResult, list of TargetEvaluationResult for all evaluated targets)
+    """
+    agent_pos = grid.get_position(agent)
+    if agent_pos is None:
+        return (
+            SearchResult(
+                best_target_id=None,
+                best_target_position=None,
+                discounted_value=0.0,
+                visible_agents=0,
+            ),
+            [],
+        )
+
+    observer_type = info_env.get_observable_type(agent)
+
+    best_target_id: Optional[str] = None
+    best_target_pos: Optional[Position] = None
+    best_value = 0.0
+    visible_count = 0
+    evaluations: list[TargetEvaluationResult] = []
+
+    # Find all agents within perception radius
+    for target_id, target_pos, distance in grid.agents_within_radius(
+        agent_pos, agent.perception_radius, exclude_center=True
+    ):
+        target = agents_by_id.get(target_id)
+        if target is None:
+            continue
+
+        # Check if we can observe this target
+        if not info_env.can_observe(agent, target, distance):
+            continue
+
+        visible_count += 1
+
+        # Get target's observable type
+        target_type = info_env.get_observable_type(target)
+
+        # Compute expected surplus from Nash bargaining
+        expected_surplus = compute_nash_surplus(observer_type, target_type)
+
+        # Compute ticks to reach target (using Chebyshev distance for diagonal movement)
+        ticks_to_reach = target_pos.chebyshev_distance_to(agent_pos)
+
+        # Discount by time to reach
+        discounted_value = expected_surplus * (agent.discount_factor ** ticks_to_reach)
+
+        # Record evaluation for all visible agents (not just those with positive surplus)
+        evaluations.append(
+            TargetEvaluationResult(
+                target_id=target_id,
+                target_position=target_pos,
+                distance=distance,
+                ticks_to_reach=ticks_to_reach,
+                expected_surplus=expected_surplus,
+                discounted_value=discounted_value,
+            )
+        )
+
+        if expected_surplus > 0 and discounted_value > best_value:
+            best_value = discounted_value
+            best_target_id = target_id
+            best_target_pos = target_pos
+
+    result = SearchResult(
+        best_target_id=best_target_id,
+        best_target_position=best_target_pos,
+        discounted_value=best_value,
+        visible_agents=visible_count,
+    )
+
+    return result, evaluations
 
 
 def compute_move_target(

@@ -24,6 +24,22 @@ The core simulation infrastructure in `src/microecon/`:
 | `bargaining.py` | Bargaining solutions (Nash, Rubinstein), protocol abstraction |
 | `search.py` | Target evaluation (discounted Nash surplus), movement decisions |
 | `simulation.py` | `Simulation` engine with tick loop, `create_simple_economy()` factory |
+| `batch.py` | `BatchRunner` for parameter sweeps and systematic comparisons |
+
+### Logging & Analysis (Complete)
+
+Infrastructure for capturing simulation state and analyzing results:
+
+| Module | Purpose |
+|--------|---------|
+| `logging/events.py` | Event dataclasses (`TickRecord`, `SearchDecision`, `TradeEvent`, etc.) |
+| `logging/logger.py` | `SimulationLogger` hooks into simulation, captures full state |
+| `logging/formats.py` | JSON lines format for human-readable logs |
+| `analysis/loader.py` | `load_run()`, `load_batch()`, grouping utilities |
+| `analysis/timeseries.py` | Welfare/trades over time, agent trajectories |
+| `analysis/distributions.py` | Cross-run comparisons, statistical tests |
+| `analysis/tracking.py` | Agent-level outcomes, search efficiency analysis |
+| `visualization/replay.py` | `ReplayController`, `DualReplayController` for playback |
 
 ### Visualization (MVP Complete)
 
@@ -50,7 +66,7 @@ Run with: `uv run python -m microecon.visualization`
 
 ### Test Coverage
 
-112 tests covering all core modules. Run with: `uv run pytest`
+160 tests covering all core modules. Run with: `uv run pytest`
 
 ## Architecture
 
@@ -65,10 +81,23 @@ src/microecon/
 ├── bargaining.py        # Nash bargaining solution
 ├── search.py            # Target selection and movement
 ├── simulation.py        # Main simulation engine
+├── batch.py             # BatchRunner for parameter sweeps
+├── logging/
+│   ├── __init__.py
+│   ├── events.py        # Event dataclasses
+│   ├── logger.py        # SimulationLogger
+│   └── formats.py       # JSON lines format
+├── analysis/
+│   ├── __init__.py
+│   ├── loader.py        # Run loading utilities
+│   ├── timeseries.py    # Time series analysis
+│   ├── distributions.py # Cross-run comparisons
+│   └── tracking.py      # Agent-level tracking
 └── visualization/
     ├── __init__.py
     ├── __main__.py      # Entry point for -m invocation
-    └── app.py           # DearPyGui visualization
+    ├── app.py           # DearPyGui visualization
+    └── replay.py        # Replay controllers
 ```
 
 ### Key Abstractions
@@ -99,6 +128,28 @@ uv run python -m microecon.visualization
 
 # Run visualization with custom parameters
 uv run python -c "from microecon.visualization import run_visualization; run_visualization(n_agents=20, grid_size=20, seed=42)"
+
+# Run batch comparison (Nash vs Rubinstein)
+uv run python -c "
+from microecon.batch import run_comparison
+from microecon.analysis import compare_protocols
+results = run_comparison(n_agents=10, ticks=100, seeds=range(5))
+for name, comp in compare_protocols([r.run_data for r in results]).items():
+    print(comp.summary())
+"
+
+# Run with logging to disk
+uv run python -c "
+from pathlib import Path
+from microecon.batch import BatchRunner
+from microecon.bargaining import NashBargainingProtocol
+runner = BatchRunner(
+    base_config={'n_agents': 10, 'grid_size': 15, 'seed': 42},
+    output_dir=Path('./runs/test')
+)
+results = runner.run(ticks=100)
+print(f'Saved to {results[0].log_path}')
+"
 ```
 
 ## Theoretical Grounding Requirements
@@ -122,12 +173,18 @@ All behavioral rules, bargaining protocols, and institutional mechanisms must ha
 
 ## Next Development Directions
 
-The simulation, visualization, and first institutional comparison (Nash vs Rubinstein bargaining) are complete. Potential next steps (not prioritized):
+The simulation, visualization, batch runs, logging, and analysis infrastructure are complete. Potential next steps (not prioritized):
+
+**Visualization enhancements** (see VISUALIZATION.md §4-9 for full specs)
+- Replay mode integration in DearPyGui app (controllers exist in `replay.py`)
+- Dual viewport for synchronized comparison (Nash vs Rubinstein side-by-side)
+- Trade zoom view with Edgeworth box (§4)
+- Time series charts via ImPlot (§9)
+- Export: PNG/SVG frames, GIF/MP4 animations (§12)
 
 **Institutional comparisons** (core research value per VISION.md)
 - Additional bargaining protocols (TIOLI, posted prices, double auction)
 - Swappable matching mechanisms
-- Systematic comparison studies (parameter sweeps, outcome distributions)
 
 **Information environments**
 - Private information (type ≠ private state)
@@ -135,14 +192,6 @@ The simulation, visualization, and first institutional comparison (Nash vs Rubin
 - Partial observability
 - Agent perspective mode in visualization (see what agent X sees)
 
-**Visualization enhancements** (see VISUALIZATION.md §4-9 for full specs)
-- Trade zoom view with Edgeworth box (§4)
-- Time series charts via ImPlot (§9)
-- Export: PNG/SVG frames, GIF/MP4 animations, CSV data logs (§12)
-- Replay mode from logged history (§14)
-
-**Analysis infrastructure**
+**Analysis extensions**
 - Equilibrium benchmarks (Walrasian prices for comparison)
-- Statistical summaries across runs
 - Config files for reproducible scenarios (YAML/JSON)
-- Parameter sweep tools

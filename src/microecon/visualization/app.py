@@ -3,11 +3,16 @@ DearPyGui-based visualization for microecon simulation.
 
 This module provides a live visualization of the search-and-exchange simulation,
 showing agents moving on a grid, trading, and updating metrics in real-time.
+
+Supports two modes:
+- Live mode: Run a new simulation with real-time updates
+- Replay mode: Play back a logged simulation run with timeline scrubbing
 """
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Literal
 import time
 
 import dearpygui.dearpygui as dpg
@@ -15,6 +20,8 @@ import dearpygui.dearpygui as dpg
 from microecon.simulation import Simulation, create_simple_economy, TradeEvent
 from microecon.grid import Position
 from microecon.agent import Agent
+from microecon.logging import AgentSnapshot, TickRecord, RunData
+from microecon.visualization.replay import ReplayController
 
 
 # ============================================================================
@@ -40,6 +47,53 @@ def alpha_to_color(alpha: float) -> tuple[int, int, int, int]:
 def lerp_color(c1: tuple[int, ...], c2: tuple[int, ...], t: float) -> tuple[int, ...]:
     """Linear interpolation between two colors."""
     return tuple(int(a + t * (b - a)) for a, b in zip(c1, c2))
+
+
+# ============================================================================
+# Agent data proxy (unified interface for live/replay modes)
+# ============================================================================
+
+@dataclass
+class AgentProxy:
+    """
+    Unified interface for agent data in both live and replay modes.
+
+    In live mode, wraps an Agent object.
+    In replay mode, wraps an AgentSnapshot from logged data.
+    """
+    id: str
+    position: Position
+    alpha: float
+    endowment_x: float
+    endowment_y: float
+    utility: float
+    perception_radius: float = 7.0  # Default; only used for selection overlay
+
+    @classmethod
+    def from_agent(cls, agent: Agent, pos: Position) -> "AgentProxy":
+        """Create from live Agent."""
+        return cls(
+            id=agent.id,
+            position=pos,
+            alpha=agent.preferences.alpha,
+            endowment_x=agent.endowment.x,
+            endowment_y=agent.endowment.y,
+            utility=agent.utility(),
+            perception_radius=agent.perception_radius,
+        )
+
+    @classmethod
+    def from_snapshot(cls, snapshot: AgentSnapshot, perception_radius: float = 7.0) -> "AgentProxy":
+        """Create from logged AgentSnapshot."""
+        return cls(
+            id=snapshot.agent_id,
+            position=Position(snapshot.position[0], snapshot.position[1]),
+            alpha=snapshot.alpha,
+            endowment_x=snapshot.endowment[0],
+            endowment_y=snapshot.endowment[1],
+            utility=snapshot.utility,
+            perception_radius=perception_radius,
+        )
 
 
 # ============================================================================
@@ -83,13 +137,37 @@ class VisualizationApp:
         n_agents: int = 10,
         grid_size: int = 15,
         seed: int | None = None,
+        mode: Literal["live", "replay"] = "live",
+        run_data: RunData | None = None,
     ):
-        self.n_agents = n_agents
-        self.grid_size = grid_size
-        self.seed = seed
+        """
+        Initialize visualization app.
 
-        # Simulation state
-        self.sim: Simulation = create_simple_economy(n_agents, grid_size, seed=seed)
+        Args:
+            n_agents: Number of agents (live mode only)
+            grid_size: Grid size (live mode only)
+            seed: Random seed (live mode only)
+            mode: "live" for new simulation, "replay" for logged run
+            run_data: Logged run data (required for replay mode)
+        """
+        self.mode = mode
+
+        if mode == "live":
+            self.n_agents = n_agents
+            self.grid_size = grid_size
+            self.seed = seed
+            self.sim: Optional[Simulation] = create_simple_economy(
+                n_agents, grid_size, seed=seed
+            )
+            self.replay: Optional[ReplayController] = None
+        else:
+            if run_data is None:
+                raise ValueError("run_data required for replay mode")
+            self.n_agents = run_data.config.n_agents
+            self.grid_size = run_data.config.grid_size
+            self.seed = run_data.config.seed
+            self.sim = None
+            self.replay = ReplayController(run_data)
 
         # Playback state
         self.playing = False
@@ -108,20 +186,29 @@ class VisualizationApp:
         self.play_button: int = 0
         self.speed_slider: int = 0
 
+        # Replay-specific UI elements
+        self.timeline_slider: int = 0
+        self.step_back_button: int = 0
+        self.mode_text: int = 0
+
         # Rendering state
         self.canvas_size = 0.0
         self.cell_size = 0.0
         self.canvas_origin = (0.0, 0.0)
 
-        # Hover tracking
-        self.hovered_agent: Optional[Agent] = None
+        # Hover tracking (uses AgentProxy for unified interface)
+        self.hovered_agent: Optional[AgentProxy] = None
 
         # Selection tracking (click to select, shows perception radius)
-        self.selected_agent: Optional[Agent] = None
+        self.selected_agent: Optional[AgentProxy] = None
 
         # Movement trail tracking
         self.position_history: dict[str, list[Position]] = {}  # agent_id -> recent positions
         self.TRAIL_LENGTH = 5
+
+        # Cache for AgentProxy lookup (rebuilt each frame)
+        self._agent_proxies: list[AgentProxy] = []
+        self._agents_by_id: dict[str, AgentProxy] = {}
 
     def grid_to_canvas(self, pos: Position) -> tuple[float, float]:
         """Convert grid position to canvas coordinates."""
@@ -137,14 +224,90 @@ class VisualizationApp:
             return Position(row, col)
         return None
 
-    def find_agent_at_canvas(self, x: float, y: float) -> Optional[Agent]:
+    # ========================================================================
+    # Unified data access (works in both live and replay modes)
+    # ========================================================================
+
+    def _build_agent_proxies(self) -> None:
+        """Rebuild agent proxy cache from current state."""
+        self._agent_proxies = []
+        self._agents_by_id = {}
+
+        if self.mode == "live" and self.sim is not None:
+            for agent in self.sim.agents:
+                pos = self.sim.grid.get_position(agent)
+                if pos is not None:
+                    proxy = AgentProxy.from_agent(agent, pos)
+                    self._agent_proxies.append(proxy)
+                    self._agents_by_id[proxy.id] = proxy
+        elif self.mode == "replay" and self.replay is not None:
+            state = self.replay.get_state()
+            if state is not None:
+                # Get perception radius from config if available
+                perception_radius = self.replay.run.config.perception_radius
+                for snapshot in state.agent_snapshots:
+                    proxy = AgentProxy.from_snapshot(snapshot, perception_radius)
+                    self._agent_proxies.append(proxy)
+                    self._agents_by_id[proxy.id] = proxy
+
+    def get_agents(self) -> list[AgentProxy]:
+        """Get all agents as AgentProxy objects."""
+        return self._agent_proxies
+
+    def get_agent_by_id(self, agent_id: str) -> Optional[AgentProxy]:
+        """Get agent by ID."""
+        return self._agents_by_id.get(agent_id)
+
+    def get_current_tick(self) -> int:
+        """Get current tick number."""
+        if self.mode == "live" and self.sim is not None:
+            return self.sim.tick
+        elif self.mode == "replay" and self.replay is not None:
+            return self.replay.current_tick + 1  # 1-indexed for display
+        return 0
+
+    def get_total_ticks(self) -> int:
+        """Get total ticks (for replay mode timeline)."""
+        if self.mode == "replay" and self.replay is not None:
+            return self.replay.total_ticks
+        return 0
+
+    def get_total_trades(self) -> int:
+        """Get cumulative trade count."""
+        if self.mode == "live" and self.sim is not None:
+            return len(self.sim.trades)
+        elif self.mode == "replay" and self.replay is not None:
+            state = self.replay.get_state()
+            return state.cumulative_trades if state else 0
+        return 0
+
+    def get_total_welfare(self) -> float:
+        """Get total welfare."""
+        if self.mode == "live" and self.sim is not None:
+            return self.sim.total_welfare()
+        elif self.mode == "replay" and self.replay is not None:
+            state = self.replay.get_state()
+            return state.total_welfare if state else 0.0
+        return 0.0
+
+    def get_welfare_gains(self) -> float:
+        """Get welfare gains from initial state."""
+        if self.mode == "live" and self.sim is not None:
+            return self.sim.welfare_gains()
+        elif self.mode == "replay" and self.replay is not None:
+            # Calculate from initial welfare
+            if self.replay.run.ticks:
+                initial = self.replay.run.ticks[0].total_welfare
+                state = self.replay.get_state()
+                current = state.total_welfare if state else initial
+                return current - initial
+        return 0.0
+
+    def find_agent_at_canvas(self, x: float, y: float) -> Optional[AgentProxy]:
         """Find agent near canvas coordinates, for hover detection."""
         agent_radius = self.cell_size * 0.35
-        for agent in self.sim.agents:
-            pos = self.sim.grid.get_position(agent)
-            if pos is None:
-                continue
-            ax, ay = self.grid_to_canvas(pos)
+        for agent in self.get_agents():
+            ax, ay = self.grid_to_canvas(agent.position)
             dist = ((x - ax) ** 2 + (y - ay) ** 2) ** 0.5
             if dist <= agent_radius:
                 return agent
@@ -203,25 +366,55 @@ class VisualizationApp:
                 tag="controls_panel",
             ):
                 with dpg.group(horizontal=True):
+                    # Mode indicator
+                    mode_label = "REPLAY" if self.mode == "replay" else "LIVE"
+                    mode_color = (100, 200, 100) if self.mode == "live" else (200, 150, 100)
+                    self.mode_text = dpg.add_text(f"[{mode_label}]", color=mode_color)
+                    dpg.add_text("  ")
+
                     self.play_button = dpg.add_button(
                         label="Play",
                         callback=self.toggle_play,
                         width=80,
                     )
+
+                    # Step back (replay mode only)
+                    if self.mode == "replay":
+                        self.step_back_button = dpg.add_button(
+                            label="<",
+                            callback=self.step_back,
+                            width=40,
+                        )
+
                     dpg.add_button(
-                        label="Step",
+                        label="Step" if self.mode == "live" else ">",
                         callback=self.step_once,
-                        width=80,
+                        width=80 if self.mode == "live" else 40,
                     )
+
                     dpg.add_text("  Speed:")
                     self.speed_slider = dpg.add_slider_float(
                         default_value=2.0,
                         min_value=0.5,
                         max_value=10.0,
-                        width=200,
+                        width=150,
                         callback=self.on_speed_change,
                     )
-                    dpg.add_text("ticks/sec  ")
+                    dpg.add_text("t/s")
+
+                    # Timeline slider (replay mode only)
+                    if self.mode == "replay" and self.replay is not None:
+                        dpg.add_text("  Tick:")
+                        self.timeline_slider = dpg.add_slider_int(
+                            default_value=0,
+                            min_value=0,
+                            max_value=self.replay.total_ticks - 1,
+                            width=200,
+                            callback=self.on_timeline_change,
+                        )
+                        dpg.add_text(f"/{self.replay.total_ticks}")
+
+                    dpg.add_text("  ")
                     dpg.add_button(
                         label="Reset",
                         callback=self.reset_simulation,
@@ -240,24 +433,51 @@ class VisualizationApp:
             self.last_tick_time = time.time()
 
     def step_once(self) -> None:
-        """Execute a single simulation step."""
-        trades = self.sim.step()
-        self.record_trades(trades)
-        self.record_positions()
+        """Execute a single step forward."""
+        if self.mode == "live" and self.sim is not None:
+            trades = self.sim.step()
+            self.record_trades(trades)
+            self.record_positions()
+        elif self.mode == "replay" and self.replay is not None:
+            self.replay.step()
+            self._update_timeline_slider()
+            self.record_positions()
+
+    def step_back(self) -> None:
+        """Step backward one tick (replay mode only)."""
+        if self.mode == "replay" and self.replay is not None:
+            self.replay.step_back()
+            self._update_timeline_slider()
 
     def on_speed_change(self, sender: int, app_data: float) -> None:
         """Handle speed slider change."""
         self.ticks_per_second = app_data
 
+    def on_timeline_change(self, sender: int, app_data: int) -> None:
+        """Handle timeline slider change (replay mode)."""
+        if self.mode == "replay" and self.replay is not None:
+            self.replay.seek(app_data)
+
+    def _update_timeline_slider(self) -> None:
+        """Update timeline slider to match current tick."""
+        if self.mode == "replay" and self.timeline_slider and self.replay is not None:
+            dpg.set_value(self.timeline_slider, self.replay.current_tick)
+
     def reset_simulation(self) -> None:
-        """Reset the simulation to initial state."""
+        """Reset to initial state."""
         self.playing = False
         dpg.set_item_label(self.play_button, "Play")
-        self.sim = create_simple_economy(
-            self.n_agents,
-            self.grid_size,
-            seed=self.seed,
-        )
+
+        if self.mode == "live":
+            self.sim = create_simple_economy(
+                self.n_agents,
+                self.grid_size,
+                seed=self.seed,
+            )
+        elif self.mode == "replay" and self.replay is not None:
+            self.replay.reset()
+            self._update_timeline_slider()
+
         self.trade_animations.clear()
         self.position_history.clear()
         self.selected_agent = None
@@ -274,16 +494,13 @@ class VisualizationApp:
 
     def record_positions(self) -> None:
         """Record current positions for trail rendering."""
-        for agent in self.sim.agents:
-            pos = self.sim.grid.get_position(agent)
-            if pos is None:
-                continue
+        for agent in self.get_agents():
             if agent.id not in self.position_history:
                 self.position_history[agent.id] = []
             history = self.position_history[agent.id]
             # Only record if position changed (avoid duplicates when stationary)
-            if not history or history[-1] != pos:
-                history.append(pos)
+            if not history or history[-1] != agent.position:
+                history.append(agent.position)
             # Trim to TRAIL_LENGTH
             if len(history) > self.TRAIL_LENGTH:
                 self.position_history[agent.id] = history[-self.TRAIL_LENGTH:]
@@ -293,10 +510,22 @@ class VisualizationApp:
         if self.playing:
             current_time = time.time()
             tick_interval = 1.0 / self.ticks_per_second
+
             if current_time - self.last_tick_time >= tick_interval:
-                trades = self.sim.step()
-                self.record_trades(trades)
-                self.record_positions()
+                if self.mode == "live" and self.sim is not None:
+                    trades = self.sim.step()
+                    self.record_trades(trades)
+                    self.record_positions()
+                elif self.mode == "replay" and self.replay is not None:
+                    if not self.replay.at_end:
+                        self.replay.step()
+                        self._update_timeline_slider()
+                        self.record_positions()
+                    else:
+                        # Stop at end of replay
+                        self.playing = False
+                        dpg.set_item_label(self.play_button, "Play")
+
                 self.last_tick_time = current_time
 
         # Clean up expired animations
@@ -348,6 +577,9 @@ class VisualizationApp:
 
     def render(self) -> None:
         """Render the current simulation state."""
+        # Rebuild agent proxy cache for this frame
+        self._build_agent_proxies()
+
         # Get dimensions from viewport (more reliable with tiling WMs)
         vp_width = dpg.get_viewport_client_width()
         vp_height = dpg.get_viewport_client_height()
@@ -408,29 +640,24 @@ class VisualizationApp:
 
     def render_trails(self) -> None:
         """Draw movement trails for all agents."""
-        for agent in self.sim.agents:
+        for agent in self.get_agents():
             history = self.position_history.get(agent.id, [])
             if len(history) < 2:
                 continue
 
-            # Get current position as trail head
-            current_pos = self.sim.grid.get_position(agent)
-            if current_pos is None:
-                continue
-
             # Build point list: history + current (oldest to newest)
-            points = history + [current_pos]
+            points = history + [agent.position]
 
             # Draw line segments with fading opacity
             for i in range(len(points) - 1):
                 # Fade: oldest segments more transparent
-                alpha = int(40 + (i / len(points)) * 80)  # 40 to 120
+                opacity = int(40 + (i / len(points)) * 80)  # 40 to 120
                 p1 = self.grid_to_canvas(points[i])
                 p2 = self.grid_to_canvas(points[i + 1])
 
                 # Use agent's color but with reduced opacity
-                base_color = alpha_to_color(agent.preferences.alpha)
-                trail_color = (base_color[0], base_color[1], base_color[2], alpha)
+                base_color = alpha_to_color(agent.alpha)
+                trail_color = (base_color[0], base_color[1], base_color[2], opacity)
 
                 dpg.draw_line(p1, p2, color=trail_color, thickness=2, parent=self.drawlist)
 
@@ -439,13 +666,15 @@ class VisualizationApp:
         if self.selected_agent is None:
             return
 
-        pos = self.sim.grid.get_position(self.selected_agent)
-        if pos is None:
+        # In replay mode, need to verify agent still exists (selection may be stale)
+        current_agent = self.get_agent_by_id(self.selected_agent.id)
+        if current_agent is None:
+            self.selected_agent = None
             return
 
-        cx, cy = self.grid_to_canvas(pos)
+        cx, cy = self.grid_to_canvas(current_agent.position)
         # Convert perception_radius (grid units) to canvas pixels
-        radius_px = self.selected_agent.perception_radius * self.cell_size
+        radius_px = current_agent.perception_radius * self.cell_size
 
         # Draw semi-transparent circle
         dpg.draw_circle(
@@ -459,15 +688,17 @@ class VisualizationApp:
     def render_agents(self) -> None:
         """Render all agents on the grid."""
         # Group agents by position for overlap handling
-        agents_by_pos: dict[Position, list[Agent]] = {}
-        for agent in self.sim.agents:
-            pos = self.sim.grid.get_position(agent)
-            if pos is not None:
-                if pos not in agents_by_pos:
-                    agents_by_pos[pos] = []
-                agents_by_pos[pos].append(agent)
+        agents_by_pos: dict[Position, list[AgentProxy]] = {}
+        for agent in self.get_agents():
+            if agent.position not in agents_by_pos:
+                agents_by_pos[agent.position] = []
+            agents_by_pos[agent.position].append(agent)
 
         agent_radius = self.cell_size * 0.35
+
+        # Check for selected/hovered by ID (since AgentProxy instances change each frame)
+        selected_id = self.selected_agent.id if self.selected_agent else None
+        hovered_id = self.hovered_agent.id if self.hovered_agent else None
 
         for pos, agents in agents_by_pos.items():
             cx, cy = self.grid_to_canvas(pos)
@@ -475,10 +706,10 @@ class VisualizationApp:
             if len(agents) == 1:
                 # Single agent: draw at center
                 agent = agents[0]
-                color = alpha_to_color(agent.preferences.alpha)
+                color = alpha_to_color(agent.alpha)
 
                 # Selection ring (thicker, more prominent)
-                if agent == self.selected_agent:
+                if agent.id == selected_id:
                     dpg.draw_circle(
                         (cx, cy),
                         agent_radius + 5,
@@ -487,7 +718,7 @@ class VisualizationApp:
                         parent=self.drawlist,
                     )
                 # Hover highlight (thinner)
-                elif agent == self.hovered_agent:
+                elif agent.id == hovered_id:
                     dpg.draw_circle(
                         (cx, cy),
                         agent_radius + 3,
@@ -511,11 +742,11 @@ class VisualizationApp:
                     angle = 2 * math.pi * i / n
                     ax = cx + offset * math.cos(angle)
                     ay = cy + offset * math.sin(angle)
-                    color = alpha_to_color(agent.preferences.alpha)
+                    color = alpha_to_color(agent.alpha)
                     small_radius = agent_radius * 0.7
 
                     # Selection ring (thicker, more prominent)
-                    if agent == self.selected_agent:
+                    if agent.id == selected_id:
                         dpg.draw_circle(
                             (ax, ay),
                             small_radius + 4,
@@ -524,7 +755,7 @@ class VisualizationApp:
                             parent=self.drawlist,
                         )
                     # Hover highlight (thinner)
-                    elif agent == self.hovered_agent:
+                    elif agent.id == hovered_id:
                         dpg.draw_circle(
                             (ax, ay),
                             small_radius + 3,
@@ -546,27 +777,22 @@ class VisualizationApp:
 
         for anim in self.trade_animations:
             # Find agent positions
-            agent1 = self.sim._agents_by_id.get(anim.agent1_id)
-            agent2 = self.sim._agents_by_id.get(anim.agent2_id)
+            agent1 = self.get_agent_by_id(anim.agent1_id)
+            agent2 = self.get_agent_by_id(anim.agent2_id)
             if agent1 is None or agent2 is None:
-                continue
-
-            pos1 = self.sim.grid.get_position(agent1)
-            pos2 = self.sim.grid.get_position(agent2)
-            if pos1 is None or pos2 is None:
                 continue
 
             # Calculate fade based on animation progress
             progress = (current_time - anim.start_time) / anim.duration
-            alpha = int(255 * (1 - progress))
+            opacity = int(255 * (1 - progress))
 
             # Draw line between agents
-            c1 = self.grid_to_canvas(pos1)
-            c2 = self.grid_to_canvas(pos2)
+            c1 = self.grid_to_canvas(agent1.position)
+            c2 = self.grid_to_canvas(agent2.position)
 
             dpg.draw_line(
                 c1, c2,
-                color=(255, 200, 0, alpha),
+                color=(255, 200, 0, opacity),
                 thickness=3,
                 parent=self.drawlist,
             )
@@ -576,37 +802,36 @@ class VisualizationApp:
             dpg.draw_circle(
                 c1,
                 radius,
-                color=(255, 200, 0, alpha),
+                color=(255, 200, 0, opacity),
                 thickness=2,
                 parent=self.drawlist,
             )
             dpg.draw_circle(
                 c2,
                 radius,
-                color=(255, 200, 0, alpha),
+                color=(255, 200, 0, opacity),
                 thickness=2,
                 parent=self.drawlist,
             )
 
     def render_metrics(self) -> None:
         """Update the metrics panel."""
-        state = self.sim.get_state()
-        dpg.set_value(self.tick_text, f"Tick: {state.tick}")
-        dpg.set_value(self.trades_text, f"Trades: {state.total_trades}")
-        dpg.set_value(self.welfare_text, f"Welfare: {self.sim.total_welfare():.1f}")
-        dpg.set_value(self.gains_text, f"Gains: {self.sim.welfare_gains():.1f}")
+        dpg.set_value(self.tick_text, f"Tick: {self.get_current_tick()}")
+        dpg.set_value(self.trades_text, f"Trades: {self.get_total_trades()}")
+        dpg.set_value(self.welfare_text, f"Welfare: {self.get_total_welfare():.1f}")
+        dpg.set_value(self.gains_text, f"Gains: {self.get_welfare_gains():.1f}")
 
     def render_hover_info(self) -> None:
         """Update hover information panel."""
         if self.hovered_agent is not None:
             agent = self.hovered_agent
-            dpg.set_value(self.hover_id_text, f"ID: {agent.id}")
-            dpg.set_value(self.hover_alpha_text, f"Alpha: {agent.preferences.alpha:.3f}")
+            dpg.set_value(self.hover_id_text, f"ID: {agent.id[:8]}...")
+            dpg.set_value(self.hover_alpha_text, f"Alpha: {agent.alpha:.3f}")
             dpg.set_value(
                 self.hover_endow_text,
-                f"Endowment: ({agent.endowment.x:.1f}, {agent.endowment.y:.1f})"
+                f"Endowment: ({agent.endowment_x:.1f}, {agent.endowment_y:.1f})"
             )
-            dpg.set_value(self.hover_utility_text, f"Utility: {agent.utility():.2f}")
+            dpg.set_value(self.hover_utility_text, f"Utility: {agent.utility:.2f}")
         else:
             dpg.set_value(self.hover_id_text, "ID: -")
             dpg.set_value(self.hover_alpha_text, "Alpha: -")
@@ -633,15 +858,41 @@ def run_visualization(
     seed: int | None = None,
 ) -> None:
     """
-    Launch the visualization window.
+    Launch the visualization window in live mode.
 
     Args:
         n_agents: Number of agents in the simulation
         grid_size: Size of the grid (NxN)
         seed: Random seed for reproducibility
     """
-    app = VisualizationApp(n_agents=n_agents, grid_size=grid_size, seed=seed)
+    app = VisualizationApp(n_agents=n_agents, grid_size=grid_size, seed=seed, mode="live")
     app.run()
+
+
+def run_replay(run_data: RunData) -> None:
+    """
+    Launch the visualization window in replay mode.
+
+    Args:
+        run_data: Logged run data to replay
+    """
+    app = VisualizationApp(mode="replay", run_data=run_data)
+    app.run()
+
+
+def run_replay_from_path(path: Path | str) -> None:
+    """
+    Launch the visualization window in replay mode from a log directory.
+
+    Args:
+        path: Path to the run directory containing config.json and ticks.jsonl
+    """
+    from microecon.logging import load_run
+
+    if isinstance(path, str):
+        path = Path(path)
+    run_data = load_run(path)
+    run_replay(run_data)
 
 
 # Allow running as: python -m microecon.visualization.app

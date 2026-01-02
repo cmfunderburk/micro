@@ -137,6 +137,9 @@ class Simulation:
         # For logging: collect search decisions and movement events
         search_decisions_data: list[tuple[str, Position, int, list[TargetEvaluationResult], Optional[str], float]] = []
         movement_events_data: list[tuple[str, Position, Position, Optional[str], str]] = []
+        # Track commitment events for logging
+        commitments_formed_data: list[tuple[str, str]] = []
+        commitments_broken_data: list[tuple[str, str, str]] = []  # (agent_a, agent_b, reason)
 
         # Store old positions for crossing detection
         old_positions: dict[str, Position] = {
@@ -149,7 +152,9 @@ class Simulation:
         # PRE-TICK: Commitment maintenance (break stale commitments)
         # =====================================================================
         if self.matching_protocol.requires_commitment:
-            self._maintain_commitments()
+            broken_pairs = self._maintain_commitments()
+            for agent_a_id, agent_b_id in broken_pairs:
+                commitments_broken_data.append((agent_a_id, agent_b_id, "left_perception"))
 
         # =====================================================================
         # PHASE 1: EVALUATE - Observe visible agents, compute surplus rankings
@@ -224,6 +229,7 @@ class Simulation:
             # Form new commitments
             for agent_a_id, agent_b_id in new_pairs:
                 self.commitments.form_commitment(agent_a_id, agent_b_id)
+                commitments_formed_data.append((agent_a_id, agent_b_id))
 
             # Set movement targets based on commitment status
             for agent in self.agents:
@@ -360,6 +366,7 @@ class Simulation:
                         # Break commitment after successful trade (committed mode)
                         if self.matching_protocol.requires_commitment:
                             self.commitments.break_commitment(agent.id, other.id)
+                            commitments_broken_data.append((agent.id, other.id, "trade_completed"))
 
                         # Record for logging
                         if self.logger is not None:
@@ -383,16 +390,21 @@ class Simulation:
                 search_decisions_data,
                 movement_events_data,
                 trade_events_data,
+                commitments_formed_data,
+                commitments_broken_data,
             )
 
         return tick_trades
 
-    def _maintain_commitments(self) -> None:
+    def _maintain_commitments(self) -> list[tuple[str, str]]:
         """
         Check and break stale commitments.
 
         A commitment is broken if the partner is no longer within perception radius.
         Called at the start of each tick (before Evaluate phase).
+
+        Returns:
+            List of (agent_a, agent_b) pairs that were broken due to leaving perception.
         """
         to_break: list[tuple[str, str]] = []
 
@@ -419,15 +431,21 @@ class Simulation:
         for agent_a_id, agent_b_id in to_break:
             self.commitments.break_commitment(agent_a_id, agent_b_id)
 
+        return to_break
+
     def _log_tick(
         self,
         search_decisions_data: list,
         movement_events_data: list,
         trade_events_data: list,
+        commitments_formed_data: list[tuple[str, str]],
+        commitments_broken_data: list[tuple[str, str, str]],
     ) -> None:
         """Create and log a complete tick record."""
         from microecon.logging import (
             create_agent_snapshot,
+            create_commitment_broken_event,
+            create_commitment_formed_event,
             create_search_decision,
             create_target_evaluation,
             create_movement_event,
@@ -499,6 +517,16 @@ class Simulation:
             for a1, a2, proposer, pre, post, utils, gains, occurred in trade_events_data
         ]
 
+        # Create commitment events
+        commitments_formed = [
+            create_commitment_formed_event(agent_a=a, agent_b=b)
+            for a, b in commitments_formed_data
+        ]
+        commitments_broken = [
+            create_commitment_broken_event(agent_a=a, agent_b=b, reason=reason)
+            for a, b, reason in commitments_broken_data
+        ]
+
         # Create and log the tick record
         tick_record = create_tick_record(
             tick=self.tick,
@@ -508,6 +536,8 @@ class Simulation:
             trades=trades,
             total_welfare=self.total_welfare(),
             cumulative_trades=len(self.trades),
+            commitments_formed=commitments_formed,
+            commitments_broken=commitments_broken,
         )
 
         self.logger.log_tick(tick_record)

@@ -8,6 +8,8 @@ This module provides:
 
 from .events import (
     AgentSnapshot,
+    CommitmentBrokenEvent,
+    CommitmentFormedEvent,
     MovementEvent,
     RunSummary,
     SearchDecision,
@@ -21,6 +23,8 @@ from .logger import (
     RunData,
     SimulationLogger,
     create_agent_snapshot,
+    create_commitment_broken_event,
+    create_commitment_formed_event,
     create_movement_event,
     create_search_decision,
     create_target_evaluation,
@@ -31,6 +35,8 @@ from .logger import (
 __all__ = [
     # Events
     "AgentSnapshot",
+    "CommitmentBrokenEvent",
+    "CommitmentFormedEvent",
     "MovementEvent",
     "RunSummary",
     "SearchDecision",
@@ -43,6 +49,8 @@ __all__ = [
     "SimulationLogger",
     # Helpers
     "create_agent_snapshot",
+    "create_commitment_broken_event",
+    "create_commitment_formed_event",
     "create_movement_event",
     "create_search_decision",
     "create_target_evaluation",

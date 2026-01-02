@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 
 from .events import (
     AgentSnapshot,
+    CommitmentBrokenEvent,
+    CommitmentFormedEvent,
     MovementEvent,
     RunSummary,
     SearchDecision,
@@ -249,6 +251,30 @@ def create_trade_event(
     )
 
 
+def create_commitment_formed_event(
+    agent_a: str,
+    agent_b: str,
+) -> CommitmentFormedEvent:
+    """Create a CommitmentFormedEvent from matching phase."""
+    return CommitmentFormedEvent(
+        agent_a=agent_a,
+        agent_b=agent_b,
+    )
+
+
+def create_commitment_broken_event(
+    agent_a: str,
+    agent_b: str,
+    reason: str,
+) -> CommitmentBrokenEvent:
+    """Create a CommitmentBrokenEvent from commitment maintenance or trade."""
+    return CommitmentBrokenEvent(
+        agent_a=agent_a,
+        agent_b=agent_b,
+        reason=reason,
+    )
+
+
 def create_tick_record(
     tick: int,
     agent_snapshots: list[AgentSnapshot],
@@ -257,6 +283,8 @@ def create_tick_record(
     trades: list[TradeEvent],
     total_welfare: float,
     cumulative_trades: int,
+    commitments_formed: list[CommitmentFormedEvent] | None = None,
+    commitments_broken: list[CommitmentBrokenEvent] | None = None,
 ) -> TickRecord:
     """Create a TickRecord from tick execution."""
     return TickRecord(
@@ -267,4 +295,6 @@ def create_tick_record(
         trades=tuple(trades),
         total_welfare=total_welfare,
         cumulative_trades=cumulative_trades,
+        commitments_formed=tuple(commitments_formed or []),
+        commitments_broken=tuple(commitments_broken or []),
     )

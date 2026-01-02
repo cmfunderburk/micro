@@ -220,6 +220,51 @@ class TradeEvent:
 
 
 @dataclass(frozen=True)
+class CommitmentFormedEvent:
+    """Record of a commitment forming between two agents."""
+
+    agent_a: str
+    agent_b: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "agent_a": self.agent_a,
+            "agent_b": self.agent_b,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "CommitmentFormedEvent":
+        return cls(
+            agent_a=d["agent_a"],
+            agent_b=d["agent_b"],
+        )
+
+
+@dataclass(frozen=True)
+class CommitmentBrokenEvent:
+    """Record of a commitment breaking."""
+
+    agent_a: str
+    agent_b: str
+    reason: str  # "trade_completed" or "left_perception"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "agent_a": self.agent_a,
+            "agent_b": self.agent_b,
+            "reason": self.reason,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "CommitmentBrokenEvent":
+        return cls(
+            agent_a=d["agent_a"],
+            agent_b=d["agent_b"],
+            reason=d["reason"],
+        )
+
+
+@dataclass(frozen=True)
 class TickRecord:
     """Complete record of a single simulation tick."""
 
@@ -230,6 +275,9 @@ class TickRecord:
     trades: tuple[TradeEvent, ...]
     total_welfare: float
     cumulative_trades: int
+    # Commitment events (for committed matching protocols)
+    commitments_formed: tuple[CommitmentFormedEvent, ...] = ()
+    commitments_broken: tuple[CommitmentBrokenEvent, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -240,6 +288,8 @@ class TickRecord:
             "trades": [t.to_dict() for t in self.trades],
             "total_welfare": self.total_welfare,
             "cumulative_trades": self.cumulative_trades,
+            "commitments_formed": [c.to_dict() for c in self.commitments_formed],
+            "commitments_broken": [c.to_dict() for c in self.commitments_broken],
         }
 
     @classmethod
@@ -256,6 +306,12 @@ class TickRecord:
             trades=tuple(TradeEvent.from_dict(t) for t in d["trades"]),
             total_welfare=d["total_welfare"],
             cumulative_trades=d["cumulative_trades"],
+            commitments_formed=tuple(
+                CommitmentFormedEvent.from_dict(c) for c in d.get("commitments_formed", [])
+            ),
+            commitments_broken=tuple(
+                CommitmentBrokenEvent.from_dict(c) for c in d.get("commitments_broken", [])
+            ),
         )
 
 

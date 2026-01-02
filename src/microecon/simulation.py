@@ -29,6 +29,11 @@ from microecon.search import (
     evaluate_targets_detailed,
     TargetEvaluationResult,
 )
+from microecon.matching import (
+    MatchingProtocol,
+    OpportunisticMatchingProtocol,
+    CommitmentState,
+)
 
 if TYPE_CHECKING:
     from microecon.logging import SimulationLogger
@@ -72,16 +77,20 @@ class Simulation:
         agents: All agents in the simulation
         info_env: Information environment
         bargaining_protocol: Protocol for bilateral bargaining (Nash, Rubinstein, etc.)
+        matching_protocol: Protocol for forming trading pairs (Opportunistic, StableRoommates)
         tick: Current tick number
         trades: History of trades
+        commitments: Tracks committed pairs (for committed matching protocols)
         logger: Optional SimulationLogger for capturing detailed state
     """
     grid: Grid
     info_env: InformationEnvironment = field(default_factory=FullInformation)
     bargaining_protocol: BargainingProtocol = field(default_factory=NashBargainingProtocol)
+    matching_protocol: MatchingProtocol = field(default_factory=OpportunisticMatchingProtocol)
     agents: list[Agent] = field(default_factory=list)
     tick: int = 0
     trades: list[TradeEvent] = field(default_factory=list)
+    commitments: CommitmentState = field(default_factory=CommitmentState)
     _agents_by_id: dict[str, Agent] = field(default_factory=dict, repr=False)
     logger: Optional["SimulationLogger"] = field(default=None, repr=False)
 

@@ -21,6 +21,12 @@ from microecon.bargaining import (
     NashBargainingProtocol,
     RubinsteinBargainingProtocol,
 )
+from microecon.matching import (
+    MatchingProtocol,
+    OpportunisticMatchingProtocol,
+    StableRoommatesMatchingProtocol,
+    CommitmentState,
+)
 from microecon.simulation import Simulation, create_simple_economy
 
 __all__ = [
@@ -46,6 +52,11 @@ __all__ = [
     "BargainingProtocol",
     "NashBargainingProtocol",
     "RubinsteinBargainingProtocol",
+    # Matching protocols (institutional abstraction)
+    "MatchingProtocol",
+    "OpportunisticMatchingProtocol",
+    "StableRoommatesMatchingProtocol",
+    "CommitmentState",
     # Simulation
     "Simulation",
     "create_simple_economy",

@@ -852,6 +852,439 @@ class VisualizationApp:
         dpg.destroy_context()
 
 
+# ============================================================================
+# Dual viewport visualization for side-by-side comparison
+# ============================================================================
+
+class DualVisualizationApp:
+    """
+    Dual viewport visualization for comparing two simulation runs.
+
+    Shows two grids side-by-side with synchronized playback and
+    comparison metrics. Useful for comparing Nash vs Rubinstein
+    bargaining protocols with the same initial conditions.
+    """
+
+    # Layout constants
+    WINDOW_WIDTH = 1400
+    WINDOW_HEIGHT = 800
+    METRICS_PANEL_WIDTH = 180
+    CONTROLS_HEIGHT = 80
+    GRID_MARGIN = 15
+
+    # Colors
+    GRID_LINE_COLOR = (200, 200, 200, 100)
+    BACKGROUND_COLOR = (30, 30, 30, 255)
+
+    def __init__(
+        self,
+        run_a: RunData,
+        run_b: RunData,
+        label_a: str = "Run A",
+        label_b: str = "Run B",
+    ):
+        """
+        Initialize dual visualization.
+
+        Args:
+            run_a: First run data (left viewport)
+            run_b: Second run data (right viewport)
+            label_a: Label for first run (e.g., "Nash")
+            label_b: Label for second run (e.g., "Rubinstein")
+        """
+        from microecon.visualization.replay import DualReplayController
+
+        self.label_a = label_a
+        self.label_b = label_b
+
+        # Both runs should have same grid size
+        self.grid_size = run_a.config.grid_size
+
+        # Create dual replay controller
+        self.controller = DualReplayController(run_a, run_b, synced=True)
+
+        # Playback state
+        self.playing = False
+        self.ticks_per_second = 2.0
+        self.last_tick_time = 0.0
+
+        # UI element references
+        self.drawlist_a: int = 0
+        self.drawlist_b: int = 0
+        self.tick_text: int = 0
+        self.play_button: int = 0
+        self.timeline_slider: int = 0
+
+        # Metrics text elements
+        self.welfare_a_text: int = 0
+        self.welfare_b_text: int = 0
+        self.trades_a_text: int = 0
+        self.trades_b_text: int = 0
+        self.welfare_diff_text: int = 0
+        self.trades_diff_text: int = 0
+
+        # Rendering state (per viewport)
+        self.canvas_size = 0.0
+        self.cell_size = 0.0
+
+        # Agent caches
+        self._agents_a: list[AgentProxy] = []
+        self._agents_b: list[AgentProxy] = []
+
+    def _build_agent_proxies(self) -> None:
+        """Rebuild agent proxy caches for both runs."""
+        self._agents_a = []
+        self._agents_b = []
+
+        state_a, state_b = self.controller.get_states()
+
+        if state_a is not None:
+            perception_radius = self.controller.replay_a.run.config.perception_radius
+            for snapshot in state_a.agent_snapshots:
+                self._agents_a.append(AgentProxy.from_snapshot(snapshot, perception_radius))
+
+        if state_b is not None:
+            perception_radius = self.controller.replay_b.run.config.perception_radius
+            for snapshot in state_b.agent_snapshots:
+                self._agents_b.append(AgentProxy.from_snapshot(snapshot, perception_radius))
+
+    def setup(self) -> None:
+        """Set up the DearPyGui context and windows."""
+        dpg.create_context()
+        dpg.create_viewport(
+            title=f"Comparison: {self.label_a} vs {self.label_b}",
+            width=self.WINDOW_WIDTH,
+            height=self.WINDOW_HEIGHT,
+        )
+
+        # Create main window
+        with dpg.window(label="Main", tag="main_window", no_title_bar=True):
+            # Top row: two grids side by side with metrics
+            with dpg.group(horizontal=True):
+                # Left viewport
+                with dpg.child_window(
+                    width=-self.METRICS_PANEL_WIDTH - 10,
+                    height=-self.CONTROLS_HEIGHT - 10,
+                    no_scrollbar=True,
+                    tag="grids_container",
+                ):
+                    with dpg.group(horizontal=True):
+                        # Grid A
+                        with dpg.group():
+                            dpg.add_text(self.label_a, color=(100, 200, 100))
+                            self.drawlist_a = dpg.add_drawlist(
+                                width=400,
+                                height=500,
+                                tag="grid_drawlist_a",
+                            )
+
+                        dpg.add_spacer(width=20)
+
+                        # Grid B
+                        with dpg.group():
+                            dpg.add_text(self.label_b, color=(200, 150, 100))
+                            self.drawlist_b = dpg.add_drawlist(
+                                width=400,
+                                height=500,
+                                tag="grid_drawlist_b",
+                            )
+
+                # Right side: comparison metrics
+                with dpg.child_window(
+                    width=self.METRICS_PANEL_WIDTH,
+                    height=-self.CONTROLS_HEIGHT - 10,
+                    tag="metrics_panel",
+                ):
+                    dpg.add_text("Comparison", color=(200, 200, 200))
+                    dpg.add_separator()
+
+                    self.tick_text = dpg.add_text("Tick: 0 / 0")
+                    dpg.add_separator()
+
+                    # Run A metrics
+                    dpg.add_text(f"{self.label_a}:", color=(100, 200, 100))
+                    self.welfare_a_text = dpg.add_text("  Welfare: 0.0")
+                    self.trades_a_text = dpg.add_text("  Trades: 0")
+
+                    dpg.add_separator()
+
+                    # Run B metrics
+                    dpg.add_text(f"{self.label_b}:", color=(200, 150, 100))
+                    self.welfare_b_text = dpg.add_text("  Welfare: 0.0")
+                    self.trades_b_text = dpg.add_text("  Trades: 0")
+
+                    dpg.add_separator()
+
+                    # Difference metrics
+                    dpg.add_text("Difference:", color=(200, 200, 200))
+                    self.welfare_diff_text = dpg.add_text("  Welfare: +0.0")
+                    self.trades_diff_text = dpg.add_text("  Trades: +0")
+
+            # Bottom: controls
+            with dpg.child_window(
+                height=self.CONTROLS_HEIGHT,
+                no_scrollbar=True,
+                tag="controls_panel",
+            ):
+                with dpg.group(horizontal=True):
+                    dpg.add_text("[COMPARISON]", color=(150, 150, 255))
+                    dpg.add_text("  ")
+
+                    self.play_button = dpg.add_button(
+                        label="Play",
+                        callback=self.toggle_play,
+                        width=80,
+                    )
+
+                    dpg.add_button(
+                        label="<",
+                        callback=self.step_back,
+                        width=40,
+                    )
+
+                    dpg.add_button(
+                        label=">",
+                        callback=self.step_forward,
+                        width=40,
+                    )
+
+                    dpg.add_text("  Speed:")
+                    dpg.add_slider_float(
+                        default_value=2.0,
+                        min_value=0.5,
+                        max_value=10.0,
+                        width=120,
+                        callback=self.on_speed_change,
+                    )
+                    dpg.add_text("t/s")
+
+                    dpg.add_text("  Tick:")
+                    self.timeline_slider = dpg.add_slider_int(
+                        default_value=0,
+                        min_value=0,
+                        max_value=self.controller.total_ticks - 1,
+                        width=200,
+                        callback=self.on_timeline_change,
+                    )
+                    dpg.add_text(f"/{self.controller.total_ticks}")
+
+                    dpg.add_text("  ")
+                    dpg.add_button(
+                        label="Reset",
+                        callback=self.reset,
+                        width=80,
+                    )
+
+        dpg.set_primary_window("main_window", True)
+        dpg.setup_dearpygui()
+        dpg.show_viewport()
+
+    def toggle_play(self) -> None:
+        """Toggle play/pause."""
+        self.playing = not self.playing
+        dpg.set_item_label(self.play_button, "Pause" if self.playing else "Play")
+        if self.playing:
+            self.last_tick_time = time.time()
+
+    def step_forward(self) -> None:
+        """Step forward one tick."""
+        self.controller.step()
+        self._update_timeline_slider()
+
+    def step_back(self) -> None:
+        """Step backward one tick."""
+        self.controller.step_back()
+        self._update_timeline_slider()
+
+    def on_speed_change(self, sender: int, app_data: float) -> None:
+        """Handle speed slider change."""
+        self.ticks_per_second = app_data
+
+    def on_timeline_change(self, sender: int, app_data: int) -> None:
+        """Handle timeline slider change."""
+        self.controller.seek(app_data)
+
+    def _update_timeline_slider(self) -> None:
+        """Update timeline slider to match current tick."""
+        if self.timeline_slider:
+            dpg.set_value(self.timeline_slider, self.controller.current_tick)
+
+    def reset(self) -> None:
+        """Reset to first tick."""
+        self.playing = False
+        dpg.set_item_label(self.play_button, "Play")
+        self.controller.reset()
+        self._update_timeline_slider()
+
+    def update(self) -> None:
+        """Update playback state."""
+        if self.playing:
+            current_time = time.time()
+            tick_interval = 1.0 / self.ticks_per_second
+
+            if current_time - self.last_tick_time >= tick_interval:
+                if not self.controller.at_end:
+                    self.controller.step()
+                    self._update_timeline_slider()
+                else:
+                    self.playing = False
+                    dpg.set_item_label(self.play_button, "Play")
+
+                self.last_tick_time = current_time
+
+    def grid_to_canvas(self, pos: Position, origin: tuple[float, float]) -> tuple[float, float]:
+        """Convert grid position to canvas coordinates."""
+        x = origin[0] + (pos.col + 0.5) * self.cell_size
+        y = origin[1] + (pos.row + 0.5) * self.cell_size
+        return (x, y)
+
+    def render(self) -> None:
+        """Render both viewports."""
+        self._build_agent_proxies()
+
+        # Get viewport dimensions
+        vp_width = dpg.get_viewport_client_width()
+        vp_height = dpg.get_viewport_client_height()
+
+        # Calculate grid sizes (two grids side by side)
+        available_width = vp_width - self.METRICS_PANEL_WIDTH - 60
+        grid_width = (available_width - 20) // 2  # 20px gap between grids
+        grid_height = vp_height - self.CONTROLS_HEIGHT - 60
+
+        # Ensure minimum and square
+        grid_size = min(grid_width, grid_height, 500)
+        grid_size = max(200, grid_size)
+
+        # Update drawlist sizes
+        dpg.configure_item(self.drawlist_a, width=grid_size, height=grid_size)
+        dpg.configure_item(self.drawlist_b, width=grid_size, height=grid_size)
+
+        # Calculate cell size
+        self.canvas_size = grid_size - 2 * self.GRID_MARGIN
+        self.cell_size = self.canvas_size / self.grid_size
+
+        # Render both grids
+        origin = (self.GRID_MARGIN, self.GRID_MARGIN)
+        self._render_grid(self.drawlist_a, origin, self._agents_a)
+        self._render_grid(self.drawlist_b, origin, self._agents_b)
+
+        # Render metrics
+        self._render_metrics()
+
+    def _render_grid(
+        self,
+        drawlist: int,
+        origin: tuple[float, float],
+        agents: list[AgentProxy],
+    ) -> None:
+        """Render a single grid viewport."""
+        dpg.delete_item(drawlist, children_only=True)
+
+        ox, oy = origin
+
+        # Draw grid lines
+        for i in range(self.grid_size + 1):
+            x = ox + i * self.cell_size
+            dpg.draw_line(
+                (x, oy),
+                (x, oy + self.canvas_size),
+                color=self.GRID_LINE_COLOR,
+                parent=drawlist,
+            )
+
+        for i in range(self.grid_size + 1):
+            y = oy + i * self.cell_size
+            dpg.draw_line(
+                (ox, y),
+                (ox + self.canvas_size, y),
+                color=self.GRID_LINE_COLOR,
+                parent=drawlist,
+            )
+
+        # Draw agents
+        agent_radius = self.cell_size * 0.35
+
+        # Group by position for overlap handling
+        agents_by_pos: dict[Position, list[AgentProxy]] = {}
+        for agent in agents:
+            if agent.position not in agents_by_pos:
+                agents_by_pos[agent.position] = []
+            agents_by_pos[agent.position].append(agent)
+
+        for pos, pos_agents in agents_by_pos.items():
+            cx, cy = self.grid_to_canvas(pos, origin)
+
+            if len(pos_agents) == 1:
+                agent = pos_agents[0]
+                color = alpha_to_color(agent.alpha)
+                dpg.draw_circle(
+                    (cx, cy),
+                    agent_radius,
+                    color=color,
+                    fill=color,
+                    parent=drawlist,
+                )
+            else:
+                import math
+                n = len(pos_agents)
+                offset = agent_radius * 0.6
+                for i, agent in enumerate(pos_agents):
+                    angle = 2 * math.pi * i / n
+                    ax = cx + offset * math.cos(angle)
+                    ay = cy + offset * math.sin(angle)
+                    color = alpha_to_color(agent.alpha)
+                    small_radius = agent_radius * 0.7
+                    dpg.draw_circle(
+                        (ax, ay),
+                        small_radius,
+                        color=color,
+                        fill=color,
+                        parent=drawlist,
+                    )
+
+    def _render_metrics(self) -> None:
+        """Update the metrics panel."""
+        state_a, state_b = self.controller.get_states()
+
+        # Tick counter
+        dpg.set_value(
+            self.tick_text,
+            f"Tick: {self.controller.current_tick + 1} / {self.controller.total_ticks}"
+        )
+
+        # Individual metrics
+        welfare_a = state_a.total_welfare if state_a else 0.0
+        welfare_b = state_b.total_welfare if state_b else 0.0
+        trades_a = state_a.cumulative_trades if state_a else 0
+        trades_b = state_b.cumulative_trades if state_b else 0
+
+        dpg.set_value(self.welfare_a_text, f"  Welfare: {welfare_a:.1f}")
+        dpg.set_value(self.trades_a_text, f"  Trades: {trades_a}")
+        dpg.set_value(self.welfare_b_text, f"  Welfare: {welfare_b:.1f}")
+        dpg.set_value(self.trades_b_text, f"  Trades: {trades_b}")
+
+        # Differences (B - A)
+        welfare_diff = welfare_b - welfare_a
+        trades_diff = trades_b - trades_a
+
+        welfare_sign = "+" if welfare_diff >= 0 else ""
+        trades_sign = "+" if trades_diff >= 0 else ""
+
+        dpg.set_value(self.welfare_diff_text, f"  Welfare: {welfare_sign}{welfare_diff:.1f}")
+        dpg.set_value(self.trades_diff_text, f"  Trades: {trades_sign}{trades_diff}")
+
+    def run(self) -> None:
+        """Main application loop."""
+        self.setup()
+
+        while dpg.is_dearpygui_running():
+            self.update()
+            self.render()
+            dpg.render_dearpygui_frame()
+
+        dpg.destroy_context()
+
+
 def run_visualization(
     n_agents: int = 10,
     grid_size: int = 15,
@@ -893,6 +1326,94 @@ def run_replay_from_path(path: Path | str) -> None:
         path = Path(path)
     run_data = load_run(path)
     run_replay(run_data)
+
+
+def run_comparison(
+    run_a: RunData,
+    run_b: RunData,
+    label_a: str = "Run A",
+    label_b: str = "Run B",
+) -> None:
+    """
+    Launch dual viewport comparison of two runs.
+
+    Args:
+        run_a: First run data (left viewport)
+        run_b: Second run data (right viewport)
+        label_a: Label for first run
+        label_b: Label for second run
+    """
+    app = DualVisualizationApp(run_a, run_b, label_a, label_b)
+    app.run()
+
+
+def run_comparison_from_paths(
+    path_a: Path | str,
+    path_b: Path | str,
+    label_a: str = "Run A",
+    label_b: str = "Run B",
+) -> None:
+    """
+    Launch dual viewport comparison from log directories.
+
+    Args:
+        path_a: Path to first run directory
+        path_b: Path to second run directory
+        label_a: Label for first run
+        label_b: Label for second run
+    """
+    from microecon.logging import load_run
+
+    if isinstance(path_a, str):
+        path_a = Path(path_a)
+    if isinstance(path_b, str):
+        path_b = Path(path_b)
+
+    run_a = load_run(path_a)
+    run_b = load_run(path_b)
+    run_comparison(run_a, run_b, label_a, label_b)
+
+
+def run_protocol_comparison(
+    n_agents: int = 10,
+    grid_size: int = 15,
+    ticks: int = 100,
+    seed: int = 42,
+) -> None:
+    """
+    Run Nash vs Rubinstein comparison with same initial conditions.
+
+    Convenience function that runs both protocols and launches
+    the dual viewport comparison.
+
+    Args:
+        n_agents: Number of agents
+        grid_size: Size of the grid
+        ticks: Number of simulation ticks
+        seed: Random seed (same for both runs)
+    """
+    from microecon.batch import run_comparison as batch_comparison
+    from microecon.analysis import pair_runs_by_seed
+
+    # Run both protocols
+    results = batch_comparison(
+        n_agents=n_agents,
+        grid_size=grid_size,
+        ticks=ticks,
+        seeds=[seed],
+    )
+
+    # Get run data
+    runs = [r.run_data for r in results if r.run_data is not None]
+
+    # Pair by seed
+    pairs = pair_runs_by_seed(runs, "nash", "rubinstein")
+
+    if pairs:
+        nash_run, rubinstein_run = pairs[0]
+        run_comparison(nash_run, rubinstein_run, "Nash", "Rubinstein")
+    else:
+        raise ValueError("Could not pair runs by protocol")
 
 
 # Allow running as: python -m microecon.visualization.app

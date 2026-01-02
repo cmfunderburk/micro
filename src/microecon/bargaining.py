@@ -183,7 +183,8 @@ def _solve_nash_cobb_douglas(
 
     Strategy:
     1. Define objective: for given x1, find optimal y1, return Nash product
-    2. Use golden section search over x1 to find the optimum
+    2. Find feasible bounds where IR constraints can be satisfied
+    3. Use golden section search over x1 to find the optimum
     """
     # Small epsilon for numerical stability
     eps = min(1e-6, W_x * 1e-6, W_y * 1e-6)
@@ -196,9 +197,45 @@ def _solve_nash_cobb_douglas(
         _, np_val = _optimize_y1(alpha1, alpha2, x1, x2, W_y, d1, d2, eps)
         return np_val
 
-    # Golden section search over x1
+    # Find feasible bounds for x1 where a valid allocation exists.
+    # The issue is that golden section search can fail if it starts in
+    # an infeasible region. We first find any feasible point, then expand.
+
+    # Step 1: Find any feasible point by sampling across the range
+    feasible_point = None
+    for i in range(1, 20):
+        test_x = i * W_x / 20
+        if objective(test_x) > -float('inf'):
+            feasible_point = test_x
+            break
+
+    if feasible_point is None:
+        # No feasible region found - return equal split as fallback
+        return (Bundle(W_x / 2, W_y / 2), Bundle(W_x / 2, W_y / 2))
+
+    # Step 2: Binary search for lower bound of feasible region
+    lo, hi = eps, feasible_point
+    for _ in range(30):
+        mid = (lo + hi) / 2
+        if objective(mid) > -float('inf'):
+            hi = mid
+        else:
+            lo = mid
+    feasible_lower = hi
+
+    # Step 3: Binary search for upper bound of feasible region
+    lo, hi = feasible_point, W_x - eps
+    for _ in range(30):
+        mid = (lo + hi) / 2
+        if objective(mid) > -float('inf'):
+            lo = mid
+        else:
+            hi = mid
+    feasible_upper = lo
+
+    # Golden section search over x1 within feasible bounds
     phi = (1 + math.sqrt(5)) / 2
-    a, b = eps, W_x - eps
+    a, b = feasible_lower, feasible_upper
 
     c = b - (b - a) / phi
     d_pt = a + (b - a) / phi

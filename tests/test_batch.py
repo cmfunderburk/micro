@@ -13,6 +13,35 @@ from microecon.logging import load_run
 class TestBatchRunner:
     """Test BatchRunner functionality."""
 
+    def test_run_requires_seed(self):
+        """Batch runs must have an explicit seed for reproducibility."""
+        runner = BatchRunner(
+            base_config={"n_agents": 4, "grid_size": 5},
+            variations={},
+        )
+        with pytest.raises(ValueError, match="requires an explicit seed"):
+            runner.run(ticks=5)
+
+    def test_run_accepts_seed_in_base_config(self):
+        """Seed in base_config satisfies requirement."""
+        runner = BatchRunner(
+            base_config={"n_agents": 4, "grid_size": 5, "seed": 42},
+            variations={},
+            keep_in_memory=True,
+        )
+        results = runner.run(ticks=5)
+        assert len(results) == 1
+
+    def test_run_accepts_seed_in_variations(self):
+        """Seed in variations satisfies requirement."""
+        runner = BatchRunner(
+            base_config={"n_agents": 4, "grid_size": 5},
+            variations={"seed": [1, 2]},
+            keep_in_memory=True,
+        )
+        results = runner.run(ticks=5)
+        assert len(results) == 2
+
     def test_count_runs_no_variations(self):
         runner = BatchRunner(
             base_config={"n_agents": 10, "grid_size": 15},

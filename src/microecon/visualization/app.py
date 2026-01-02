@@ -448,6 +448,9 @@ class VisualizationApp:
         if self.mode == "replay" and self.replay is not None:
             self.replay.step_back()
             self._update_timeline_slider()
+            # Clear trails and animations - they would show future state otherwise
+            self.position_history.clear()
+            self.trade_animations.clear()
 
     def on_speed_change(self, sender: int, app_data: float) -> None:
         """Handle speed slider change."""
@@ -457,6 +460,9 @@ class VisualizationApp:
         """Handle timeline slider change (replay mode)."""
         if self.mode == "replay" and self.replay is not None:
             self.replay.seek(app_data)
+            # Clear trails - scrubbing invalidates position history
+            self.position_history.clear()
+            self.trade_animations.clear()
 
     def _update_timeline_slider(self) -> None:
         """Update timeline slider to match current tick."""
@@ -897,7 +903,13 @@ class DualVisualizationApp:
         self.label_a = label_a
         self.label_b = label_b
 
-        # Both runs should have same grid size
+        # Validate grid sizes match
+        if run_a.config.grid_size != run_b.config.grid_size:
+            raise ValueError(
+                f"Grid sizes must match for dual comparison. "
+                f"{label_a} has grid_size={run_a.config.grid_size}, "
+                f"{label_b} has grid_size={run_b.config.grid_size}."
+            )
         self.grid_size = run_a.config.grid_size
 
         # Create dual replay controller

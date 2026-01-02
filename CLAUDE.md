@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a research-first agent-based microeconomics platform that gives canonical theoretical microeconomics computational form. The core insight is **institutional visibility**: making economic institutions (bargaining protocols, information structures, search mechanisms) explicit, configurable, and comparable.
 
-See VISION.md for the authoritative statement of project identity and methodology.
+See VISION.md for the authoritative statement of project identity and methodology. See STATUS.md for current capabilities and known limitations.
 
-## Current Implementation Status
+## Current Implementation Status (Summary)
 
 ### Simulation Core (Complete)
 
@@ -166,31 +166,29 @@ All behavioral rules, bargaining protocols, and institutional mechanisms must ha
 ## Document Hierarchy
 
 1. **VISION.md** - Authoritative on identity, scope, methodology
-2. **theoretical-foundations.md** - Textbook mappings and derivations
-3. **VISUALIZATION.md** - Full visualization design vision (UI/UX, technology choices, future features)
-4. **VISUALIZATION_MVP_SPEC.md** - MVP requirements (complete, checklist at bottom shows all items done)
-5. **CLAUDE.md** - Development guidance and current status
+2. **STATUS.md** - Current capabilities and known limitations (what exists today)
+3. **theoretical-foundations.md** - Textbook mappings and derivations
+4. **VISUALIZATION.md** - Full visualization design vision (UI/UX, technology choices, future features)
+5. **CLAUDE.md** - Development guidance and conventions
 
 ## Next Development Directions
 
-The simulation, visualization, batch runs, logging, and analysis infrastructure are complete. Potential next steps (not prioritized):
+See STATUS.md §5 for a detailed gap analysis vs VISION.md and VISUALIZATION.md.
 
-**Visualization enhancements** (see VISUALIZATION.md §4-9 for full specs)
-- Replay mode integration in DearPyGui app (controllers exist in `replay.py`)
-- Dual viewport for synchronized comparison (Nash vs Rubinstein side-by-side)
-- Trade zoom view with Edgeworth box (§4)
-- Time series charts via ImPlot (§9)
-- Export: PNG/SVG frames, GIF/MP4 animations (§12)
+**Visualization enhancements** (see VISUALIZATION.md for full specs)
+- Trade zoom view with Edgeworth box
+- Time series charts via ImPlot
+- Export: PNG/SVG frames, GIF/MP4 animations
+- Overlay toggles (trails, perception radius)
 
 **Institutional comparisons** (core research value per VISION.md)
 - Additional bargaining protocols (TIOLI, posted prices, double auction)
-- Swappable matching mechanisms
+- Protocol-aware search (currently uses Nash surplus for all protocols)
 
 **Information environments**
 - Private information (type ≠ private state)
 - Signaling and screening
-- Partial observability
-- Agent perspective mode in visualization (see what agent X sees)
+- Agent perspective mode in visualization
 
 **Analysis extensions**
 - Equilibrium benchmarks (Walrasian prices for comparison)

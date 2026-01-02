@@ -133,7 +133,7 @@ class BatchRunner:
         return SimulationConfig(
             n_agents=config.get("n_agents", 10),
             grid_size=config.get("grid_size", 10),
-            seed=config.get("seed", 0),
+            seed=config["seed"],  # Required - validated in run()
             protocol_name=_get_protocol_name(protocol),
             protocol_params=_get_protocol_params(protocol),
             perception_radius=config.get("perception_radius", 7.0),
@@ -190,6 +190,21 @@ class BatchRunner:
             run_data=run_data if self.keep_in_memory else None,
         )
 
+    def _validate_seed_required(self) -> None:
+        """Validate that all runs will have an explicit seed.
+
+        Batch runs require explicit seeds for reproducibility. This catches
+        the mistake early rather than after a long batch completes.
+        """
+        has_base_seed = "seed" in self.base_config
+        has_seed_variation = "seed" in self.variations
+
+        if not has_base_seed and not has_seed_variation:
+            raise ValueError(
+                "BatchRunner requires an explicit seed for reproducibility. "
+                "Provide 'seed' in base_config or include 'seed' in variations."
+            )
+
     def run(self, ticks: int = 100) -> list[RunResult]:
         """Run all parameter combinations.
 
@@ -198,7 +213,13 @@ class BatchRunner:
 
         Returns:
             List of RunResult objects with summary statistics and log paths
+
+        Raises:
+            ValueError: If no seed is provided in base_config or variations
         """
+        # Validate seed requirement before starting any runs
+        self._validate_seed_required()
+
         # Create output directory if specified
         if self.output_dir is not None:
             self.output_dir.mkdir(parents=True, exist_ok=True)

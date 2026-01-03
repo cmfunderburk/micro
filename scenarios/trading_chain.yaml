@@ -1,0 +1,42 @@
+meta:
+  title: "Trading Chain (4 Agents)"
+  complexity: 2
+  description: |
+    Four agents arranged linearly with uniform endowments but varying preferences.
+    Demonstrates how matching protocol affects welfare outcomes.
+
+    Under committed matching (StableRoommates): optimal pairs A-D and B-C form,
+    achieving competitive equilibrium with all MRS=1.0 and welfare=26.80.
+
+    Under opportunistic matching: B-C cross paths first, then B trades with D,
+    leaving A to trade with B. Result: suboptimal equilibrium, welfare=26.20.
+
+    The ~2.2% welfare gap demonstrates that institutional design matters.
+  tags:
+    - matching
+    - spatial
+    - bilateral
+    - comparison
+
+config:
+  grid_size: 20
+  perception_radius: 20.0
+  discount_factor: 0.9
+
+  agents:
+    - id: A
+      position: [0, 0]
+      alpha: 0.2
+      endowment: [6.0, 6.0]
+    - id: B
+      position: [5, 0]
+      alpha: 0.4
+      endowment: [6.0, 6.0]
+    - id: C
+      position: [10, 0]
+      alpha: 0.6
+      endowment: [6.0, 6.0]
+    - id: D
+      position: [15, 0]
+      alpha: 0.8
+      endowment: [6.0, 6.0]

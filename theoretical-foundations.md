@@ -285,10 +285,13 @@ PDF files for primary sources are located in `references/`:
 
 3. **Rubinstein Alternating Offers:** Finite horizon uses backward induction; infinite horizon has unique SPE; δ → 1 converges to Nash. Key insight: patience = bargaining power. (O&R-B Ch 3, O&R-G Ch 7)
 
+4. **Asymmetric Nash (BRW 1986):** For exchange economies with general preferences (e.g., Cobb-Douglas), Rubinstein alternating-offers SPE converges to the *asymmetric* Nash solution with patience-derived weights: w₁ = ln(δ₂)/(ln(δ₁)+ln(δ₂)), w₂ = ln(δ₁)/(ln(δ₁)+ln(δ₂)). (O&R-B Ch 4, Binmore-Rubinstein-Wolinsky 1986)
+
 **Key theorems:**
 1. **Nash (1950):** Unique bargaining solution satisfying four axioms
 2. **Rubinstein (1982):** Unique SPE of alternating-offer game; converges to Nash as δ→1
-3. **Core convergence:** As economy replicates, core shrinks to Walrasian equilibrium
+3. **BRW (1986):** For general utility, Rubinstein → asymmetric Nash with weights from patience ratios
+4. **Core convergence:** As economy replicates, core shrinks to Walrasian equilibrium
 
 ---
 

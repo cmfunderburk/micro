@@ -664,13 +664,17 @@ class TestTradingChainCommittedStage3:
             new_trades = sim.step()
             assert len(new_trades) == 0, "No trades should occur at equilibrium"
 
-    def test_competitive_equilibrium_achieved(self, scenario_at_equilibrium):
+    def test_mrs_equality_in_symmetric_case(self, scenario_at_equilibrium):
         """
-        With uniform endowments, bilateral exchange achieves competitive equilibrium.
+        MRS equality achieved in this symmetric scenario.
 
-        This is a special case: when initial endowments are uniform (6,6),
-        the effective price ratio is 1:1, and bilateral Nash bargaining
-        produces the Walrasian outcome.
+        Bilateral Nash bargaining achieves MRS equality (competitive equilibrium)
+        in this specific symmetric scenario. This is NOT a general property of
+        bilateral exchange - it occurs here because initial endowments are uniform
+        (6,6) and the effective price ratio is 1:1.
+
+        Note: With asymmetric endowments or preferences, bilateral Nash does not
+        generally achieve competitive equilibrium prices.
         """
         sim, a, b, c, d, trades = scenario_at_equilibrium
 

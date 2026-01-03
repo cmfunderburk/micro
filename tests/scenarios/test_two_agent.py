@@ -691,55 +691,66 @@ class TestRubinsteinProtocol:
 
         return sim, agent_a, agent_b
 
-    def test_proposer_advantage_a_proposes(self, symmetric_agents):
-        """When A proposes, A should get more than B."""
-        from microecon.bargaining import RubinsteinBargainingProtocol
+    def test_equal_delta_gives_equal_shares(self, symmetric_agents):
+        """Equal patience (δ1 = δ2) should give equal shares (BRW formulation).
+
+        Under BRW (1986), when discount factors are equal, the bargaining
+        weights are equal, giving the symmetric Nash solution.
+        """
+        from microecon.bargaining import RubinsteinBargainingProtocol, compute_brw_weights
 
         sim, agent_a, agent_b = symmetric_agents
         protocol = RubinsteinBargainingProtocol()
 
+        # BRW weights should be equal when δ1 = δ2
+        w1, w2 = compute_brw_weights(0.9, 0.9)
+        assert w1 == pytest.approx(0.5, rel=1e-6)
+        assert w2 == pytest.approx(0.5, rel=1e-6)
+
         outcome = protocol.solve(agent_a, agent_b, proposer=agent_a)
 
-        # Proposer gets more
-        assert outcome.gains_1 > outcome.gains_2
-        # With δ=0.9, proposer share ≈ 0.526
-        expected_share = 1 / (1 + 0.9)
+        # Equal patience → equal shares (approximately)
         actual_share = outcome.gains_1 / outcome.total_gains
-        assert actual_share == pytest.approx(expected_share, rel=0.01)
+        assert actual_share == pytest.approx(0.5, rel=0.01)
 
-    def test_proposer_advantage_b_proposes(self, symmetric_agents):
-        """When B proposes, B should get more than A."""
+    def test_proposer_identity_irrelevant_brw(self, symmetric_agents):
+        """Proposer identity should not affect outcome under BRW formulation.
+
+        Under BRW (1986), the Rubinstein outcome for exchange economies
+        depends on patience ratio, not proposer identity.
+        """
         from microecon.bargaining import RubinsteinBargainingProtocol
 
         sim, agent_a, agent_b = symmetric_agents
         protocol = RubinsteinBargainingProtocol()
 
-        outcome = protocol.solve(agent_a, agent_b, proposer=agent_b)
+        # Outcomes should be identical regardless of proposer
+        outcome_a_proposes = protocol.solve(agent_a, agent_b, proposer=agent_a)
+        outcome_b_proposes = protocol.solve(agent_a, agent_b, proposer=agent_b)
 
-        # Now B (agent2 in the solution) gets more
-        assert outcome.gains_2 > outcome.gains_1
-        expected_share = 1 / (1 + 0.9)
-        actual_share_b = outcome.gains_2 / outcome.total_gains
-        assert actual_share_b == pytest.approx(expected_share, rel=0.01)
+        assert outcome_a_proposes.gains_1 == pytest.approx(outcome_b_proposes.gains_1, rel=1e-6)
+        assert outcome_a_proposes.gains_2 == pytest.approx(outcome_b_proposes.gains_2, rel=1e-6)
 
-    def test_surplus_shares_match_formula(self, symmetric_agents):
-        """Surplus shares should exactly match Rubinstein formula."""
-        from microecon.bargaining import RubinsteinBargainingProtocol, rubinstein_share
+    def test_brw_weights_formula(self, symmetric_agents):
+        """Surplus shares should match BRW asymmetric Nash weights."""
+        from microecon.bargaining import RubinsteinBargainingProtocol, compute_brw_weights
 
         sim, agent_a, agent_b = symmetric_agents
         protocol = RubinsteinBargainingProtocol()
 
-        outcome = protocol.solve(agent_a, agent_b, proposer=agent_a)
+        outcome = protocol.solve(agent_a, agent_b)
 
-        # Get theoretical shares
-        expected_share_a, expected_share_b = rubinstein_share(0.9, 0.9, proposer=1)
+        # Get BRW weights
+        w1, w2 = compute_brw_weights(0.9, 0.9)
 
-        # Compare
+        # With equal δ, shares should be ~0.5 each
         actual_share_a = outcome.gains_1 / outcome.total_gains
         actual_share_b = outcome.gains_2 / outcome.total_gains
 
-        assert actual_share_a == pytest.approx(expected_share_a, rel=0.01)
-        assert actual_share_b == pytest.approx(expected_share_b, rel=0.01)
+        # Note: actual shares differ from weights due to non-linear utility
+        # but with equal weights and symmetric setup, shares should be equal
+        assert actual_share_a == pytest.approx(0.5, rel=0.01)
+        assert actual_share_b == pytest.approx(0.5, rel=0.01)
 
     def test_patience_equals_power(self):
         """More patient agent should get larger share."""

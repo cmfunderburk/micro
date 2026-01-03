@@ -166,6 +166,137 @@ def nash_bargaining_solution(
     )
 
 
+def asymmetric_nash_bargaining_solution(
+    prefs_1: CobbDouglas,
+    endowment_1: Bundle,
+    prefs_2: CobbDouglas,
+    endowment_2: Bundle,
+    weight_1: float = 0.5,
+    weight_2: float = 0.5,
+) -> BargainingOutcome:
+    """
+    Compute the asymmetric Nash bargaining solution for two-agent exchange.
+
+    The asymmetric Nash solution generalizes the symmetric Nash solution by
+    allowing different bargaining power weights for each player. It maximizes:
+
+        (u1 - d1)^w1 * (u2 - d2)^w2
+
+    subject to Pareto efficiency and individual rationality.
+
+    When w1 = w2, this reduces to the symmetric Nash solution.
+
+    This is the solution to which Rubinstein alternating-offers converges
+    for general preferences, with weights derived from patience parameters.
+    See Binmore, Rubinstein, Wolinsky (1986).
+
+    Reference: O&R-B Chapter 4, Section 4.4
+
+    Args:
+        prefs_1: Agent 1's Cobb-Douglas preferences
+        endowment_1: Agent 1's initial endowment
+        prefs_2: Agent 2's Cobb-Douglas preferences
+        endowment_2: Agent 2's initial endowment
+        weight_1: Agent 1's bargaining power weight (default 0.5)
+        weight_2: Agent 2's bargaining power weight (default 0.5)
+
+    Returns:
+        BargainingOutcome with the asymmetric Nash bargaining solution
+    """
+    # Total endowment (feasibility constraint)
+    W_x = endowment_1.x + endowment_2.x
+    W_y = endowment_1.y + endowment_2.y
+
+    # Disagreement point: utility from consuming own endowment
+    d1 = prefs_1.utility(endowment_1)
+    d2 = prefs_2.utility(endowment_2)
+
+    # Check for degenerate cases
+    if W_x <= 0 or W_y <= 0:
+        return BargainingOutcome(
+            allocation_1=endowment_1,
+            allocation_2=endowment_2,
+            utility_1=d1,
+            utility_2=d2,
+            gains_1=0.0,
+            gains_2=0.0,
+            trade_occurred=False,
+        )
+
+    # Solve for asymmetric Nash allocation
+    allocation_1, allocation_2 = _solve_nash_cobb_douglas(
+        prefs_1.alpha, prefs_2.alpha, W_x, W_y, d1, d2, weight_1, weight_2
+    )
+
+    u1 = prefs_1.utility(allocation_1)
+    u2 = prefs_2.utility(allocation_2)
+
+    # Verify individual rationality
+    if u1 < d1 - 1e-9 or u2 < d2 - 1e-9:
+        return BargainingOutcome(
+            allocation_1=endowment_1,
+            allocation_2=endowment_2,
+            utility_1=d1,
+            utility_2=d2,
+            gains_1=0.0,
+            gains_2=0.0,
+            trade_occurred=False,
+        )
+
+    return BargainingOutcome(
+        allocation_1=allocation_1,
+        allocation_2=allocation_2,
+        utility_1=u1,
+        utility_2=u2,
+        gains_1=u1 - d1,
+        gains_2=u2 - d2,
+        trade_occurred=True,
+    )
+
+
+def compute_brw_weights(delta_1: float, delta_2: float) -> tuple[float, float]:
+    """
+    Compute asymmetric Nash bargaining weights from discount factors.
+
+    Binmore, Rubinstein, and Wolinsky (1986) showed that the Rubinstein
+    alternating-offers SPE converges to the asymmetric Nash solution with
+    weights derived from patience:
+
+        w1 = ln(δ2) / (ln(δ1) + ln(δ2))
+        w2 = ln(δ1) / (ln(δ1) + ln(δ2))
+
+    Note the counterintuitive formula: w1 uses δ2 in the numerator!
+    This means the MORE patient player (higher δ) gets GREATER bargaining power.
+
+    Reference: O&R-B Chapter 4, Section 4.4.4
+
+    Args:
+        delta_1: Agent 1's discount factor (0 < δ1 < 1)
+        delta_2: Agent 2's discount factor (0 < δ2 < 1)
+
+    Returns:
+        (weight_1, weight_2) tuple of bargaining power weights
+
+    Raises:
+        ValueError: If discount factors not in (0, 1)
+    """
+    if not (0 < delta_1 < 1):
+        raise ValueError(f"delta_1 must be in (0, 1), got {delta_1}")
+    if not (0 < delta_2 < 1):
+        raise ValueError(f"delta_2 must be in (0, 1), got {delta_2}")
+
+    # Both ln(δ) values are negative since 0 < δ < 1
+    ln_d1 = math.log(delta_1)
+    ln_d2 = math.log(delta_2)
+
+    # BRW formula: w1 = ln(δ2) / (ln(δ1) + ln(δ2))
+    denom = ln_d1 + ln_d2
+    weight_1 = ln_d2 / denom
+    weight_2 = ln_d1 / denom
+
+    return weight_1, weight_2
+
+
 def _solve_nash_cobb_douglas(
     alpha1: float,
     alpha2: float,
@@ -173,9 +304,11 @@ def _solve_nash_cobb_douglas(
     W_y: float,
     d1: float,
     d2: float,
+    weight1: float = 0.5,
+    weight2: float = 0.5,
 ) -> tuple[Bundle, Bundle]:
     """
-    Solve for Nash bargaining allocation with Cobb-Douglas preferences.
+    Solve for (asymmetric) Nash bargaining allocation with Cobb-Douglas preferences.
 
     Uses golden section search for efficient unimodal optimization.
     The Nash product with Cobb-Douglas utilities is quasiconcave,
@@ -185,16 +318,22 @@ def _solve_nash_cobb_douglas(
     1. Define objective: for given x1, find optimal y1, return Nash product
     2. Find feasible bounds where IR constraints can be satisfied
     3. Use golden section search over x1 to find the optimum
+
+    Args:
+        alpha1, alpha2: Cobb-Douglas preference parameters
+        W_x, W_y: Total endowments of goods x and y
+        d1, d2: Disagreement utilities
+        weight1, weight2: Bargaining power weights (default 0.5, 0.5 for symmetric Nash)
     """
     # Small epsilon for numerical stability
     eps = min(1e-6, W_x * 1e-6, W_y * 1e-6)
 
     def objective(x1: float) -> float:
-        """Nash product maximized over y1 for given x1."""
+        """(Asymmetric) Nash product maximized over y1 for given x1."""
         if x1 <= eps or x1 >= W_x - eps:
             return -float('inf')
         x2 = W_x - x1
-        _, np_val = _optimize_y1(alpha1, alpha2, x1, x2, W_y, d1, d2, eps)
+        _, np_val = _optimize_y1(alpha1, alpha2, x1, x2, W_y, d1, d2, eps, weight1, weight2)
         return np_val
 
     # Find feasible bounds for x1 where a valid allocation exists.
@@ -251,7 +390,7 @@ def _solve_nash_cobb_douglas(
 
     best_x1 = (a + b) / 2
     x2 = W_x - best_x1
-    best_y1, _ = _optimize_y1(alpha1, alpha2, best_x1, x2, W_y, d1, d2, eps)
+    best_y1, _ = _optimize_y1(alpha1, alpha2, best_x1, x2, W_y, d1, d2, eps, weight1, weight2)
 
     return (Bundle(best_x1, best_y1), Bundle(x2, W_y - best_y1))
 
@@ -265,17 +404,26 @@ def _optimize_y1(
     d1: float,
     d2: float,
     eps: float = 1e-6,
+    weight1: float = 0.5,
+    weight2: float = 0.5,
 ) -> tuple[float, float]:
     """
-    Optimize y1 given x1, x2 to maximize Nash product.
+    Optimize y1 given x1, x2 to maximize (asymmetric) Nash product.
 
-    For fixed x1, x2, the Nash product as a function of y1 is:
-    NP(y1) = (x1^a1 * y1^(1-a1) - d1) * (x2^a2 * (W_y - y1)^(1-a2) - d2)
+    For fixed x1, x2, the asymmetric Nash product as a function of y1 is:
+    ANP(y1) = (u1 - d1)^w1 * (u2 - d2)^w2
+
+    where u1 = x1^a1 * y1^(1-a1), u2 = x2^a2 * (W_y - y1)^(1-a2)
 
     We use golden section search for unimodal optimization.
 
     Args:
+        alpha1, alpha2: Cobb-Douglas preference parameters
+        x1, x2: Good x allocations (fixed)
+        W_y: Total good y to allocate
+        d1, d2: Disagreement utilities
         eps: Small value for numerical bounds. Adapts to small endowments.
+        weight1, weight2: Bargaining power weights (default 0.5, 0.5 for symmetric Nash)
     """
     # Ensure valid search interval even for small W_y
     bound_eps = min(eps, W_y * 0.01)
@@ -294,7 +442,8 @@ def _optimize_y1(
         if u1 <= d1 or u2 <= d2:
             return -float('inf')
 
-        return (u1 - d1) * (u2 - d2)
+        # Asymmetric Nash product: (u1 - d1)^w1 * (u2 - d2)^w2
+        return ((u1 - d1) ** weight1) * ((u2 - d2) ** weight2)
 
     # Golden section search
     phi = (1 + math.sqrt(5)) / 2
@@ -439,15 +588,21 @@ def rubinstein_bargaining_solution(
     """
     Compute the Rubinstein bargaining solution for two-agent exchange.
 
-    Adapts the Rubinstein alternating-offers model (which divides a pie)
-    to bilateral exchange with Cobb-Douglas preferences by:
+    For exchange economies with non-linear utility (like Cobb-Douglas),
+    Binmore, Rubinstein, and Wolinsky (1986) showed that the alternating-offers
+    SPE converges to the ASYMMETRIC Nash bargaining solution with weights
+    derived from patience:
 
-    1. Computing total surplus available (max feasible utility gains)
-    2. Using Rubinstein shares to determine each agent's portion
-    3. Finding the Pareto-efficient allocation matching those shares
+        w1 = ln(δ2) / (ln(δ1) + ln(δ2))
+        w2 = ln(δ1) / (ln(δ1) + ln(δ2))
 
-    The key insight: the Rubinstein formula determines how surplus is divided,
-    and we find the allocation on the Pareto frontier that achieves this division.
+    The MORE patient player (higher δ) gets GREATER bargaining power.
+
+    Note: The proposer parameter is retained for API compatibility and logging,
+    but with asymmetric Nash, the proposer identity's effect vanishes as δ → 1.
+    The key determinant of bargaining power is patience, not first-mover status.
+
+    Reference: O&R-B Chapter 4, Section 4.4; BRW (1986) RAND Journal
 
     Args:
         prefs_1: Agent 1's Cobb-Douglas preferences
@@ -456,62 +611,17 @@ def rubinstein_bargaining_solution(
         endowment_2: Agent 2's initial endowment
         delta_1: Agent 1's discount factor (0 < δ₁ < 1)
         delta_2: Agent 2's discount factor (0 < δ₂ < 1)
-        proposer: Which agent proposes first (1 or 2)
+        proposer: Which agent proposes first (retained for compatibility/logging)
 
     Returns:
         BargainingOutcome with the Rubinstein bargaining solution
     """
-    # Total endowment
-    W_x = endowment_1.x + endowment_2.x
-    W_y = endowment_1.y + endowment_2.y
+    # Compute BRW weights from discount factors
+    weight_1, weight_2 = compute_brw_weights(delta_1, delta_2)
 
-    # Disagreement point: utility from own endowment
-    d1 = prefs_1.utility(endowment_1)
-    d2 = prefs_2.utility(endowment_2)
-
-    # Check for degenerate cases
-    if W_x <= 0 or W_y <= 0:
-        return BargainingOutcome(
-            allocation_1=endowment_1,
-            allocation_2=endowment_2,
-            utility_1=d1,
-            utility_2=d2,
-            gains_1=0.0,
-            gains_2=0.0,
-            trade_occurred=False,
-        )
-
-    # Compute Rubinstein surplus shares
-    share_1, share_2 = rubinstein_share(delta_1, delta_2, proposer)
-
-    # Find allocation on Pareto frontier matching these shares
-    allocation_1, allocation_2 = _solve_rubinstein_allocation(
-        prefs_1.alpha, prefs_2.alpha, W_x, W_y, d1, d2, share_1, share_2
-    )
-
-    u1 = prefs_1.utility(allocation_1)
-    u2 = prefs_2.utility(allocation_2)
-
-    # Verify individual rationality
-    if u1 < d1 - 1e-9 or u2 < d2 - 1e-9:
-        return BargainingOutcome(
-            allocation_1=endowment_1,
-            allocation_2=endowment_2,
-            utility_1=d1,
-            utility_2=d2,
-            gains_1=0.0,
-            gains_2=0.0,
-            trade_occurred=False,
-        )
-
-    return BargainingOutcome(
-        allocation_1=allocation_1,
-        allocation_2=allocation_2,
-        utility_1=u1,
-        utility_2=u2,
-        gains_1=u1 - d1,
-        gains_2=u2 - d2,
-        trade_occurred=True,
+    # Use asymmetric Nash solution with patience-derived weights
+    return asymmetric_nash_bargaining_solution(
+        prefs_1, endowment_1, prefs_2, endowment_2, weight_1, weight_2
     )
 
 
@@ -623,18 +733,22 @@ def compute_rubinstein_surplus(
     """
     Compute expected surplus from Rubinstein bargaining between two agents.
 
+    With the BRW (1986) formulation, the Rubinstein solution for exchange economies
+    converges to asymmetric Nash with patience-derived weights. The proposer
+    identity parameter is retained for API compatibility but no longer affects
+    the outcome - bargaining power is determined by patience (discount factors).
+
     Args:
         observer_type: Observable type of the evaluating agent
         target_type: Observable type of the potential partner
         observer_delta: Observer's discount factor
         target_delta: Target's discount factor
-        observer_is_proposer: Whether observer would propose first
+        observer_is_proposer: Retained for API compatibility (no longer affects outcome)
 
     Returns:
         Expected surplus for the observer from Rubinstein bargaining
     """
-    proposer = 1 if observer_is_proposer else 2
-
+    # Note: proposer parameter retained for compatibility but no longer used
     outcome = rubinstein_bargaining_solution(
         observer_type.preferences,
         observer_type.endowment,
@@ -642,7 +756,6 @@ def compute_rubinstein_surplus(
         target_type.endowment,
         observer_delta,
         target_delta,
-        proposer,
     )
     return outcome.gains_1
 
@@ -820,19 +933,22 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
     """
     Rubinstein Alternating Offers - strategic approach.
 
-    Implements the unique Subgame Perfect Equilibrium of the infinite-horizon
-    alternating-offers game with discounting.
+    For exchange economies with Cobb-Douglas preferences, Binmore, Rubinstein,
+    and Wolinsky (1986) showed that the alternating-offers SPE converges to
+    the ASYMMETRIC Nash bargaining solution with patience-derived weights:
+
+        w1 = ln(δ2) / (ln(δ1) + ln(δ2))
+        w2 = ln(δ1) / (ln(δ1) + ln(δ2))
 
     Properties:
-    - Asymmetric: First-mover (proposer) gets larger share
     - Patience = power: Higher discount factor → larger share
-    - Converges to Nash as discount factors → 1
-    - Immediate agreement in equilibrium (no delay)
+    - Equal δ → symmetric Nash (equal bargaining power)
+    - Proposer identity no longer affects outcome (with asymmetric Nash)
 
-    The proposer advantage represents the "initiator" of trade - the agent
-    who moves toward the other and proposes the exchange.
+    The proposer parameter is retained for API compatibility and logging
+    but does not affect outcomes under the BRW formulation.
 
-    Reference: O&R-B Chapter 3, Theorem 3.4
+    Reference: O&R-B Chapter 4, Section 4.4; BRW (1986) RAND Journal
     """
 
     def solve(
@@ -842,23 +958,16 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
         proposer: Agent | None = None,
     ) -> BargainingOutcome:
         """
-        Compute Rubinstein bargaining solution.
+        Compute Rubinstein bargaining solution using BRW asymmetric Nash.
 
         Args:
             agent1: First agent
             agent2: Second agent
-            proposer: Agent who proposes first (gets first-mover advantage).
-                     Defaults to agent1 if not specified.
+            proposer: Retained for API compatibility (no longer affects outcome)
 
         Returns:
-            BargainingOutcome with Rubinstein allocation
+            BargainingOutcome with asymmetric Nash allocation based on patience
         """
-        # Determine which agent is proposer (1-indexed for the solution)
-        if proposer is None or proposer.id == agent1.id:
-            proposer_id = 1
-        else:
-            proposer_id = 2
-
         return rubinstein_bargaining_solution(
             agent1.preferences,
             agent1.endowment,
@@ -866,7 +975,6 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
             agent2.endowment,
             agent1.discount_factor,
             agent2.discount_factor,
-            proposer_id,
         )
 
     def compute_expected_surplus(
@@ -876,20 +984,19 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
         proposer: Agent | None = None,
     ) -> float:
         """
-        Compute expected surplus for agent1 under Rubinstein.
+        Compute expected surplus for agent1 under Rubinstein/BRW.
+
+        With asymmetric Nash, the surplus depends on the ratio of patience
+        (discount factors), not on proposer identity.
 
         Args:
             agent1: Evaluating agent
             agent2: Potential trade partner
-            proposer: Who would propose first (defaults to agent1)
+            proposer: Retained for API compatibility (no longer affects outcome)
 
         Returns:
             Expected surplus for agent1
         """
-        # When evaluating targets, agent1 is typically the one who would
-        # move toward agent2 and initiate, so they're the proposer
-        observer_is_proposer = proposer is None or proposer.id == agent1.id
-
         # Create observable types from agents (full information case)
         type1 = AgentType(agent1.preferences, agent1.endowment)
         type2 = AgentType(agent2.preferences, agent2.endowment)
@@ -899,5 +1006,4 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
             type2,
             agent1.discount_factor,
             agent2.discount_factor,
-            observer_is_proposer,
         )

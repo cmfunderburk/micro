@@ -276,26 +276,44 @@ class TestRubinsteinBargainingSolution:
         assert outcome.gains_1 > 0
         assert outcome.gains_2 > 0
 
-    def test_proposer_gets_larger_share(self):
-        """Proposer should get larger share of surplus."""
+    def test_patience_determines_bargaining_power(self):
+        """More patient player should get larger share (BRW formulation).
+
+        Under BRW (1986), the Rubinstein alternating-offers converges to
+        asymmetric Nash with patience-derived weights. The MORE patient
+        player (higher δ) gets GREATER bargaining power.
+
+        Note: Proposer identity no longer affects outcomes.
+        """
         prefs1 = CobbDouglas(0.3)
         prefs2 = CobbDouglas(0.7)
         endow1 = Bundle(8.0, 2.0)
         endow2 = Bundle(2.0, 8.0)
 
-        # Agent 1 proposes
-        outcome1 = rubinstein_bargaining_solution(
-            prefs1, endow1, prefs2, endow2, 0.9, 0.9, proposer=1
-        )
-        # Agent 2 proposes
-        outcome2 = rubinstein_bargaining_solution(
-            prefs1, endow1, prefs2, endow2, 0.9, 0.9, proposer=2
+        # Agent 1 more patient (δ1 > δ2)
+        outcome_patient1 = rubinstein_bargaining_solution(
+            prefs1, endow1, prefs2, endow2, 0.95, 0.5
         )
 
-        # When agent 1 proposes, they get more
-        assert outcome1.gains_1 > outcome2.gains_1
-        # When agent 2 proposes, they get more
-        assert outcome2.gains_2 > outcome1.gains_2
+        # Agent 2 more patient (δ2 > δ1)
+        outcome_patient2 = rubinstein_bargaining_solution(
+            prefs1, endow1, prefs2, endow2, 0.5, 0.95
+        )
+
+        # More patient player gets larger share
+        assert outcome_patient1.gains_1 > outcome_patient2.gains_1
+        assert outcome_patient2.gains_2 > outcome_patient1.gains_2
+
+        # Also verify proposer identity no longer matters
+        outcome_prop1 = rubinstein_bargaining_solution(
+            prefs1, endow1, prefs2, endow2, 0.9, 0.9, proposer=1
+        )
+        outcome_prop2 = rubinstein_bargaining_solution(
+            prefs1, endow1, prefs2, endow2, 0.9, 0.9, proposer=2
+        )
+        # Outcomes should be identical regardless of proposer
+        assert outcome_prop1.gains_1 == pytest.approx(outcome_prop2.gains_1, rel=1e-6)
+        assert outcome_prop1.gains_2 == pytest.approx(outcome_prop2.gains_2, rel=1e-6)
 
     def test_pareto_efficiency(self):
         """Outcome should be Pareto efficient."""
@@ -348,23 +366,36 @@ class TestRubinsteinBargainingSolution:
         assert outcome.allocation_1.x + outcome.allocation_2.x == pytest.approx(total_x)
         assert outcome.allocation_1.y + outcome.allocation_2.y == pytest.approx(total_y)
 
-    def test_surplus_matches_rubinstein_shares(self):
-        """Surplus distribution should match Rubinstein shares."""
+    def test_equal_delta_gives_symmetric_nash(self):
+        """Equal patience (δ1 = δ2) should give symmetric Nash solution.
+
+        Under BRW, when discount factors are equal, the bargaining weights
+        are equal (0.5, 0.5), which gives the symmetric Nash solution.
+        """
+        from microecon.bargaining import compute_brw_weights
+
         prefs1 = CobbDouglas(0.3)
         prefs2 = CobbDouglas(0.7)
         endow1 = Bundle(8.0, 2.0)
         endow2 = Bundle(2.0, 8.0)
         delta1, delta2 = 0.9, 0.9
 
-        outcome = rubinstein_bargaining_solution(
-            prefs1, endow1, prefs2, endow2, delta1, delta2, proposer=1
+        # Compute BRW weights - should be equal
+        w1, w2 = compute_brw_weights(delta1, delta2)
+        assert w1 == pytest.approx(0.5, rel=1e-6)
+        assert w2 == pytest.approx(0.5, rel=1e-6)
+
+        # Rubinstein outcome should match symmetric Nash
+        rubinstein_outcome = rubinstein_bargaining_solution(
+            prefs1, endow1, prefs2, endow2, delta1, delta2
+        )
+        nash_outcome = nash_bargaining_solution(
+            prefs1, endow1, prefs2, endow2
         )
 
-        expected_share1, expected_share2 = rubinstein_share(delta1, delta2, proposer=1)
-        total = outcome.gains_1 + outcome.gains_2
-        actual_share1 = outcome.gains_1 / total
-
-        assert actual_share1 == pytest.approx(expected_share1, rel=0.01)
+        # Should match symmetric Nash closely
+        assert rubinstein_outcome.gains_1 == pytest.approx(nash_outcome.gains_1, rel=0.01)
+        assert rubinstein_outcome.gains_2 == pytest.approx(nash_outcome.gains_2, rel=0.01)
 
 
 class TestRubinsteinConvergesToNash:
@@ -484,14 +515,23 @@ class TestBargainingProtocol:
         assert surplus1 == pytest.approx(surplus2, rel=0.01)
 
     def test_compute_expected_surplus_rubinstein(self, agents):
-        """Rubinstein protocol expected surplus depends on proposer."""
+        """Rubinstein protocol expected surplus depends on patience (BRW).
+
+        Under BRW (1986), the expected surplus depends on the ratio of
+        discount factors, not on proposer identity.
+        """
         agent1, agent2 = agents
         protocol = RubinsteinBargainingProtocol()
 
-        # Agent 1 as proposer
-        surplus_proposer = protocol.compute_expected_surplus(agent1, agent2, proposer=agent1)
-        # Agent 1 as responder
-        surplus_responder = protocol.compute_expected_surplus(agent1, agent2, proposer=agent2)
+        # With equal discount factors, surplus should be similar
+        surplus1 = protocol.compute_expected_surplus(agent1, agent2)
+        surplus2 = protocol.compute_expected_surplus(agent2, agent1)
 
-        # Proposer gets more
-        assert surplus_proposer > surplus_responder
+        # Both should be positive
+        assert surplus1 > 0
+        assert surplus2 > 0
+
+        # Proposer parameter no longer affects outcome
+        surplus_prop1 = protocol.compute_expected_surplus(agent1, agent2, proposer=agent1)
+        surplus_prop2 = protocol.compute_expected_surplus(agent1, agent2, proposer=agent2)
+        assert surplus_prop1 == pytest.approx(surplus_prop2, rel=1e-6)

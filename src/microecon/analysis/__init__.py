@@ -50,6 +50,24 @@ from .tracking import (
     trade_partners,
     unique_trade_partners,
 )
+from .emergence import (
+    TradeNetworkStats,
+    TradeEdge,
+    WelfareEfficiencyResult,
+    SpatialCluster,
+    AgentTrajectory,
+    ConvergenceStats,
+    MarketEmergenceReport,
+    build_trade_network,
+    trade_network_stats,
+    compute_theoretical_max_gains,
+    welfare_efficiency,
+    detect_trading_clusters,
+    agent_trajectories,
+    convergence_analysis,
+    analyze_market_emergence,
+    compare_emergence,
+)
 
 __all__ = [
     # Loader
@@ -91,4 +109,21 @@ __all__ = [
     "search_efficiency",
     "trade_partners",
     "unique_trade_partners",
+    # Market emergence
+    "TradeNetworkStats",
+    "TradeEdge",
+    "WelfareEfficiencyResult",
+    "SpatialCluster",
+    "AgentTrajectory",
+    "ConvergenceStats",
+    "MarketEmergenceReport",
+    "build_trade_network",
+    "trade_network_stats",
+    "compute_theoretical_max_gains",
+    "welfare_efficiency",
+    "detect_trading_clusters",
+    "agent_trajectories",
+    "convergence_analysis",
+    "analyze_market_emergence",
+    "compare_emergence",
 ]

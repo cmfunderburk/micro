@@ -128,3 +128,42 @@ class TestScenarioBrowserImports:
         )
         assert StartupSelector is not None
         assert ScenarioBrowser is not None
+
+
+class TestMarketEmergenceScenario:
+    """Tests for programmatic market emergence scenarios."""
+
+    def test_market_emergence_config(self):
+        """Config should validate parameters."""
+        from microecon.scenarios import MarketEmergenceConfig
+
+        config = MarketEmergenceConfig(n_agents=50, grid_size=20)
+        assert config.n_agents == 50
+        assert config.grid_size == 20
+
+    def test_market_emergence_config_validation(self):
+        """Config should reject invalid parameters."""
+        from microecon.scenarios import MarketEmergenceConfig
+
+        with pytest.raises(ValueError):
+            MarketEmergenceConfig(n_agents=1)  # Too few agents
+
+        with pytest.raises(ValueError):
+            MarketEmergenceConfig(n_agents=10, grid_size=3)  # Grid too small
+
+    def test_run_small_market_emergence(self):
+        """Should run a small scenario successfully."""
+        from microecon.scenarios import MarketEmergenceConfig, run_market_emergence
+
+        config = MarketEmergenceConfig(
+            n_agents=10,
+            grid_size=8,
+            ticks=20,
+            seed=42,
+        )
+        result = run_market_emergence(config)
+
+        assert result.analysis.n_agents == 10
+        assert result.analysis.total_ticks == 20
+        assert result.protocol_name == "NashBargaining"
+        assert result.matching_name == "OpportunisticMatching"

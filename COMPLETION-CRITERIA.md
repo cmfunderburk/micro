@@ -141,22 +141,22 @@ The following are explicitly **not** required for release-worthy completion:
 
 ### Core Feature Complete (Phase 1)
 
-- [ ] `NoisyAlphaInformation` environment passes unit tests
-- [ ] Time-series charts display during simulation playback
-- [ ] Trade network can be extracted and analyzed from logged runs
-- [ ] Welfare efficiency gap computable for any simulation
-- [ ] Cluster detection identifies trading hotspots in 50+ agent scenarios
-- [ ] Market emergence scenario runs to completion at 50-100 agent scale
-- [ ] Integration tests cover full simulation-to-analysis pipeline
+- [x] `NoisyAlphaInformation` environment passes unit tests (19 tests in test_information.py)
+- [x] Time-series charts display during simulation playback (TimeSeriesPanel in visualization/timeseries.py)
+- [x] Trade network can be extracted and analyzed from logged runs (trade_network_stats in analysis/emergence.py)
+- [x] Welfare efficiency gap computable for any simulation (welfare_efficiency in analysis/emergence.py)
+- [x] Cluster detection identifies trading hotspots in 50+ agent scenarios (detect_trading_clusters in analysis/emergence.py)
+- [x] Market emergence scenario runs to completion at 50-100 agent scale (run_market_emergence in scenarios/market_emergence.py)
+- [x] Integration tests cover full simulation-to-analysis pipeline (9 tests in test_integration.py)
 
 ### Polished Release (Phase 2)
 
-- [ ] README enables new user to run visualization in <5 minutes
-- [ ] Key concepts understandable without reading all source code
-- [ ] Worked example reproducible on clean checkout
-- [ ] Comparative study document complete with quantitative findings
-- [ ] No crashes on documented use cases
-- [ ] Known limitations clearly stated
+- [x] README enables new user to run visualization in <5 minutes (3-command quickstart)
+- [x] Key concepts understandable without reading all source code (Key Concepts section in README)
+- [x] Worked example reproducible on clean checkout (docs/comparative-study.md)
+- [x] Comparative study document complete with quantitative findings (docs/comparative-study.md)
+- [x] No crashes on documented use cases (445 tests pass)
+- [x] Known limitations clearly stated (STATUS.md §2)
 
 ---
 

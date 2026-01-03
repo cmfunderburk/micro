@@ -11,6 +11,7 @@ Reference: CLAUDE.md, O&R-G Ch 11 (games with imperfect information)
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
+import random
 
 if TYPE_CHECKING:
     from microecon.agent import Agent, AgentType
@@ -107,3 +108,72 @@ class PrivateInformation(InformationEnvironment):
     def can_observe(self, observer: Agent, target: Agent, distance: float) -> bool:
         """Observation is still distance-based, but type content differs."""
         return distance <= observer.perception_radius
+
+
+class NoisyAlphaInformation(InformationEnvironment):
+    """
+    Noisy alpha information environment: agents observe noisy estimates of
+    counterparty preference parameters.
+
+    In this environment:
+    - Endowments are observable (agents can see what others hold)
+    - Preference parameter (alpha) is observed with Gaussian noise
+    - Each observation is a fresh noisy draw (no memory)
+
+    The noise model: observed_alpha = true_alpha + N(0, noise_std)
+    The observed alpha is clipped to (0.01, 0.99) to remain valid.
+
+    This models situations where agents can observe holdings directly but must
+    infer preferences from behavior, leading to estimation error.
+
+    Attributes:
+        noise_std: Standard deviation of the Gaussian noise added to alpha
+        seed: Random seed for reproducibility (optional)
+
+    Reference: Kreps II Ch 20 (adverse selection), O&R-G Ch 11
+    """
+
+    def __init__(self, noise_std: float, seed: int | None = None):
+        if noise_std < 0:
+            raise ValueError(f"noise_std must be non-negative, got {noise_std}")
+        self.noise_std = noise_std
+        self.seed = seed
+        self._rng = random.Random(seed)
+
+    def get_observable_type(self, agent: Agent) -> AgentType:
+        """
+        Return type with noisy alpha but true endowment.
+
+        The alpha parameter is perturbed by Gaussian noise and clipped
+        to remain in the valid range (0, 1).
+        """
+        from microecon.agent import AgentType
+        from microecon.preferences import CobbDouglas
+
+        true_alpha = agent.private_state.preferences.alpha
+
+        # Add Gaussian noise
+        noise = self._rng.gauss(0, self.noise_std)
+        noisy_alpha = true_alpha + noise
+
+        # Clip to valid range (epsilon away from boundaries)
+        noisy_alpha = max(0.01, min(0.99, noisy_alpha))
+
+        return AgentType(
+            preferences=CobbDouglas(noisy_alpha),
+            endowment=agent.private_state.endowment,
+        )
+
+    def can_observe(self, observer: Agent, target: Agent, distance: float) -> bool:
+        """Check if target is within observer's perception radius."""
+        return distance <= observer.perception_radius
+
+    def get_true_type(self, agent: Agent) -> AgentType:
+        """
+        Return the true type (for visualization/analysis purposes).
+
+        This should NOT be used for agent decision-making, only for
+        comparing perceived vs actual types in analysis.
+        """
+        from microecon.agent import AgentType
+        return AgentType.from_private_state(agent.private_state)

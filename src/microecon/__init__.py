@@ -10,7 +10,7 @@ from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
 from microecon.agent import Agent, AgentPrivateState, AgentType
 from microecon.grid import Grid, Position
-from microecon.information import InformationEnvironment, FullInformation
+from microecon.information import InformationEnvironment, FullInformation, NoisyAlphaInformation
 from microecon.bargaining import (
     nash_bargaining_solution,
     compute_nash_surplus,
@@ -41,6 +41,7 @@ __all__ = [
     # Information environments
     "InformationEnvironment",
     "FullInformation",
+    "NoisyAlphaInformation",
     # Bargaining - Nash (axiomatic)
     "nash_bargaining_solution",
     "compute_nash_surplus",

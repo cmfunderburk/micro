@@ -22,6 +22,7 @@ from microecon.grid import Position
 from microecon.agent import Agent
 from microecon.logging import AgentSnapshot, TickRecord, RunData
 from microecon.visualization.replay import ReplayController
+from microecon.visualization.timeseries import TimeSeriesPanel, DualTimeSeriesPanel
 
 
 # ============================================================================
@@ -122,8 +123,8 @@ class VisualizationApp:
 
     # Layout constants
     WINDOW_WIDTH = 1200
-    WINDOW_HEIGHT = 800
-    METRICS_PANEL_WIDTH = 200
+    WINDOW_HEIGHT = 850
+    METRICS_PANEL_WIDTH = 240
     CONTROLS_HEIGHT = 60
     GRID_MARGIN = 20
 
@@ -209,6 +210,9 @@ class VisualizationApp:
         # Cache for AgentProxy lookup (rebuilt each frame)
         self._agent_proxies: list[AgentProxy] = []
         self._agents_by_id: dict[str, AgentProxy] = {}
+
+        # Time-series panel (initialized in setup)
+        self.timeseries_panel: Optional[TimeSeriesPanel] = None
 
     def grid_to_canvas(self, pos: Position) -> tuple[float, float]:
         """Convert grid position to canvas coordinates."""
@@ -359,6 +363,16 @@ class VisualizationApp:
                     self.hover_endow_text = dpg.add_text("Endowment: -")
                     self.hover_utility_text = dpg.add_text("Utility: -")
 
+                    # Time-series charts
+                    dpg.add_separator()
+                    self.timeseries_panel = TimeSeriesPanel("metrics_panel")
+                    self.timeseries_panel.setup()
+
+                    # In replay mode, preload time-series data
+                    if self.mode == "replay" and self.replay is not None:
+                        self._load_replay_timeseries()
+                        self.timeseries_panel.set_replay_mode(True)
+
             # Bottom: controls
             with dpg.child_window(
                 height=self.CONTROLS_HEIGHT,
@@ -438,16 +452,19 @@ class VisualizationApp:
             trades = self.sim.step()
             self.record_trades(trades)
             self.record_positions()
+            self._update_timeseries()
         elif self.mode == "replay" and self.replay is not None:
             self.replay.step()
             self._update_timeline_slider()
             self.record_positions()
+            self._update_timeseries()
 
     def step_back(self) -> None:
         """Step backward one tick (replay mode only)."""
         if self.mode == "replay" and self.replay is not None:
             self.replay.step_back()
             self._update_timeline_slider()
+            self._update_timeseries()
             # Clear trails and animations - they would show future state otherwise
             self.position_history.clear()
             self.trade_animations.clear()
@@ -460,6 +477,7 @@ class VisualizationApp:
         """Handle timeline slider change (replay mode)."""
         if self.mode == "replay" and self.replay is not None:
             self.replay.seek(app_data)
+            self._update_timeseries()
             # Clear trails - scrubbing invalidates position history
             self.position_history.clear()
             self.trade_animations.clear()
@@ -468,6 +486,36 @@ class VisualizationApp:
         """Update timeline slider to match current tick."""
         if self.mode == "replay" and self.timeline_slider and self.replay is not None:
             dpg.set_value(self.timeline_slider, self.replay.current_tick)
+
+    def _load_replay_timeseries(self) -> None:
+        """Load time-series data from replay run."""
+        if self.replay is None or self.timeseries_panel is None:
+            return
+
+        ticks = []
+        welfare = []
+        trades = []
+
+        for i, tick_record in enumerate(self.replay.run.ticks):
+            ticks.append(i + 1)  # 1-indexed for display
+            welfare.append(tick_record.total_welfare)
+            trades.append(tick_record.cumulative_trades)
+
+        self.timeseries_panel.load_full_data(ticks, welfare, trades)
+
+    def _update_timeseries(self) -> None:
+        """Update time-series panel with current data."""
+        if self.timeseries_panel is None:
+            return
+
+        if self.mode == "live" and self.sim is not None:
+            self.timeseries_panel.record_tick(
+                self.sim.tick,
+                self.sim.total_welfare(),
+                len(self.sim.trades),
+            )
+        elif self.mode == "replay" and self.replay is not None:
+            self.timeseries_panel.seek_to_tick(self.replay.current_tick + 1)
 
     def reset_simulation(self) -> None:
         """Reset to initial state."""
@@ -480,9 +528,13 @@ class VisualizationApp:
                 self.grid_size,
                 seed=self.seed,
             )
+            if self.timeseries_panel is not None:
+                self.timeseries_panel.reset()
         elif self.mode == "replay" and self.replay is not None:
             self.replay.reset()
             self._update_timeline_slider()
+            if self.timeseries_panel is not None:
+                self.timeseries_panel.seek_to_tick(1)
 
         self.trade_animations.clear()
         self.position_history.clear()
@@ -522,11 +574,13 @@ class VisualizationApp:
                     trades = self.sim.step()
                     self.record_trades(trades)
                     self.record_positions()
+                    self._update_timeseries()
                 elif self.mode == "replay" and self.replay is not None:
                     if not self.replay.at_end:
                         self.replay.step()
                         self._update_timeline_slider()
                         self.record_positions()
+                        self._update_timeseries()
                     else:
                         # Stop at end of replay
                         self.playing = False
@@ -873,8 +927,8 @@ class DualVisualizationApp:
 
     # Layout constants
     WINDOW_WIDTH = 1400
-    WINDOW_HEIGHT = 800
-    METRICS_PANEL_WIDTH = 180
+    WINDOW_HEIGHT = 850
+    METRICS_PANEL_WIDTH = 240
     CONTROLS_HEIGHT = 120  # Increased to fit timeline markers
     GRID_MARGIN = 15
     TIMELINE_HEIGHT = 30
@@ -966,6 +1020,13 @@ class DualVisualizationApp:
         # Timeline drawlist reference
         self.timeline_drawlist: int = 0
         self.timeline_width = 400  # Will be updated in render
+
+        # Time-series panel for comparison (initialized in setup)
+        self.timeseries_panel: Optional[DualTimeSeriesPanel] = None
+
+        # Store run data for time-series loading
+        self._run_a = run_a
+        self._run_b = run_b
 
     @staticmethod
     def _precompute_events(run_data: RunData) -> dict[str, list[int]]:
@@ -1087,6 +1148,16 @@ class DualVisualizationApp:
                     self.welfare_diff_text = dpg.add_text("  Welfare: +0.0")
                     self.trades_diff_text = dpg.add_text("  Trades: +0")
 
+                    # Time-series charts for comparison
+                    dpg.add_separator()
+                    self.timeseries_panel = DualTimeSeriesPanel(
+                        "metrics_panel",
+                        label_a=self.label_a,
+                        label_b=self.label_b,
+                    )
+                    self.timeseries_panel.setup()
+                    self._load_timeseries_data()
+
             # Bottom: controls
             with dpg.child_window(
                 height=self.CONTROLS_HEIGHT,
@@ -1174,12 +1245,14 @@ class DualVisualizationApp:
         """Step forward one tick."""
         self.controller.step()
         self._update_timeline_slider()
+        self._update_timeseries()
         self._on_tick_changed()
 
     def step_back(self) -> None:
         """Step backward one tick."""
         self.controller.step_back()
         self._update_timeline_slider()
+        self._update_timeseries()
         # Clear trails and animations when going backwards
         self.position_history_a.clear()
         self.position_history_b.clear()
@@ -1193,6 +1266,7 @@ class DualVisualizationApp:
     def on_timeline_change(self, sender: int, app_data: int) -> None:
         """Handle timeline slider change."""
         self.controller.seek(app_data)
+        self._update_timeseries()
         # Clear trails and animations when scrubbing
         self.position_history_a.clear()
         self.position_history_b.clear()
@@ -1204,12 +1278,42 @@ class DualVisualizationApp:
         if self.timeline_slider:
             dpg.set_value(self.timeline_slider, self.controller.current_tick)
 
+    def _load_timeseries_data(self) -> None:
+        """Load time-series data for both runs."""
+        if self.timeseries_panel is None:
+            return
+
+        # Extract data from both runs
+        ticks = []
+        welfare_a = []
+        welfare_b = []
+        trades_a = []
+        trades_b = []
+
+        # Use the shorter run length
+        min_len = min(len(self._run_a.ticks), len(self._run_b.ticks))
+
+        for i in range(min_len):
+            ticks.append(i + 1)  # 1-indexed for display
+            welfare_a.append(self._run_a.ticks[i].total_welfare)
+            welfare_b.append(self._run_b.ticks[i].total_welfare)
+            trades_a.append(self._run_a.ticks[i].cumulative_trades)
+            trades_b.append(self._run_b.ticks[i].cumulative_trades)
+
+        self.timeseries_panel.load_data(ticks, welfare_a, welfare_b, trades_a, trades_b)
+
+    def _update_timeseries(self) -> None:
+        """Update time-series playhead position."""
+        if self.timeseries_panel is not None:
+            self.timeseries_panel.seek_to_tick(self.controller.current_tick + 1)
+
     def reset(self) -> None:
         """Reset to first tick."""
         self.playing = False
         dpg.set_item_label(self.play_button, "Play")
         self.controller.reset()
         self._update_timeline_slider()
+        self._update_timeseries()
         # Clear trails and animations
         self.position_history_a.clear()
         self.position_history_b.clear()

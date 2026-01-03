@@ -1,7 +1,7 @@
 # Current Project Status
 
-**Version:** 0.0.1 (pre-release)
-**Date:** 2026-01-02
+**Version:** 0.1.0 (community release)
+**Date:** 2026-01-03
 **Purpose:** Definitive reference for current capabilities
 
 This document describes what exists and works today. For the long-term vision, see VISION.md. For the full visualization design, see VISUALIZATION.md.
@@ -127,7 +127,7 @@ run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
 
 ### Test Coverage
 
-341 tests covering all core modules. Run with: `uv run pytest`
+400+ tests covering all core modules. Run with: `uv run pytest`
 
 ---
 
@@ -141,15 +141,41 @@ run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
 - Intentional simplification pending information environment architecture
 - Does not affect bargaining outcomes, only partner selection heuristics
 
-**Single information environment**
-- Only `FullInformation` is implemented (agents see true types)
-- Agent type = private state (no information asymmetry yet)
-- Architecture supports future private/signaled information
-
 **2-good economy only**
 - `Bundle(x, y)` is hardcoded for 2 goods
 - Cobb-Douglas preferences assume 2 goods
 - Visualization color encoding assumes 2 goods
+
+**No learning agents**
+- Agents follow fixed behavioral rules
+- No reinforcement learning or evolutionary dynamics
+- No adaptive behavior over time
+
+### Scale Boundaries
+
+**Recommended agent count: 2-200**
+- Minimum: 2 agents (need at least a pair for trade)
+- Optimal: 50-100 agents (market emergence visible, reasonable runtime)
+- Maximum tested: 200 agents (runs but slower; ~5 minutes for 100 ticks)
+- Not recommended: >500 agents (untested, may be slow)
+
+**Grid size relative to agents**
+- Minimum: grid_size >= 5 (smaller grids work but limited movement)
+- Recommended: grid_size >= sqrt(n_agents) to avoid excessive crowding
+- Crowding is allowed (multiple agents per cell) but affects dynamics
+
+### Edge Cases Handled
+
+**Degenerate economic cases:**
+- Zero utility (one endowment component = 0) → trades still compute, returns 0 gains
+- No gains from trade (identical preferences + endowments) → graceful no-op
+- Extreme endowment imbalance (1000:0.01) → handles correctly
+
+**Invalid configurations:**
+- alpha ∉ (0, 1) → clear ValueError with message
+- negative endowments → clear ValueError with message
+- grid_size < 1 → clear ValueError with message
+- noise_std < 0 → clear ValueError with message
 
 ### Visualization
 
@@ -172,11 +198,6 @@ run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
 - Cannot inspect individual trades in detail
 - No Edgeworth box visualization
 - No bargaining sequence replay
-
-**No time-series charts**
-- Metrics panel shows current values only
-- No ImPlot integration yet
-- No welfare/trade graphs over time
 
 ---
 
@@ -279,10 +300,10 @@ uv run pytest --cov=microecon
 |-------------|--------|
 | Institutional visibility (swap protocols) | **Implemented** for bargaining and matching |
 | Equilibrium benchmarks | Bargaining only; no Walrasian/GE |
-| Information regimes | Architecture ready; only FullInformation |
+| Information regimes | **Implemented** (FullInformation, NoisyAlphaInformation) |
 | Search/matching mechanisms | **Implemented** (Opportunistic, StableRoommates) |
 | Agent sophistication levels | Single level; no learning agents |
-| Market emergence metrics | Basic welfare only; no price/network analysis |
+| Market emergence metrics | **Implemented** (trade networks, welfare efficiency, spatial clustering) |
 
 ### vs VISUALIZATION.md
 
@@ -297,22 +318,22 @@ uv run pytest --cov=microecon
 | Dual viewport comparison | **Implemented** |
 | Timeline event markers | **Implemented** (trades, commitments) |
 | Comparison mode entry points | **Implemented** (bargaining + matching) |
+| Time-series charts | **Implemented** (welfare, trades over time) |
 | Setup/Run/Analyze modes | Not implemented |
 | Overlay toggles | Not implemented |
 | Trade zoom (Edgeworth box) | Not implemented |
-| Time-series charts | Not implemented (Phase 3) |
 | Agent perspective mode | Not implemented |
-| Export (PNG/GIF/MP4) | Not implemented (Phase 4) |
-| Config files (YAML/JSON) | Not implemented (Phase 2) |
-| Scenario browser | Not implemented (Phase 2) |
+| Export (PNG/GIF/MP4) | Not implemented |
+| Config files (YAML/JSON) | Not implemented |
+| Scenario browser | **Implemented** (YAML loading) |
 
 ### vs DESIGN_dashboard_integration.md
 
 | Phase | Status |
 |-------|--------|
 | Phase 1: Comparison View MVP | **Complete** |
-| Phase 2: Scenario Pipeline | Not started |
-| Phase 3: Timeline & Charts | Not started |
+| Phase 2: Scenario Pipeline | **Complete** (YAML scenarios, run_market_emergence) |
+| Phase 3: Timeline & Charts | **Complete** (time-series panels) |
 | Phase 4: Polish & Export | Not started |
 
 ---

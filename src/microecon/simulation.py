@@ -31,7 +31,6 @@ from microecon.search import (
     evaluate_targets_detailed,
     TargetEvaluationResult,
 )
-from microecon.bargaining import compute_nash_surplus
 from microecon.matching import (
     MatchingProtocol,
     OpportunisticMatchingProtocol,
@@ -173,7 +172,8 @@ class Simulation:
 
             # Use detailed evaluation to get visibility info and rankings
             result, evaluations = evaluate_targets_detailed(
-                agent, self.grid, self.info_env, self._agents_by_id
+                agent, self.grid, self.info_env, self._agents_by_id,
+                self.bargaining_protocol
             )
 
             # Build visibility set from evaluations
@@ -215,11 +215,21 @@ class Simulation:
                 if aid in self._agents_by_id
             ]
 
-            # Define surplus function for matching
+            # Define surplus function for matching with protocol and distance discounting
             def surplus_fn(a: Agent, b: Agent) -> float:
-                type_a = self.info_env.get_observable_type(a)
-                type_b = self.info_env.get_observable_type(b)
-                return compute_nash_surplus(type_a, type_b)
+                # Get expected surplus using the bargaining protocol
+                base_surplus = self.bargaining_protocol.compute_expected_surplus(a, b)
+                if base_surplus <= 0:
+                    return 0.0
+
+                # Apply distance discounting
+                pos_a = self.grid.get_position(a)
+                pos_b = self.grid.get_position(b)
+                if pos_a is None or pos_b is None:
+                    return 0.0
+
+                ticks_to_reach = pos_a.chebyshev_distance_to(pos_b)
+                return base_surplus * (a.discount_factor ** ticks_to_reach)
 
             # Compute new matches
             new_pairs = self.matching_protocol.compute_matches(
@@ -343,14 +353,15 @@ class Simulation:
                     if self.commitments.get_partner(agent.id) != other_id:
                         continue  # Not committed to this agent
 
-                if should_trade(agent, other, self.info_env):
+                if should_trade(agent, other, self.info_env, self.bargaining_protocol):
                     # Capture pre-trade endowments for logging
                     pre_endowment1 = (agent.endowment.x, agent.endowment.y)
                     pre_endowment2 = (other.endowment.x, other.endowment.y)
 
-                    # The agent who found the other becomes the proposer
-                    # (first-mover advantage in Rubinstein)
-                    outcome = self.bargaining_protocol.execute(agent, other, proposer=agent)
+                    # Random proposer assignment eliminates arbitrary bias
+                    # (With BRW Rubinstein, proposer identity doesn't affect outcomes anyway)
+                    proposer = random.choice([agent, other])
+                    outcome = self.bargaining_protocol.execute(agent, other, proposer=proposer)
                     if outcome.trade_occurred:
                         event = TradeEvent(
                             tick=self.tick,
@@ -373,7 +384,7 @@ class Simulation:
                             trade_events_data.append((
                                 agent.id,
                                 other.id,
-                                agent.id,  # proposer_id
+                                proposer.id,  # proposer_id (randomly assigned)
                                 (pre_endowment1, pre_endowment2),
                                 ((outcome.allocation_1.x, outcome.allocation_1.y),
                                  (outcome.allocation_2.x, outcome.allocation_2.y)),

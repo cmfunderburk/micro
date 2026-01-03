@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Optional, TYPE_CHECKING
 
 from microecon.grid import Grid, Position
-from microecon.bargaining import compute_nash_surplus
+from microecon.bargaining import compute_nash_surplus, BargainingProtocol
 from microecon.information import InformationEnvironment
 
 if TYPE_CHECKING:
@@ -62,12 +62,13 @@ def evaluate_targets(
     grid: Grid,
     info_env: InformationEnvironment,
     agents_by_id: dict[str, Agent],
+    bargaining_protocol: Optional[BargainingProtocol] = None,
 ) -> SearchResult:
     """
     Evaluate all visible agents and find the best trade target.
 
     For each agent j in perception radius:
-        expected_surplus[j] = nash_bargaining_surplus(self, j)
+        expected_surplus[j] = protocol.compute_expected_surplus(self, j)
         discounted_value[j] = expected_surplus[j] * δ^(ticks_to_reach_j)
 
     Returns the target with maximum discounted value.
@@ -77,6 +78,7 @@ def evaluate_targets(
         grid: The grid with agent positions
         info_env: Information environment for observing types
         agents_by_id: Map from agent ID to Agent object
+        bargaining_protocol: Protocol for computing expected surplus (uses Nash if None)
 
     Returns:
         SearchResult with best target information
@@ -114,8 +116,11 @@ def evaluate_targets(
         # Get target's observable type
         target_type = info_env.get_observable_type(target)
 
-        # Compute expected surplus from Nash bargaining
-        expected_surplus = compute_nash_surplus(observer_type, target_type)
+        # Compute expected surplus using protocol (or Nash default)
+        if bargaining_protocol is not None:
+            expected_surplus = bargaining_protocol.compute_expected_surplus(agent, target)
+        else:
+            expected_surplus = compute_nash_surplus(observer_type, target_type)
 
         if expected_surplus <= 0:
             continue
@@ -149,6 +154,7 @@ def evaluate_targets_detailed(
     grid: Grid,
     info_env: InformationEnvironment,
     agents_by_id: dict[str, Agent],
+    bargaining_protocol: Optional[BargainingProtocol] = None,
 ) -> tuple[SearchResult, list[TargetEvaluationResult]]:
     """
     Evaluate all visible agents and return detailed evaluation data.
@@ -161,6 +167,7 @@ def evaluate_targets_detailed(
         grid: The grid with agent positions
         info_env: Information environment for observing types
         agents_by_id: Map from agent ID to Agent object
+        bargaining_protocol: Protocol for computing expected surplus (uses Nash if None)
 
     Returns:
         Tuple of (SearchResult, list of TargetEvaluationResult for all evaluated targets)
@@ -202,8 +209,11 @@ def evaluate_targets_detailed(
         # Get target's observable type
         target_type = info_env.get_observable_type(target)
 
-        # Compute expected surplus from Nash bargaining
-        expected_surplus = compute_nash_surplus(observer_type, target_type)
+        # Compute expected surplus using protocol (or Nash default)
+        if bargaining_protocol is not None:
+            expected_surplus = bargaining_protocol.compute_expected_surplus(agent, target)
+        else:
+            expected_surplus = compute_nash_surplus(observer_type, target_type)
 
         # Compute ticks to reach target (using Chebyshev distance for diagonal movement)
         ticks_to_reach = target_pos.chebyshev_distance_to(agent_pos)
@@ -250,6 +260,7 @@ def compute_move_target(
     grid: Grid,
     info_env: InformationEnvironment,
     agents_by_id: dict[str, Agent],
+    bargaining_protocol: Optional[BargainingProtocol] = None,
 ) -> Optional[Position]:
     """
     Determine where an agent should move.
@@ -262,11 +273,12 @@ def compute_move_target(
         grid: The grid
         info_env: Information environment
         agents_by_id: Map of agents
+        bargaining_protocol: Protocol for computing expected surplus (uses Nash if None)
 
     Returns:
         Target position to move toward, or None if no good target
     """
-    result = evaluate_targets(agent, grid, info_env, agents_by_id)
+    result = evaluate_targets(agent, grid, info_env, agents_by_id, bargaining_protocol)
     return result.best_target_position
 
 
@@ -274,6 +286,7 @@ def should_trade(
     agent1: Agent,
     agent2: Agent,
     info_env: InformationEnvironment,
+    bargaining_protocol: Optional[BargainingProtocol] = None,
 ) -> bool:
     """
     Check if two agents at the same position should trade.
@@ -284,15 +297,19 @@ def should_trade(
         agent1: First agent
         agent2: Second agent
         info_env: Information environment
+        bargaining_protocol: Protocol for computing expected surplus (uses Nash if None)
 
     Returns:
         True if trade should occur
     """
-    type1 = info_env.get_observable_type(agent1)
-    type2 = info_env.get_observable_type(agent2)
-
     # Check both agents expect gains
-    surplus1 = compute_nash_surplus(type1, type2)
-    surplus2 = compute_nash_surplus(type2, type1)
+    if bargaining_protocol is not None:
+        surplus1 = bargaining_protocol.compute_expected_surplus(agent1, agent2)
+        surplus2 = bargaining_protocol.compute_expected_surplus(agent2, agent1)
+    else:
+        type1 = info_env.get_observable_type(agent1)
+        type2 = info_env.get_observable_type(agent2)
+        surplus1 = compute_nash_surplus(type1, type2)
+        surplus2 = compute_nash_surplus(type2, type1)
 
     return surplus1 > 0 and surplus2 > 0

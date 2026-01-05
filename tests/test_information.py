@@ -228,6 +228,76 @@ class TestNoisyAlphaWithSearch:
         # (This is a statistical test - with high noise they should differ)
         # We don't assert inequality because occasionally they could be equal
 
+    def test_noise_causes_different_target_valuations(self):
+        """
+        Verify that noisy information actually produces different valuations.
+
+        This is a regression test for CE-1: before the fix, search used true types
+        regardless of information environment, so noisy info had no effect.
+        """
+        from microecon.grid import Grid, Position
+        from microecon.search import evaluate_targets
+
+        grid = Grid(size=10)
+        observer = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, perception_radius=5.0)
+        target = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, perception_radius=5.0)
+
+        grid.place_agent(observer, Position(0, 0))
+        grid.place_agent(target, Position(2, 0))
+        agents_by_id = {observer.id: observer, target.id: target}
+
+        # Run with noise many times, collect valuations
+        valuations = set()
+        for seed in range(50):
+            env = NoisyAlphaInformation(noise_std=0.2, seed=seed)
+            result = evaluate_targets(observer, grid, env, agents_by_id)
+            # Round to avoid floating point issues
+            valuations.add(round(result.discounted_value, 6))
+
+        # With noise affecting behavior, we should see variation in valuations
+        # Without the fix, all valuations would be identical
+        assert len(valuations) > 1, (
+            "Expected noise to cause variation in target valuations, "
+            "but all 50 runs produced identical results. "
+            "This suggests information environment is not affecting search behavior."
+        )
+
+    def test_observer_knows_own_type(self):
+        """
+        Verify that observers use their true type (not noisy) for self.
+
+        This is a regression test for CE-2: observers should not apply noise
+        to their own alpha when evaluating potential trades.
+        """
+        from microecon.grid import Grid, Position
+        from microecon.search import evaluate_targets
+        from microecon.bargaining import compute_nash_surplus
+        from microecon.agent import AgentType
+
+        grid = Grid(size=10)
+        observer = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, perception_radius=5.0)
+        target = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, perception_radius=5.0)
+
+        grid.place_agent(observer, Position(0, 0))
+        grid.place_agent(target, Position(1, 0))  # Distance 1, no discounting effect
+        agents_by_id = {observer.id: observer, target.id: target}
+
+        # With zero noise, the valuation should match Nash surplus computed with true types
+        env = NoisyAlphaInformation(noise_std=0.0, seed=42)
+        result = evaluate_targets(observer, grid, env, agents_by_id)
+
+        true_observer_type = AgentType.from_private_state(observer.private_state)
+        true_target_type = AgentType.from_private_state(target.private_state)
+        expected_surplus = compute_nash_surplus(true_observer_type, true_target_type)
+
+        # Account for discounting (distance = 1 tick)
+        expected_value = expected_surplus * (observer.discount_factor ** 1)
+
+        assert abs(result.discounted_value - expected_value) < 1e-6, (
+            f"Expected valuation {expected_value}, got {result.discounted_value}. "
+            "Observer may be using noisy self-type instead of true type."
+        )
+
 
 class TestNoisyAlphaWithSimulation:
     """Tests for NoisyAlphaInformation integration with simulation."""

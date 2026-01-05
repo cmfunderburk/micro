@@ -92,7 +92,9 @@ def evaluate_targets(
             visible_agents=0,
         )
 
-    observer_type = info_env.get_observable_type(agent)
+    # Observer knows their own true type (no noise applied to self)
+    from microecon.agent import AgentType
+    observer_type = AgentType.from_private_state(agent.private_state)
 
     best_target_id: Optional[str] = None
     best_target_pos: Optional[Position] = None
@@ -113,14 +115,13 @@ def evaluate_targets(
 
         visible_count += 1
 
-        # Get target's observable type
+        # Get target's observable type (may include noise depending on info_env)
         target_type = info_env.get_observable_type(target)
 
-        # Compute expected surplus using protocol (or Nash default)
-        if bargaining_protocol is not None:
-            expected_surplus = bargaining_protocol.compute_expected_surplus(agent, target)
-        else:
-            expected_surplus = compute_nash_surplus(observer_type, target_type)
+        # Compute expected surplus based on observer's beliefs about target
+        # Always use Nash surplus as the evaluation heuristic (agent's estimate of value)
+        # The actual bargaining protocol affects outcomes, not beliefs during search
+        expected_surplus = compute_nash_surplus(observer_type, target_type)
 
         if expected_surplus <= 0:
             continue
@@ -184,7 +185,9 @@ def evaluate_targets_detailed(
             [],
         )
 
-    observer_type = info_env.get_observable_type(agent)
+    # Observer knows their own true type (no noise applied to self)
+    from microecon.agent import AgentType
+    observer_type = AgentType.from_private_state(agent.private_state)
 
     best_target_id: Optional[str] = None
     best_target_pos: Optional[Position] = None
@@ -206,14 +209,13 @@ def evaluate_targets_detailed(
 
         visible_count += 1
 
-        # Get target's observable type
+        # Get target's observable type (may include noise depending on info_env)
         target_type = info_env.get_observable_type(target)
 
-        # Compute expected surplus using protocol (or Nash default)
-        if bargaining_protocol is not None:
-            expected_surplus = bargaining_protocol.compute_expected_surplus(agent, target)
-        else:
-            expected_surplus = compute_nash_surplus(observer_type, target_type)
+        # Compute expected surplus based on observer's beliefs about target
+        # Always use Nash surplus as the evaluation heuristic (agent's estimate of value)
+        # The actual bargaining protocol affects outcomes, not beliefs during search
+        expected_surplus = compute_nash_surplus(observer_type, target_type)
 
         # Compute ticks to reach target (using Chebyshev distance for diagonal movement)
         ticks_to_reach = target_pos.chebyshev_distance_to(agent_pos)
@@ -291,25 +293,33 @@ def should_trade(
     """
     Check if two agents at the same position should trade.
 
-    Trade occurs if there are mutual gains (both expect positive surplus).
+    Trade occurs if both agents believe there are mutual gains based on
+    their observations. Each agent knows their own true type but observes
+    the other through the information environment.
 
     Args:
         agent1: First agent
         agent2: Second agent
         info_env: Information environment
-        bargaining_protocol: Protocol for computing expected surplus (uses Nash if None)
+        bargaining_protocol: Protocol (ignored - trade willingness uses Nash heuristic)
 
     Returns:
-        True if trade should occur
+        True if both agents believe trade would be beneficial
     """
-    # Check both agents expect gains
-    if bargaining_protocol is not None:
-        surplus1 = bargaining_protocol.compute_expected_surplus(agent1, agent2)
-        surplus2 = bargaining_protocol.compute_expected_surplus(agent2, agent1)
-    else:
-        type1 = info_env.get_observable_type(agent1)
-        type2 = info_env.get_observable_type(agent2)
-        surplus1 = compute_nash_surplus(type1, type2)
-        surplus2 = compute_nash_surplus(type2, type1)
+    from microecon.agent import AgentType
+
+    # Each agent knows their own true type
+    true_type1 = AgentType.from_private_state(agent1.private_state)
+    true_type2 = AgentType.from_private_state(agent2.private_state)
+
+    # Each agent observes the other through the info environment
+    observed_type2 = info_env.get_observable_type(agent2)  # agent1's view of agent2
+    observed_type1 = info_env.get_observable_type(agent1)  # agent2's view of agent1
+
+    # Agent1 evaluates: "do I expect gains trading with what I observe about agent2?"
+    surplus1 = compute_nash_surplus(true_type1, observed_type2)
+
+    # Agent2 evaluates: "do I expect gains trading with what I observe about agent1?"
+    surplus2 = compute_nash_surplus(true_type2, observed_type1)
 
     return surplus1 > 0 and surplus2 > 0

@@ -6,10 +6,11 @@
 
 ## Critical
 
-- [ ] **CE-1:** Information asymmetry does not affect behavior
+- [x] **CE-1:** Information asymmetry does not affect behavior
   - Source: REVIEW_0.1.0 §1, §6
   - Files: `search.py`, `simulation.py`, `bargaining.py`
   - Unblocks: CE-2, T-1, V-1, D-1
+  - **RESOLVED (2026-01-05):** Search now uses observed types from info_env for targets. Agents evaluate potential trades based on beliefs (observed types), not true types. Test `test_noise_causes_different_target_valuations` verifies behavioral impact.
 
 - [x] **CE-3:** Reproducibility not guaranteed
   - Source: REVIEW_0.1.0 §2
@@ -22,10 +23,11 @@
 
 ## Medium
 
-- [ ] **CE-2:** Self-observation applies noise incorrectly
+- [x] **CE-2:** Self-observation applies noise incorrectly
   - Source: REVIEW_0.1.0 §6
   - Files: `search.py`, `information.py`
   - Blocked by: CE-1
+  - **RESOLVED (2026-01-05):** Observers now use `AgentType.from_private_state()` for their own type (true preferences) and `info_env.get_observable_type()` only for targets. Test `test_observer_knows_own_type` verifies this.
 
 - [ ] **CE-4:** Distance metric inconsistency
   - Source: claude-alpha-review §3.1
@@ -74,3 +76,23 @@
 7. `tests/test_simulation.py`: Added `test_full_reproducibility()` that verifies agent IDs, trade events, and positions match across runs
 
 **Verification:** All 38 related tests pass (simulation, batch, search)
+
+### Session 2: Information Environment Fix
+**Date:** 2026-01-05
+**Issues addressed:** CE-1, CE-2
+
+**Problem:** Search behavior ignored information environment. When using `NoisyAlphaInformation`, agents still made decisions based on true types rather than observed (noisy) types.
+
+**Root causes:**
+1. `evaluate_targets()` called `info_env.get_observable_type(agent)` for the observer, applying noise to own alpha
+2. When `bargaining_protocol` was provided, `compute_expected_surplus(agent, target)` used true `Agent` objects instead of observed types
+
+**Changes made:**
+1. `search.py`: Observer now uses `AgentType.from_private_state()` for own type (no noise on self)
+2. `search.py`: Target evaluation always uses `info_env.get_observable_type(target)` for observed type
+3. `search.py`: Removed branching on `bargaining_protocol` - always use Nash surplus with beliefs for search
+4. `search.py`: Updated `should_trade()` to use true self-type + observed other-type for both agents
+5. `tests/test_information.py`: Added `test_noise_causes_different_target_valuations` (CE-1 regression test)
+6. `tests/test_information.py`: Added `test_observer_knows_own_type` (CE-2 regression test)
+
+**Verification:** All 53 tests pass (information, search, simulation, integration)

@@ -126,8 +126,8 @@ def evaluate_targets(
         if expected_surplus <= 0:
             continue
 
-        # Compute ticks to reach target (using Chebyshev distance for diagonal movement)
-        ticks_to_reach = target_pos.chebyshev_distance_to(agent_pos)
+        # Compute ticks to reach target (using Chebyshev distance, respects grid wrapping)
+        ticks_to_reach = grid.chebyshev_distance(agent_pos, target_pos)
 
         # Discount by time to reach
         discounted_value = expected_surplus * (agent.discount_factor ** ticks_to_reach)
@@ -217,8 +217,8 @@ def evaluate_targets_detailed(
         # The actual bargaining protocol affects outcomes, not beliefs during search
         expected_surplus = compute_nash_surplus(observer_type, target_type)
 
-        # Compute ticks to reach target (using Chebyshev distance for diagonal movement)
-        ticks_to_reach = target_pos.chebyshev_distance_to(agent_pos)
+        # Compute ticks to reach target (using Chebyshev distance, respects grid wrapping)
+        ticks_to_reach = grid.chebyshev_distance(agent_pos, target_pos)
 
         # Discount by time to reach
         discounted_value = expected_surplus * (agent.discount_factor ** ticks_to_reach)

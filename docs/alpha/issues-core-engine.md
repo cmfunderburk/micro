@@ -29,15 +29,17 @@
   - Blocked by: CE-1
   - **RESOLVED (2026-01-05):** Observers now use `AgentType.from_private_state()` for their own type (true preferences) and `info_env.get_observable_type()` only for targets. Test `test_observer_knows_own_type` verifies this.
 
-- [ ] **CE-4:** Distance metric inconsistency
+- [x] **CE-4:** Distance metric inconsistency
   - Source: claude-alpha-review §3.1
   - Files: `grid.py`, `search.py`, `simulation.py`
   - Note: Euclidean for perception, Chebyshev for movement
+  - **RESOLVED (2026-01-05):** `agents_within_radius` now uses Chebyshev distance, consistent with movement. Perception area is now square (Chebyshev) rather than circular (Euclidean). Tests verify agents reachable in N steps are visible at radius N.
 
-- [ ] **CE-5:** Wrapped grid Chebyshev missing
+- [x] **CE-5:** Wrapped grid Chebyshev missing
   - Source: claude-alpha-review §3.3
   - Files: `grid.py`
   - Related to: CE-4
+  - **RESOLVED (2026-01-05):** `Position.chebyshev_distance_to()` now accepts optional `grid_size` parameter for wrapped distance. `Grid.chebyshev_distance()` method added as convenience wrapper. Search and simulation now use wrapped Chebyshev on torus grids.
 
 ---
 
@@ -96,3 +98,23 @@
 6. `tests/test_information.py`: Added `test_observer_knows_own_type` (CE-2 regression test)
 
 **Verification:** All 53 tests pass (information, search, simulation, integration)
+
+### Session 3: Distance Metric Consistency
+**Date:** 2026-01-05
+**Issues addressed:** CE-4, CE-5
+
+**Problem:** Perception radius used Euclidean distance while movement uses Chebyshev. This meant agents could miss nearby targets that were close in movement terms but far in Euclidean terms (e.g., diagonal positions).
+
+**Changes made:**
+1. `grid.py`: Added `grid_size` parameter to `Position.chebyshev_distance_to()` for wrapped distance
+2. `grid.py`: Added `Grid.chebyshev_distance()` convenience method
+3. `grid.py`: Changed `agents_within_radius()` to use Chebyshev distance instead of Euclidean
+4. `search.py`: Updated `evaluate_targets()` and `evaluate_targets_detailed()` to use `grid.chebyshev_distance()` for ticks-to-reach calculation
+5. `simulation.py`: Updated `_maintain_commitments()` to use `grid.chebyshev_distance()` for perception checks
+6. `tests/test_grid.py`: Added 4 new tests:
+   - `test_chebyshev_distance`: Basic Chebyshev on Grid
+   - `test_wrapped_chebyshev_distance`: Wrapped Chebyshev on torus
+   - `test_agents_within_radius_uses_chebyshev`: Regression test for CE-4
+   - `test_perception_movement_consistency`: Verifies perception matches movement
+
+**Verification:** All 68 tests pass (grid, search, simulation, information)

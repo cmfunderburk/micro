@@ -170,3 +170,92 @@ class TestGrid:
         # Direct distance would be 9, wrapped distance is 1
         dist = grid.distance(p1, p2)
         assert dist == pytest.approx(1.0)
+
+    def test_chebyshev_distance(self):
+        """Grid.chebyshev_distance should compute Chebyshev metric."""
+        grid = Grid(10)
+
+        p1 = Position(0, 0)
+        p2 = Position(3, 5)
+
+        # Chebyshev = max(|3-0|, |5-0|) = 5
+        assert grid.chebyshev_distance(p1, p2) == 5
+
+    def test_wrapped_chebyshev_distance(self):
+        """Chebyshev distance should account for wrapping on torus grid."""
+        grid = Grid(10, wrap=True)
+
+        p1 = Position(0, 0)
+        p2 = Position(9, 9)
+
+        # Without wrapping: max(9, 9) = 9
+        # With wrapping: max(1, 1) = 1 (going the short way around)
+        assert grid.chebyshev_distance(p1, p2) == 1
+
+        # Another example: (0,0) to (8,2)
+        p3 = Position(8, 2)
+        # Without wrapping: max(8, 2) = 8
+        # With wrapping: max(2, 2) = 2 (row wraps: 10-8=2)
+        assert grid.chebyshev_distance(p1, p3) == 2
+
+    def test_agents_within_radius_uses_chebyshev(self):
+        """
+        agents_within_radius should use Chebyshev distance for consistency
+        with movement mechanics.
+
+        This is a regression test for CE-4: previously used Euclidean distance,
+        which created inconsistency with the Chebyshev-based movement model.
+        """
+        grid = Grid(10)
+        center = Position(5, 5)
+
+        agent1 = create_agent(alpha=0.5, endowment_x=1.0, endowment_y=1.0)
+        agent2 = create_agent(alpha=0.5, endowment_x=1.0, endowment_y=1.0)
+
+        # Place agent1 at (5,8): Chebyshev=3, Euclidean=3.0
+        grid.place_agent(agent1, Position(5, 8))
+        # Place agent2 at (8,8): Chebyshev=3, Euclidean≈4.24
+        grid.place_agent(agent2, Position(8, 8))
+
+        # With radius 3.0, both should be visible if using Chebyshev
+        # With Euclidean, agent2 would be excluded (4.24 > 3.0)
+        nearby = list(grid.agents_within_radius(center, 3.0))
+
+        assert len(nearby) == 2, (
+            "Both agents at Chebyshev distance 3 should be visible. "
+            "If only 1 visible, distance metric may still be Euclidean."
+        )
+
+    def test_perception_movement_consistency(self):
+        """
+        An agent should be able to reach any visible target in at most
+        perception_radius steps (using diagonal moves).
+
+        This verifies that perception uses the same distance metric as movement.
+        """
+        grid = Grid(15)
+        center = Position(7, 7)
+
+        # Place agents at various positions
+        positions = [
+            Position(10, 10),  # Chebyshev=3
+            Position(7, 12),   # Chebyshev=5
+            Position(2, 4),    # Chebyshev=5
+        ]
+
+        agents = []
+        for i, pos in enumerate(positions):
+            agent = create_agent(alpha=0.5, endowment_x=1.0, endowment_y=1.0)
+            grid.place_agent(agent, pos)
+            agents.append(agent)
+
+        # With radius 5, all should be visible
+        nearby = list(grid.agents_within_radius(center, 5.0))
+        assert len(nearby) == 3
+
+        # The returned distance should equal Chebyshev distance
+        for agent_id, pos, dist in nearby:
+            expected_chebyshev = grid.chebyshev_distance(center, pos)
+            assert dist == expected_chebyshev, (
+                f"Returned distance {dist} != Chebyshev {expected_chebyshev}"
+            )

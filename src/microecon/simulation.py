@@ -436,8 +436,8 @@ class Simulation:
                 to_break.append((agent_a_id, agent_b_id))
                 continue
 
-            # Check if partner is still within perception radius
-            distance = pos_a.distance_to(pos_b)
+            # Check if partner is still within perception radius (using Chebyshev)
+            distance = self.grid.chebyshev_distance(pos_a, pos_b)
             if distance > agent_a.perception_radius or distance > agent_b.perception_radius:
                 to_break.append((agent_a_id, agent_b_id))
 

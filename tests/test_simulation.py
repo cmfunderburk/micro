@@ -167,3 +167,35 @@ class TestCreateSimpleEconomy:
             pos1 = sim1.grid.get_position(a1)
             pos2 = sim2.grid.get_position(a2)
             assert pos1 == pos2
+
+    def test_full_reproducibility(self):
+        """Same seed should produce identical simulation runs including trades."""
+        sim1 = create_simple_economy(n_agents=6, grid_size=8, seed=123)
+        sim2 = create_simple_economy(n_agents=6, grid_size=8, seed=123)
+
+        # Agent IDs must be deterministic for tie-breaking
+        ids1 = [a.id for a in sim1.agents]
+        ids2 = [a.id for a in sim2.agents]
+        assert ids1 == ids2, "Agent IDs should be deterministic"
+
+        # Run both simulations
+        sim1.run(ticks=20)
+        sim2.run(ticks=20)
+
+        # Trade count must match
+        assert len(sim1.trades) == len(sim2.trades), "Trade counts should match"
+
+        # Final welfare must match exactly
+        assert sim1.total_welfare() == sim2.total_welfare(), "Final welfare should match"
+
+        # Trade events must match in detail
+        for t1, t2 in zip(sim1.trades, sim2.trades):
+            assert t1.tick == t2.tick, "Trade ticks should match"
+            assert t1.agent1_id == t2.agent1_id, "Trade agent1 IDs should match"
+            assert t1.agent2_id == t2.agent2_id, "Trade agent2 IDs should match"
+
+        # Final positions must match
+        for a1, a2 in zip(sim1.agents, sim2.agents):
+            pos1 = sim1.grid.get_position(a1)
+            pos2 = sim2.grid.get_position(a2)
+            assert pos1 == pos2, f"Final position for agent {a1.id} should match"

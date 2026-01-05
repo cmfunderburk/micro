@@ -13,7 +13,8 @@ Reference: CLAUDE.md, DESIGN_matching_protocol.md
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Callable, TYPE_CHECKING
-import random
+import random as random_module
+from random import Random
 
 from microecon.agent import Agent, create_agent
 from microecon.grid import Grid, Position
@@ -95,6 +96,7 @@ class Simulation:
     commitments: CommitmentState = field(default_factory=CommitmentState)
     _agents_by_id: dict[str, Agent] = field(default_factory=dict, repr=False)
     logger: Optional["SimulationLogger"] = field(default=None, repr=False)
+    _rng: Random = field(default_factory=Random, repr=False)
 
     def add_agent(self, agent: Agent, position: Position) -> None:
         """Add an agent to the simulation at the given position."""
@@ -105,8 +107,8 @@ class Simulation:
     def add_agent_random(self, agent: Agent) -> Position:
         """Add an agent at a random position on the grid."""
         pos = Position(
-            random.randint(0, self.grid.size - 1),
-            random.randint(0, self.grid.size - 1),
+            self._rng.randint(0, self.grid.size - 1),
+            self._rng.randint(0, self.grid.size - 1),
         )
         self.add_agent(agent, pos)
         return pos
@@ -360,7 +362,7 @@ class Simulation:
 
                     # Random proposer assignment eliminates arbitrary bias
                     # (With BRW Rubinstein, proposer identity doesn't affect outcomes anyway)
-                    proposer = random.choice([agent, other])
+                    proposer = self._rng.choice([agent, other])
                     outcome = self.bargaining_protocol.execute(agent, other, proposer=proposer)
                     if outcome.trade_occurred:
                         event = TradeEvent(
@@ -622,14 +624,15 @@ def create_simple_economy(
     Returns:
         Configured Simulation ready to run
     """
-    if seed is not None:
-        random.seed(seed)
+    # Create RNG instance - seed if provided, otherwise use system entropy
+    rng = Random(seed) if seed is not None else Random()
 
     sim = Simulation(
         grid=Grid(grid_size),
         info_env=FullInformation(),
         bargaining_protocol=bargaining_protocol or NashBargainingProtocol(),
         matching_protocol=matching_protocol or OpportunisticMatchingProtocol(),
+        _rng=rng,
     )
 
     for i in range(n_agents):
@@ -642,12 +645,16 @@ def create_simple_economy(
         else:
             endowment_x, endowment_y = 2.0, 10.0
 
+        # Use deterministic agent IDs for reproducibility
+        agent_id = f"agent_{i:03d}"
+
         agent = create_agent(
             alpha=alpha,
             endowment_x=endowment_x,
             endowment_y=endowment_y,
             perception_radius=perception_radius,
             discount_factor=discount_factor,
+            agent_id=agent_id,
         )
 
         sim.add_agent_random(agent)

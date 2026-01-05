@@ -145,6 +145,7 @@ def create_agent(
     perception_radius: float = 3.0,
     discount_factor: float = 0.95,
     movement_budget: int = 1,
+    agent_id: str | None = None,
 ) -> Agent:
     """
     Factory function to create an agent with Cobb-Douglas preferences.
@@ -156,6 +157,7 @@ def create_agent(
         perception_radius: How far the agent can observe
         discount_factor: Time preference delta in (0, 1)
         movement_budget: Squares per tick
+        agent_id: Optional explicit ID (for reproducibility). If None, uses UUID.
 
     Returns:
         A new Agent instance
@@ -164,9 +166,15 @@ def create_agent(
     endowment = Bundle(endowment_x, endowment_y)
     private_state = AgentPrivateState(preferences, endowment)
 
-    return Agent(
+    agent = Agent(
         private_state=private_state,
         perception_radius=perception_radius,
         discount_factor=discount_factor,
         movement_budget=movement_budget,
     )
+
+    # Override ID if explicit ID provided (for reproducibility)
+    if agent_id is not None:
+        agent.id = agent_id
+
+    return agent

@@ -54,6 +54,9 @@ class MarketEmergenceConfig:
     alpha_range: tuple[float, float] = (0.2, 0.8)
     endowment_types: tuple[str, ...] = ('x_rich', 'y_rich')
 
+    # Valid endowment type names
+    VALID_ENDOWMENT_TYPES = frozenset({'x_rich', 'y_rich', 'balanced'})
+
     def __post_init__(self) -> None:
         if self.n_agents < 2:
             raise ValueError(f"n_agents must be >= 2, got {self.n_agents}")
@@ -61,6 +64,15 @@ class MarketEmergenceConfig:
             raise ValueError(f"grid_size must be >= 5, got {self.grid_size}")
         if not (0 < self.alpha_range[0] < self.alpha_range[1] < 1):
             raise ValueError(f"alpha_range must be (a, b) with 0 < a < b < 1")
+        # Validate endowment types (LA-4)
+        if not self.endowment_types:
+            raise ValueError("endowment_types cannot be empty")
+        invalid = set(self.endowment_types) - self.VALID_ENDOWMENT_TYPES
+        if invalid:
+            raise ValueError(
+                f"Unknown endowment_types: {invalid}. "
+                f"Valid types: {sorted(self.VALID_ENDOWMENT_TYPES)}"
+            )
 
 
 @dataclass
@@ -188,17 +200,26 @@ def run_market_emergence(
     # Create agents
     agents = create_heterogeneous_agents(config, rng)
 
-    # Determine protocol names
-    protocol_name = type(bargaining_protocol).__name__.replace("Protocol", "")
-    matching_name = type(matching_protocol).__name__.replace("Protocol", "")
+    # Determine protocol names for logging
+    protocol_name = type(bargaining_protocol).__name__.replace("Protocol", "").lower()
+    matching_name = type(matching_protocol).__name__.replace("Protocol", "").lower()
+    info_env_name = type(info_env).__name__.lower()
 
-    # Create SimulationConfig for logging
+    # Get info_env params
+    info_env_params: dict = {}
+    if isinstance(info_env, NoisyAlphaInformation):
+        info_env_params = {"noise_std": info_env.noise_std}
+
+    # Create SimulationConfig for logging (LA-1: include institutional metadata)
     sim_config = SimulationConfig(
         n_agents=config.n_agents,
         grid_size=config.grid_size,
         seed=config.seed,
-        protocol_name=protocol_name.lower(),
+        protocol_name=protocol_name,
         perception_radius=config.perception_radius,
+        matching_protocol_name=matching_name,
+        info_env_name=info_env_name,
+        info_env_params=info_env_params,
     )
 
     # Create logger

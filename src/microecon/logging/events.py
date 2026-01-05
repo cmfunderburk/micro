@@ -11,7 +11,13 @@ from typing import Any
 
 @dataclass(frozen=True)
 class SimulationConfig:
-    """Configuration snapshot for a simulation run."""
+    """Configuration snapshot for a simulation run.
+
+    Captures all institutional settings needed to reproduce and compare runs:
+    - Bargaining protocol (Nash, Rubinstein)
+    - Matching protocol (opportunistic, stable_roommates)
+    - Information environment (full, noisy)
+    """
 
     n_agents: int
     grid_size: int
@@ -21,6 +27,10 @@ class SimulationConfig:
     perception_radius: float = 3.0
     discount_factor: float = 0.95
     movement_budget: int = 1
+    # Institutional metadata (LA-1)
+    matching_protocol_name: str = "opportunistic"
+    info_env_name: str = "full_information"
+    info_env_params: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -32,6 +42,9 @@ class SimulationConfig:
             "perception_radius": self.perception_radius,
             "discount_factor": self.discount_factor,
             "movement_budget": self.movement_budget,
+            "matching_protocol_name": self.matching_protocol_name,
+            "info_env_name": self.info_env_name,
+            "info_env_params": self.info_env_params,
         }
 
     @classmethod
@@ -45,6 +58,9 @@ class SimulationConfig:
             perception_radius=d.get("perception_radius", 3.0),
             discount_factor=d.get("discount_factor", 0.95),
             movement_budget=d.get("movement_budget", 1),
+            matching_protocol_name=d.get("matching_protocol_name", "opportunistic"),
+            info_env_name=d.get("info_env_name", "full_information"),
+            info_env_params=d.get("info_env_params", {}),
         )
 
 

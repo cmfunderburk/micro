@@ -26,6 +26,8 @@ from .timeseries import (
     utility_variance_over_time,
     compare_welfare_trajectories,
     metric_over_time,
+    mrs_over_time,
+    mrs_dispersion_over_time,
 )
 from .distributions import (
     ComparisonResult,
@@ -88,6 +90,8 @@ __all__ = [
     "utility_variance_over_time",
     "compare_welfare_trajectories",
     "metric_over_time",
+    "mrs_over_time",
+    "mrs_dispersion_over_time",
     # Distributions
     "ComparisonResult",
     "compare_groups",

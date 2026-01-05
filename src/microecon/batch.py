@@ -13,7 +13,11 @@ import random
 
 from microecon.simulation import Simulation, create_simple_economy
 from microecon.grid import Grid
-from microecon.information import FullInformation
+from microecon.information import (
+    InformationEnvironment,
+    FullInformation,
+    NoisyAlphaInformation,
+)
 from microecon.bargaining import (
     BargainingProtocol,
     NashBargainingProtocol,
@@ -65,6 +69,23 @@ def _get_matching_protocol_name(protocol: MatchingProtocol) -> str:
 def _get_protocol_params(protocol: BargainingProtocol) -> dict[str, Any]:
     """Get parameters for a bargaining protocol."""
     # Rubinstein uses agent discount factors, not protocol-level delta
+    return {}
+
+
+def _get_info_env_name(info_env: InformationEnvironment) -> str:
+    """Get a string name for an information environment."""
+    if isinstance(info_env, FullInformation):
+        return "full_information"
+    elif isinstance(info_env, NoisyAlphaInformation):
+        return "noisy_alpha"
+    else:
+        return info_env.__class__.__name__.lower()
+
+
+def _get_info_env_params(info_env: InformationEnvironment) -> dict[str, Any]:
+    """Get parameters for an information environment."""
+    if isinstance(info_env, NoisyAlphaInformation):
+        return {"noise_std": info_env.noise_std}
     return {}
 
 
@@ -147,6 +168,8 @@ class BatchRunner:
     ) -> SimulationConfig:
         """Convert config dict to SimulationConfig dataclass."""
         protocol = config.get("protocol", NashBargainingProtocol())
+        matching = config.get("matching_protocol", OpportunisticMatchingProtocol())
+        info_env = config.get("info_env", FullInformation())
         return SimulationConfig(
             n_agents=config.get("n_agents", 10),
             grid_size=config.get("grid_size", 10),
@@ -156,6 +179,9 @@ class BatchRunner:
             perception_radius=config.get("perception_radius", 7.0),
             discount_factor=config.get("discount_factor", 0.95),
             movement_budget=config.get("movement_budget", 1),
+            matching_protocol_name=_get_matching_protocol_name(matching),
+            info_env_name=_get_info_env_name(info_env),
+            info_env_params=_get_info_env_params(info_env),
         )
 
     def _generate_run_name(self, config: dict[str, Any], index: int) -> str:

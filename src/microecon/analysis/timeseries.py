@@ -209,3 +209,85 @@ def compare_welfare_trajectories(
     # Handle different lengths
     min_len = min(len(welfare_a), len(welfare_b))
     return [welfare_b[i] - welfare_a[i] for i in range(min_len)]
+
+
+def _compute_mrs(alpha: float, x: float, y: float) -> float:
+    """Compute Marginal Rate of Substitution for Cobb-Douglas preferences.
+
+    MRS = (α / (1-α)) * (y / x)
+
+    Returns inf if x = 0, 0 if α = 1, and handles edge cases.
+    """
+    if x <= 0:
+        return float("inf")
+    if alpha >= 1.0:
+        return 0.0
+    if alpha <= 0.0:
+        return float("inf")
+    return (alpha / (1.0 - alpha)) * (y / x)
+
+
+def mrs_over_time(run: RunData) -> list[dict[str, float]]:
+    """Extract MRS for each agent at each tick.
+
+    Marginal Rate of Substitution indicates willingness to trade y for x.
+    For Cobb-Douglas: MRS = (α / (1-α)) * (y / x).
+
+    In efficient markets, MRS should converge across agents as trade
+    equalizes marginal valuations.
+
+    Args:
+        run: RunData object
+
+    Returns:
+        List of dicts mapping agent_id -> MRS at each tick
+    """
+    result = []
+    for tick in run.ticks:
+        tick_mrs = {}
+        for snapshot in tick.agent_snapshots:
+            x, y = snapshot.endowment
+            mrs = _compute_mrs(snapshot.alpha, x, y)
+            tick_mrs[snapshot.agent_id] = mrs
+        result.append(tick_mrs)
+    return result
+
+
+def mrs_dispersion_over_time(run: RunData) -> list[float]:
+    """Track MRS dispersion (coefficient of variation) over time.
+
+    Lower dispersion indicates convergence toward market-clearing prices.
+    Uses coefficient of variation (std/mean) to normalize across scales.
+
+    Args:
+        run: RunData object
+
+    Returns:
+        List of MRS CV values indexed by tick (lower = more convergence)
+    """
+    import math
+
+    dispersions = []
+    for tick in run.ticks:
+        mrs_values = []
+        for snapshot in tick.agent_snapshots:
+            x, y = snapshot.endowment
+            mrs = _compute_mrs(snapshot.alpha, x, y)
+            if math.isfinite(mrs):
+                mrs_values.append(mrs)
+
+        if len(mrs_values) < 2:
+            dispersions.append(float("nan"))
+            continue
+
+        mean = sum(mrs_values) / len(mrs_values)
+        if mean <= 0:
+            dispersions.append(float("nan"))
+            continue
+
+        variance = sum((m - mean) ** 2 for m in mrs_values) / len(mrs_values)
+        std = math.sqrt(variance)
+        cv = std / mean  # Coefficient of variation
+        dispersions.append(cv)
+
+    return dispersions

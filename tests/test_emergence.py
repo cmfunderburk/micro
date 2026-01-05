@@ -192,6 +192,29 @@ class TestWelfareEfficiency:
         # With diverse alphas and endowments, there should be gains available
         assert max_gains >= 0
 
+    def test_greedy_matching_limits_pairs(self):
+        """Greedy matching should not count agent twice.
+
+        With n agents, at most n/2 pairs can form. The old implementation
+        summed ALL pairwise surpluses (n*(n-1)/2 pairs), overcounting by ~n.
+        """
+        # 4 agents = at most 2 pairs
+        run = create_test_run(n_agents=4)
+        max_gains_4 = compute_theoretical_max_gains(run)
+
+        # 8 agents = at most 4 pairs
+        run_8 = create_test_run(n_agents=8)
+        max_gains_8 = compute_theoretical_max_gains(run_8)
+
+        # With greedy matching, 8 agents should have ~2x the max gains of 4 agents
+        # (roughly 4 pairs vs 2 pairs). The old all-pairs sum would give
+        # 28 pairs vs 6 pairs, a ratio of ~4.7x instead of ~2x.
+        ratio = max_gains_8 / max_gains_4 if max_gains_4 > 0 else 0
+
+        # Allow some variance due to different agent compositions, but
+        # ratio should be closer to 2 than to 4.7 (the all-pairs ratio)
+        assert 1.0 < ratio < 4.0, f"Ratio {ratio:.2f} suggests overcounting"
+
 
 class TestSpatialClustering:
     """Tests for spatial cluster detection."""

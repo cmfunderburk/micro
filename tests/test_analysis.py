@@ -17,6 +17,8 @@ from microecon.analysis import (
     welfare_gains_over_time,
     average_utility_over_time,
     compare_welfare_trajectories,
+    mrs_over_time,
+    mrs_dispersion_over_time,
     # Distributions
     compare_final_welfare,
     compare_total_trades,
@@ -161,6 +163,28 @@ class TestTimeSeries:
         diff = compare_welfare_trajectories(run_a, run_b)
 
         assert len(diff) == 10
+
+    def test_mrs_over_time(self):
+        run = _create_test_run(ticks=10)
+        mrs = mrs_over_time(run)
+
+        assert len(mrs) == 10
+        # Each tick should have MRS for each agent
+        for tick_mrs in mrs:
+            assert isinstance(tick_mrs, dict)
+            # MRS values should be positive (for sensible endowments)
+            assert all(m > 0 for m in tick_mrs.values() if m != float("inf"))
+
+    def test_mrs_dispersion_over_time(self):
+        run = _create_test_run(ticks=10)
+        dispersion = mrs_dispersion_over_time(run)
+
+        assert len(dispersion) == 10
+        # Dispersion (CV) should be non-negative
+        import math
+        for d in dispersion:
+            if math.isfinite(d):
+                assert d >= 0
 
 
 class TestDistributions:

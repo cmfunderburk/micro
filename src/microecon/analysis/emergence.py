@@ -175,19 +175,25 @@ class WelfareEfficiencyResult:
 
 
 def compute_theoretical_max_gains(run: RunData) -> float:
-    """Estimate maximum possible gains from trade.
+    """Estimate maximum possible gains from trade using optimal matching.
 
-    This computes the sum of all positive Nash bargaining surpluses between
-    all pairs of agents in the initial state. This is an upper bound on
-    achievable welfare gains (exact only with full information and optimal matching).
+    Computes the maximum total welfare gains achievable if agents were
+    optimally paired. Uses greedy maximum weight matching on bilateral
+    surpluses (both agents' gains, not just one side).
+
+    This is a much tighter bound than summing all pairwise surpluses,
+    which overcounts since each agent can only trade once per matching.
+
+    Note: Greedy matching gives a 2-approximation of optimal. For typical
+    simulation sizes (n ≤ 50), this is accurate enough for efficiency analysis.
 
     Args:
         run: RunData object
 
     Returns:
-        Estimated maximum total welfare gains
+        Estimated maximum total welfare gains from optimal matching
     """
-    from microecon.bargaining import compute_nash_surplus
+    from microecon.bargaining import nash_bargaining_solution
     from microecon.agent import AgentType
     from microecon.preferences import CobbDouglas
     from microecon.bundle import Bundle
@@ -207,14 +213,38 @@ def compute_theoretical_max_gains(run: RunData) -> float:
         )
         types.append(agent_type)
 
-    # Compute sum of positive surpluses across all pairs
-    total_surplus = 0.0
     n = len(types)
+    if n < 2:
+        return 0.0
+
+    # Compute bilateral surpluses for all pairs
+    # Each entry: (surplus, agent_i, agent_j)
+    pair_surpluses: list[tuple[float, int, int]] = []
     for i in range(n):
         for j in range(i + 1, n):
-            surplus = compute_nash_surplus(types[i], types[j])
-            if surplus > 0:
-                total_surplus += surplus
+            outcome = nash_bargaining_solution(
+                types[i].preferences,
+                types[i].endowment,
+                types[j].preferences,
+                types[j].endowment,
+            )
+            # Use bilateral surplus (both agents' gains)
+            bilateral_surplus = outcome.gains_1 + outcome.gains_2
+            if bilateral_surplus > 0:
+                pair_surpluses.append((bilateral_surplus, i, j))
+
+    # Greedy maximum weight matching
+    # Sort by surplus descending, greedily select non-overlapping pairs
+    pair_surpluses.sort(reverse=True, key=lambda x: x[0])
+
+    matched: set[int] = set()
+    total_surplus = 0.0
+
+    for surplus, i, j in pair_surpluses:
+        if i not in matched and j not in matched:
+            total_surplus += surplus
+            matched.add(i)
+            matched.add(j)
 
     return total_surplus
 

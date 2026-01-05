@@ -325,7 +325,10 @@ def run_scenario_comparison(scenario: Scenario) -> None:
 
     def create_simulation_and_logger(matching_protocol, protocol_name: str):
         """Create a simulation with logger from scenario config."""
-        # Create simulation config for logger
+        # Determine matching protocol name
+        matching_name = type(matching_protocol).__name__.replace("Protocol", "").lower()
+
+        # Create simulation config for logger (LA-1: include institutional metadata)
         sim_config = SimulationConfig(
             n_agents=len(config.agents),
             grid_size=config.grid_size,
@@ -334,6 +337,9 @@ def run_scenario_comparison(scenario: Scenario) -> None:
             protocol_params={},
             perception_radius=config.perception_radius,
             discount_factor=config.discount_factor,
+            matching_protocol_name=matching_name,
+            info_env_name="full_information",
+            info_env_params={},
         )
 
         # Create logger

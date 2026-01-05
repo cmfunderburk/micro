@@ -20,7 +20,6 @@ from microecon.agent import Agent, create_agent
 from microecon.grid import Grid, Position
 from microecon.information import InformationEnvironment, FullInformation
 from microecon.bargaining import (
-    execute_trade,
     BargainingOutcome,
     BargainingProtocol,
     NashBargainingProtocol,

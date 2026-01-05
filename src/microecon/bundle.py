@@ -36,19 +36,6 @@ class Bundle:
             return NotImplemented
         return Bundle(self.x + other.x, self.y + other.y)
 
-    def __sub__(self, other: Bundle) -> Bundle:
-        """Subtract bundles component-wise. Result may have negative components."""
-        if not isinstance(other, Bundle):
-            return NotImplemented
-        # Allow negative for transfer calculations; caller validates if needed
-        return Bundle.__new__(Bundle)._unsafe_init(self.x - other.x, self.y - other.y)
-
-    def _unsafe_init(self, x: float, y: float) -> Bundle:
-        """Internal: create bundle without non-negativity check."""
-        object.__setattr__(self, 'x', x)
-        object.__setattr__(self, 'y', y)
-        return self
-
     def __mul__(self, scalar: float) -> Bundle:
         """Scalar multiplication."""
         if not isinstance(scalar, (int, float)):

@@ -112,14 +112,14 @@ class TestPerceptionBoundary:
             bargaining_protocol=NashBargainingProtocol(),
         )
 
-        # Distance = √(3² + 4²) = 5.0 (exactly at perception boundary)
+        # Chebyshev distance = max(5, 0) = 5 (exactly at perception boundary)
         sim.add_agent(agent_a, Position(0, 0))
-        sim.add_agent(agent_b, Position(3, 4))
+        sim.add_agent(agent_b, Position(5, 0))
 
         agents_by_id = {a.id: a for a in sim.agents}
         result = evaluate_targets(agent_a, sim.grid, sim.info_env, agents_by_id)
 
-        # Should find agent_b (distance == perception_radius is visible)
+        # Should find agent_b (Chebyshev distance == perception_radius is visible)
         assert result.best_target_id == agent_b.id
 
     def test_agent_outside_perception_not_found(self):
@@ -128,7 +128,7 @@ class TestPerceptionBoundary:
             alpha=0.5,
             endowment_x=10.0,
             endowment_y=2.0,
-            perception_radius=4.9,  # Just under distance
+            perception_radius=4.9,  # Just under Chebyshev distance of 5
             discount_factor=0.95,
         )
         agent_b = create_agent(
@@ -145,14 +145,14 @@ class TestPerceptionBoundary:
             bargaining_protocol=NashBargainingProtocol(),
         )
 
-        # Distance = 5.0, but A's perception = 4.9
+        # Chebyshev distance = max(5, 3) = 5, but A's perception = 4.9
         sim.add_agent(agent_a, Position(0, 0))
-        sim.add_agent(agent_b, Position(3, 4))
+        sim.add_agent(agent_b, Position(5, 3))
 
         agents_by_id = {a.id: a for a in sim.agents}
         result = evaluate_targets(agent_a, sim.grid, sim.info_env, agents_by_id)
 
-        # A should NOT find B (distance > perception_radius)
+        # A should NOT find B (Chebyshev distance 5 > perception_radius 4.9)
         assert result.best_target_id is None
         assert result.visible_agents == 0
 

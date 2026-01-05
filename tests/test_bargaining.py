@@ -9,7 +9,6 @@ from microecon.bargaining import (
     # Nash bargaining
     nash_bargaining_solution,
     compute_nash_surplus,
-    execute_trade,
     BargainingOutcome,
     # Rubinstein bargaining
     rubinstein_share,
@@ -151,40 +150,6 @@ class TestComputeNashSurplus:
         # Symmetric preferences should give equal surplus
         assert surplus1 == pytest.approx(surplus2, rel=0.1)
         assert surplus1 > 0
-
-
-class TestExecuteTrade:
-    """Test trade execution between agents."""
-
-    def test_execute_trade_updates_endowments(self):
-        agent1 = create_agent(alpha=0.5, endowment_x=10.0, endowment_y=2.0)
-        agent2 = create_agent(alpha=0.5, endowment_x=2.0, endowment_y=10.0)
-
-        initial_u1 = agent1.utility()
-        initial_u2 = agent2.utility()
-
-        outcome = execute_trade(agent1, agent2)
-
-        assert outcome.trade_occurred
-        assert agent1.utility() >= initial_u1
-        assert agent2.utility() >= initial_u2
-        assert agent1.endowment == outcome.allocation_1
-        assert agent2.endowment == outcome.allocation_2
-
-    def test_execute_trade_preserves_total(self):
-        agent1 = create_agent(alpha=0.4, endowment_x=8.0, endowment_y=4.0)
-        agent2 = create_agent(alpha=0.6, endowment_x=4.0, endowment_y=8.0)
-
-        total_x = agent1.endowment.x + agent2.endowment.x
-        total_y = agent1.endowment.y + agent2.endowment.y
-
-        execute_trade(agent1, agent2)
-
-        new_total_x = agent1.endowment.x + agent2.endowment.x
-        new_total_y = agent1.endowment.y + agent2.endowment.y
-
-        assert new_total_x == pytest.approx(total_x)
-        assert new_total_y == pytest.approx(total_y)
 
 
 # =============================================================================

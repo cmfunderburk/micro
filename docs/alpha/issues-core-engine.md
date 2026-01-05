@@ -45,20 +45,23 @@
 
 ## Low (Cleanup)
 
-- [ ] **CE-6:** Dead Rubinstein code
+- [x] **CE-6:** Dead Rubinstein code
   - Source: claude-alpha-review §2.2
   - Files: `bargaining.py:628-723`
   - Action: Remove `_solve_rubinstein_allocation()`, update `proposer` docstrings
+  - **RESOLVED (2026-01-05):** Removed `_solve_rubinstein_allocation()` (~96 lines). Function was dead code - never called after BRW formulation was implemented.
 
-- [ ] **CE-7:** Legacy execute_trade function
+- [x] **CE-7:** Legacy execute_trade function
   - Source: claude-alpha-review §3.4
   - Files: `bargaining.py:763-791`
   - Action: Deprecate or remove
+  - **RESOLVED (2026-01-05):** Removed `execute_trade()` function and associated tests. Was unused - simulation uses `BargainingProtocol.execute()` instead.
 
-- [ ] **CE-8:** Unsafe Bundle construction
+- [x] **CE-8:** Unsafe Bundle construction
   - Source: claude-alpha-review §3.2
   - Files: `bundle.py:44-50`
   - Action: Consider type-safe alternative (future)
+  - **RESOLVED (2026-01-05):** Removed `__sub__` and `_unsafe_init` entirely. Methods were unused throughout codebase. If bundle subtraction is needed in future, design proper solution (e.g., separate Transfer type).
 
 ---
 
@@ -118,3 +121,22 @@
    - `test_perception_movement_consistency`: Verifies perception matches movement
 
 **Verification:** All 68 tests pass (grid, search, simulation, information)
+
+### Session 4: Dead Code Removal
+**Date:** 2026-01-05
+**Issues addressed:** CE-6, CE-7, CE-8
+
+**Changes made:**
+1. `bargaining.py`: Removed `_solve_rubinstein_allocation()` (~96 lines of dead code)
+2. `bargaining.py`: Removed `execute_trade()` function (~30 lines)
+3. `simulation.py`: Removed unused `execute_trade` import
+4. `tests/test_bargaining.py`: Removed `TestExecuteTrade` class and import
+5. `bundle.py`: Removed `__sub__` and `_unsafe_init` methods (~12 lines)
+
+**Verification:** All tests pass (bundle, bargaining, simulation, search, matching, information)
+
+---
+
+## Summary
+
+All core engine issues (CE-1 through CE-8) are now resolved. The core engine is clean and ready for further development.

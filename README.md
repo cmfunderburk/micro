@@ -11,7 +11,7 @@ By making institutions visible, we can ask: *What difference does the institutio
 ## Quick Start
 
 ```bash
-# 1. Install dependencies (requires Python 3.11+)
+# 1. Install dependencies (requires Python 3.12+)
 pip install uv
 uv sync
 

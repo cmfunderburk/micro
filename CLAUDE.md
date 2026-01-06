@@ -20,7 +20,7 @@ The core simulation infrastructure in `src/microecon/`:
 | `preferences.py` | `CobbDouglas(alpha)` - u(x,y) = x^α * y^(1-α) |
 | `agent.py` | Agent with private state / observable type separation |
 | `grid.py` | `Grid(size)`, `Position`, movement, spatial queries |
-| `information.py` | `InformationEnvironment` abstraction, `FullInformation` implementation |
+| `information.py` | `InformationEnvironment` abstraction (`FullInformation`, `NoisyAlphaInformation`) |
 | `bargaining.py` | Bargaining solutions (Nash, Rubinstein), protocol abstraction |
 | `search.py` | Target evaluation (discounted Nash surplus), movement decisions |
 | `matching.py` | Matching protocols (Opportunistic, StableRoommates), commitment state |
@@ -57,17 +57,14 @@ DearPyGui-based visualization in `src/microecon/visualization/`. See VISUALIZATI
 
 **From VISUALIZATION.md, not yet implemented:**
 - Trade zoom view / Edgeworth box
-- Time series charts (ImPlot integration)
 - Agent perspective mode (for information asymmetry)
 - Export capabilities (PNG, GIF, CSV, SVG)
-- Config file support (YAML/JSON scenarios)
-- Replay mode (currently live-only)
 
 Run with: `uv run python -m microecon.visualization`
 
 ### Test Coverage
 
-341 tests covering all core modules. Run with: `uv run pytest`
+450+ tests covering all core modules. Run with: `uv run pytest`
 
 ## Architecture
 
@@ -78,8 +75,8 @@ src/microecon/
 ├── preferences.py       # Utility functions (Cobb-Douglas)
 ├── agent.py             # Agent, AgentPrivateState, AgentType
 ├── grid.py              # Spatial grid and positions
-├── information.py       # Information environment abstraction
-├── bargaining.py        # Nash bargaining solution
+├── information.py       # Information environments (Full, NoisyAlpha)
+├── bargaining.py        # Bargaining protocols (Nash, Rubinstein)
 ├── search.py            # Target selection and movement
 ├── matching.py          # Matching protocols (Opportunistic, StableRoommates)
 ├── simulation.py        # Main simulation engine (four-phase tick)
@@ -94,19 +91,27 @@ src/microecon/
 │   ├── loader.py        # Run loading utilities
 │   ├── timeseries.py    # Time series analysis
 │   ├── distributions.py # Cross-run comparisons
-│   └── tracking.py      # Agent-level tracking
+│   ├── tracking.py      # Agent-level tracking
+│   └── emergence.py     # Market emergence metrics
+├── scenarios/
+│   ├── __init__.py
+│   ├── schema.py        # YAML scenario schema
+│   ├── loader.py        # Scenario loading utilities
+│   └── market_emergence.py  # MarketEmergenceConfig
 └── visualization/
     ├── __init__.py
     ├── __main__.py      # Entry point for -m invocation
     ├── app.py           # DearPyGui visualization
-    └── replay.py        # Replay controllers
+    ├── replay.py        # Replay controllers
+    ├── browser.py       # Scenario browser UI
+    └── timeseries.py    # Time-series charts (ImPlot)
 ```
 
 ### Key Abstractions
 
-**Agent state vs. observable type**: Agents have private state (true preferences, endowments) separate from observable type (what others can see). Currently type = private state (full information), but the architecture supports future information environments.
+**Agent state vs. observable type**: Agents have private state (true preferences, endowments) separate from observable type (what others can see). Under `FullInformation`, type = private state. Under `NoisyAlphaInformation`, observed types differ from true types.
 
-**Information environment**: `InformationEnvironment` interface determines what agents can observe about each other. `FullInformation` exposes everything; future implementations can restrict visibility.
+**Information environment**: `InformationEnvironment` interface determines what agents can observe about each other. `FullInformation` exposes everything; `NoisyAlphaInformation` adds noise to observed preference parameters, enabling information asymmetry studies.
 
 **Bargaining protocol**: `BargainingProtocol` ABC enables swapping institutional rules. Two implementations:
 - `NashBargainingProtocol`: Axiomatic solution (symmetric, maximizes Nash product)
@@ -183,19 +188,17 @@ See STATUS.md §5 for a detailed gap analysis vs VISION.md and VISUALIZATION.md.
 
 **Visualization enhancements** (see VISUALIZATION.md for full specs)
 - Trade zoom view with Edgeworth box
-- Time series charts via ImPlot
 - Export: PNG/SVG frames, GIF/MP4 animations
 - Overlay toggles (trails, perception radius)
+- Agent perspective mode (visualize what agents observe under noisy info)
 
 **Institutional comparisons** (core research value per VISION.md)
 - Additional bargaining protocols (TIOLI, posted prices, double auction)
 - Protocol-aware search (currently uses Nash surplus for all protocols)
 
 **Information environments**
-- Private information (type ≠ private state)
-- Signaling and screening
-- Agent perspective mode in visualization
+- Signaling and screening mechanisms
+- Additional noise models beyond NoisyAlphaInformation
 
 **Analysis extensions**
 - Equilibrium benchmarks (Walrasian prices for comparison)
-- Config files for reproducible scenarios (YAML/JSON)

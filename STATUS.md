@@ -1,7 +1,7 @@
 # Current Project Status
 
 **Version:** 0.1.0 (community release)
-**Date:** 2026-01-03
+**Date:** 2026-01-05
 **Purpose:** Definitive reference for current capabilities
 
 This document describes what exists and works today. For the long-term vision, see VISION.md. For the full visualization design, see VISUALIZATION.md.
@@ -127,7 +127,7 @@ run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
 
 ### Test Coverage
 
-400+ tests covering all core modules. Run with: `uv run pytest`
+450+ tests covering all core modules. Run with: `uv run pytest`
 
 ---
 
@@ -184,10 +184,9 @@ run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
 - Cannot export GIF/MP4 animations
 - No CSV/JSON data export from UI
 
-**No configuration files**
-- Parameters set via code only
-- No YAML/JSON scenario files
-- No GUI parameter editing
+**No GUI parameter editing**
+- YAML scenario files exist (`scenarios/*.yaml`) but no GUI editor
+- Parameters can be set via code or YAML scenarios
 
 **Overlays always on**
 - Movement trails cannot be toggled
@@ -363,12 +362,20 @@ src/microecon/
 │   ├── loader.py
 │   ├── timeseries.py
 │   ├── distributions.py
-│   └── tracking.py
+│   ├── tracking.py
+│   └── emergence.py      # Market emergence metrics
+├── scenarios/
+│   ├── __init__.py
+│   ├── schema.py          # YAML scenario schema
+│   ├── loader.py          # Scenario loading utilities
+│   └── market_emergence.py # MarketEmergenceConfig, run_market_emergence
 └── visualization/
     ├── __init__.py
     ├── __main__.py
     ├── app.py
-    └── replay.py
+    ├── replay.py
+    ├── browser.py         # Scenario browser UI
+    └── timeseries.py      # Time-series charts (ImPlot)
 ```
 
 ---

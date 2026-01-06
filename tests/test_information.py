@@ -334,3 +334,67 @@ class TestNoisyAlphaWithSimulation:
 
         # Simulation should complete without error
         assert sim.tick == 10
+
+    def test_observed_alpha_logged_in_search_decisions(self):
+        """Logged search decisions should include observed_alpha for V-1 visualization."""
+        from microecon.simulation import Simulation
+        from microecon.grid import Grid, Position
+        from microecon.bargaining import NashBargainingProtocol
+        from microecon.matching import OpportunisticMatchingProtocol
+        from microecon.logging import SimulationLogger, SimulationConfig
+
+        # Create agents with known alphas
+        observer = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, perception_radius=10.0)
+        target = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, perception_radius=10.0)
+
+        # With full info, observed_alpha should equal true alpha
+        config = SimulationConfig(n_agents=2, grid_size=10, seed=42, protocol_name="nash")
+        logger = SimulationLogger(config=config)
+        grid = Grid(size=10)
+        sim = Simulation(
+            grid=grid,
+            info_env=FullInformation(),
+            bargaining_protocol=NashBargainingProtocol(),
+            matching_protocol=OpportunisticMatchingProtocol(),
+            logger=logger,
+        )
+        sim.add_agent(observer, Position(0, 0))
+        sim.add_agent(target, Position(2, 0))
+        sim.run(ticks=1)
+        run_data = logger.finalize()
+
+        # Find search decision from observer
+        search_decisions = run_data.ticks[0].search_decisions
+        observer_decision = next(d for d in search_decisions if d.agent_id == observer.id)
+        target_eval = next(e for e in observer_decision.evaluations if e.target_id == target.id)
+
+        # With full info, observed_alpha should match true alpha
+        assert target_eval.observed_alpha == 0.7
+
+        # Now test with noisy info
+        noisy_env = NoisyAlphaInformation(noise_std=0.2, seed=99)
+        config2 = SimulationConfig(n_agents=2, grid_size=10, seed=42, protocol_name="nash")
+        logger2 = SimulationLogger(config=config2)
+        grid2 = Grid(size=10)
+        observer2 = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, perception_radius=10.0)
+        target2 = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, perception_radius=10.0)
+        sim2 = Simulation(
+            grid=grid2,
+            info_env=noisy_env,
+            bargaining_protocol=NashBargainingProtocol(),
+            matching_protocol=OpportunisticMatchingProtocol(),
+            logger=logger2,
+        )
+        sim2.add_agent(observer2, Position(0, 0))
+        sim2.add_agent(target2, Position(2, 0))
+        sim2.run(ticks=1)
+        run_data2 = logger2.finalize()
+
+        search_decisions2 = run_data2.ticks[0].search_decisions
+        observer_decision2 = next(d for d in search_decisions2 if d.agent_id == observer2.id)
+        target_eval2 = next(e for e in observer_decision2.evaluations if e.target_id == target2.id)
+
+        # With noisy info, observed_alpha should differ from true alpha
+        assert target_eval2.observed_alpha != 0.7
+        # But should still be valid (clipped to 0.01-0.99)
+        assert 0.01 <= target_eval2.observed_alpha <= 0.99

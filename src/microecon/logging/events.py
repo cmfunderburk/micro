@@ -104,6 +104,7 @@ class TargetEvaluation:
     ticks_to_reach: int  # Chebyshev distance (movement ticks required)
     expected_surplus: float  # Nash bargaining surplus
     discounted_value: float  # surplus * (delta ^ ticks_to_reach)
+    observed_alpha: float  # Alpha as perceived by observer (enables V-1 visualization)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -113,6 +114,7 @@ class TargetEvaluation:
             "ticks_to_reach": self.ticks_to_reach,
             "expected_surplus": self.expected_surplus,
             "discounted_value": self.discounted_value,
+            "observed_alpha": self.observed_alpha,
         }
 
     @classmethod
@@ -124,6 +126,7 @@ class TargetEvaluation:
             ticks_to_reach=d["ticks_to_reach"],
             expected_surplus=d["expected_surplus"],
             discounted_value=d["discounted_value"],
+            observed_alpha=d.get("observed_alpha", d.get("alpha", 0.5)),  # fallback for old logs
         )
 
 

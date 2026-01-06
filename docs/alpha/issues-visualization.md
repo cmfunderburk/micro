@@ -6,11 +6,14 @@
 
 ## High
 
-- [ ] **V-1:** Perceived vs true visualization missing
+- [x] **V-1:** Perceived vs true visualization - data path ✅
   - Source: REVIEW_0.1.0 §3
-  - Files: `logging/events.py` (AgentSnapshot), `visualization/app.py`
+  - Files: `logging/events.py`, `search.py`, `simulation.py`, `logging/logger.py`
   - Issue: Only true alpha logged, no data path for observed types
-  - Blocked by: CE-1 (info env must affect behavior first)
+  - **Fix:** Added `observed_alpha` field to `TargetEvaluation` and `TargetEvaluationResult`.
+    Search decisions now log the perceived alpha for each evaluated target.
+    This enables "agent perspective mode" visualization (UI enhancement deferred).
+  - **Test:** `test_observed_alpha_logged_in_search_decisions` in `test_information.py`
 
 ---
 
@@ -35,11 +38,13 @@
 
 ## Session Notes
 
-_Use this space during work sessions:_
-
 ```
-Session:
-Date:
-Issues addressed:
+Session: 2026-01-05-b
+Date: 2026-01-05
+Issues addressed: V-1 (data path)
 Notes:
+- Added observed_alpha to TargetEvaluationResult (search.py) and TargetEvaluation (events.py)
+- Updated simulation.py and logger.py to wire observed_alpha through
+- Added test_observed_alpha_logged_in_search_decisions
+- UI enhancement for "agent perspective mode" deferred (V-2/V-3 lower priority)
 ```

@@ -490,6 +490,7 @@ class Simulation:
                     ticks_to_reach=e.ticks_to_reach,
                     expected_surplus=e.expected_surplus,
                     discounted_value=e.discounted_value,
+                    observed_alpha=e.observed_alpha,
                 )
                 for e in evals
             ]

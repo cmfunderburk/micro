@@ -38,6 +38,7 @@ class TargetEvaluationResult:
     ticks_to_reach: int  # Chebyshev distance (movement ticks)
     expected_surplus: float  # Nash bargaining surplus
     discounted_value: float  # surplus * delta^ticks
+    observed_alpha: float  # Alpha as perceived by observer (may differ from true if noisy)
 
 
 @dataclass
@@ -232,6 +233,7 @@ def evaluate_targets_detailed(
                 ticks_to_reach=ticks_to_reach,
                 expected_surplus=expected_surplus,
                 discounted_value=discounted_value,
+                observed_alpha=target_type.preferences.alpha,
             )
         )
 

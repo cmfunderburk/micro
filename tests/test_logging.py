@@ -60,6 +60,7 @@ class TestEventSerialization:
             ticks_to_reach=5,
             expected_surplus=2.5,
             discounted_value=1.8,
+            observed_alpha=0.65,
         )
         d = eval.to_dict()
         restored = TargetEvaluation.from_dict(d)
@@ -71,8 +72,8 @@ class TestEventSerialization:
             position=(5, 5),
             visible_agents=3,
             evaluations=(
-                TargetEvaluation("t1", (1, 1), 2.0, 2, 1.0, 0.9),
-                TargetEvaluation("t2", (2, 2), 3.0, 3, 0.8, 0.7),
+                TargetEvaluation("t1", (1, 1), 2.0, 2, 1.0, 0.9, 0.6),
+                TargetEvaluation("t2", (2, 2), 3.0, 3, 0.8, 0.7, 0.4),
             ),
             chosen_target_id="t1",
             chosen_value=0.9,

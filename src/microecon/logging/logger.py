@@ -180,6 +180,7 @@ def create_target_evaluation(
     ticks_to_reach: int,
     expected_surplus: float,
     discounted_value: float,
+    observed_alpha: float,
 ) -> TargetEvaluation:
     """Create a TargetEvaluation from search computation."""
     return TargetEvaluation(
@@ -189,6 +190,7 @@ def create_target_evaluation(
         ticks_to_reach=ticks_to_reach,
         expected_surplus=expected_surplus,
         discounted_value=discounted_value,
+        observed_alpha=observed_alpha,
     )
 
 

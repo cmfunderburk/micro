@@ -73,6 +73,17 @@ This comparison demonstrates the platform's core methodological contribution: **
 - 80 ticks may not be long enough for full equilibration
 - 30 agents is at the lower end of "market" scale
 
+### Statistical Rigor (T-3)
+
+For publication-quality results, the methodology should use:
+- **10+ seeds** for statistical confidence (means ± std dev)
+- **50+ agents** for meaningful market emergence
+- **200+ ticks** for equilibration
+- **Confidence intervals** on all reported metrics
+
+The current study is exploratory. A rigorous study requires significant compute time
+given current performance characteristics (see below).
+
 ## Reproducibility
 
 This study can be reproduced with:
@@ -116,7 +127,26 @@ for result in [result_nash_opp, result_nash_stable, result_rub_opp]:
     print(f"  Efficiency: {a.efficiency.efficiency_ratio:.1%}")
 ```
 
+## Performance Baseline (2026-01-05)
+
+Headless simulation performance on development hardware:
+
+| Agents | Ticks/second |
+|--------|--------------|
+| 5      | ~27          |
+| 10     | ~7           |
+| 15     | ~3           |
+| 20     | ~1.4         |
+
+Scaling is approximately O(n²) due to pairwise comparisons in search and matching.
+
+**Implication for rigorous study:** A 10-seed × 50-agent × 200-tick study would require
+roughly 2000 simulation ticks per configuration. At ~0.5 ticks/sec for 50 agents,
+each configuration takes ~1 hour. Three configurations = ~3 hours total.
+
+Optimization is not prioritized for MVP but noted for future work.
+
 ---
 
-**Date:** 2026-01-03
+**Date:** 2026-01-03 (updated 2026-01-05)
 **Platform Version:** Development (pre-release)

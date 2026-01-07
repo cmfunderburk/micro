@@ -1,0 +1,531 @@
+{
+  "task": {
+    "name": "Visualization Polish & Integration",
+    "description": "Comprehensive visualization layer update: belief visualization, export capabilities, overlay toggles, Edgeworth box trade detail, agent perspective mode, and advanced overlays. Brings the visualization to full capability as specified in VISUALIZATION.md.",
+    "created": "2026-01-07T00:00:00Z",
+    "vision_source": "VISUALIZATION.md",
+    "project_type": "implementation",
+    "completion_promise": "<promise>VISUALIZATION-POLISH-COMPLETE</promise>"
+  },
+
+  "context": {
+    "codebase_state": "active",
+    "primary_language": "python",
+    "frameworks": ["dearpygui", "pytest"],
+    "vision_extraction": {
+      "primary_goal": "Make economic institutions visible through visualization - enabling researchers to see abstract concepts come alive through spatial simulation",
+      "success_criteria": [
+        "Functions as productive research instrument",
+        "Generates publication-quality outputs",
+        "Enables live demonstrations",
+        "Makes institutional visibility concrete"
+      ],
+      "deliverables": [
+        "Overlay toggles (trails, perception radius, trade network, heatmaps)",
+        "Belief visualization (tooltips, panel, visual encodings)",
+        "Export capabilities (PNG, GIF, CSV/JSON)",
+        "Trade zoom with Edgeworth box",
+        "Agent perspective mode",
+        "Time-series charts (already complete)"
+      ]
+    },
+    "gap_analysis_summary": "Core visualization exists (grid, agents, animations, comparison mode, time-series). Missing: overlay toggles, belief visualization, export, Edgeworth box, agent perspective mode. Belief data is logged but not displayed.",
+    "resource_constraints": {
+      "compute": null,
+      "time_budget": null,
+      "other": null
+    },
+    "canonical_sources": [
+      "VISUALIZATION.md - UI/UX design specification",
+      "DearPyGui documentation - framework reference",
+      "src/microecon/beliefs.py - belief data structures",
+      "src/microecon/logging/events.py - BeliefSnapshot, TypeBeliefSnapshot"
+    ]
+  },
+
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Overlay Infrastructure & Toggles",
+      "description": "Add toggle panel to control overlay visibility. Make existing overlays (trails, perception radius) toggleable. Establish pattern for future overlays.",
+      "features": ["VIZ-001", "VIZ-002", "VIZ-003"],
+      "entry_criteria": "Existing visualization runs without error",
+      "exit_criteria": "Toggle panel visible, trails and perception radius can be toggled on/off, toggle state persists during session",
+      "estimated_iterations": 15
+    },
+    {
+      "phase": 2,
+      "name": "Belief Visualization",
+      "description": "Surface agent belief data in the UI. Extend tooltips, add belief panel for selected agents, add visual encoding of belief relationships between agents.",
+      "features": ["VIZ-004", "VIZ-005", "VIZ-006", "VIZ-007"],
+      "entry_criteria": "Phase 1 complete, toggle infrastructure in place",
+      "exit_criteria": "Belief data visible in hover tooltips, selected agent shows belief panel, belief connections render between agents",
+      "estimated_iterations": 20
+    },
+    {
+      "phase": 3,
+      "name": "Export Capabilities",
+      "description": "Add export functionality for screenshots, animations, and data. Support publication-quality output.",
+      "features": ["VIZ-008", "VIZ-009", "VIZ-010", "VIZ-011"],
+      "entry_criteria": "Phase 2 complete",
+      "exit_criteria": "Can export PNG screenshots, GIF animations, and CSV/JSON data from UI",
+      "estimated_iterations": 20
+    },
+    {
+      "phase": 4,
+      "name": "Trade Zoom & Edgeworth Box",
+      "description": "Implement trade detail view with Edgeworth box visualization showing pre/post allocations, indifference curves, and contract curve.",
+      "features": ["VIZ-012", "VIZ-013", "VIZ-014"],
+      "entry_criteria": "Phase 3 complete",
+      "exit_criteria": "Click on trade opens detail modal, Edgeworth box renders correctly, theoretical elements (indifference curves, contract curve) display",
+      "estimated_iterations": 25
+    },
+    {
+      "phase": 5,
+      "name": "Agent Perspective Mode",
+      "description": "Add mode to view simulation from a specific agent's information state. Show what agent observes vs ground truth.",
+      "features": ["VIZ-015", "VIZ-016", "VIZ-017"],
+      "entry_criteria": "Phase 4 complete",
+      "exit_criteria": "Can toggle perspective mode, select agent perspective, display reflects agent's observations under noisy information",
+      "estimated_iterations": 15
+    },
+    {
+      "phase": 6,
+      "name": "Advanced Overlays",
+      "description": "Add trade network overlay and surplus heatmap overlay. Integrate with toggle system from Phase 1.",
+      "features": ["VIZ-018", "VIZ-019"],
+      "entry_criteria": "Phase 5 complete, toggle infrastructure from Phase 1",
+      "exit_criteria": "Trade network overlay shows who has traded with whom, surplus heatmap shows opportunity density",
+      "estimated_iterations": 15
+    }
+  ],
+
+  "features": [
+    {
+      "id": "VIZ-001",
+      "name": "Toggle Panel UI",
+      "phase": 1,
+      "description": "Add a collapsible panel in the metrics area with toggle controls for overlays. Establish consistent toggle pattern.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Toggle panel renders in metrics area",
+          "Panel can be collapsed/expanded",
+          "Toggle controls are checkboxes or switches"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    },
+    {
+      "id": "VIZ-002",
+      "name": "Movement Trails Toggle",
+      "phase": 1,
+      "description": "Make movement trails toggleable. Default to ON for backward compatibility.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Toggle control for trails exists",
+          "When OFF, no trails render",
+          "When ON, trails render as before",
+          "Default is ON"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    },
+    {
+      "id": "VIZ-003",
+      "name": "Perception Radius Toggle",
+      "phase": 1,
+      "description": "Add toggle for perception radius overlay. When enabled, shows radius for selected agent (existing behavior) OR all agents.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Toggle control for perception radius exists",
+          "Can show radius for selected agent only",
+          "Can show radius for all agents",
+          "When OFF, no radius overlay renders"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    },
+    {
+      "id": "VIZ-004",
+      "name": "Belief Tooltip Extension",
+      "phase": 2,
+      "description": "Extend hover tooltip to show belief summary: number of type beliefs, price belief mean/variance, memory depth.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Tooltip shows 'Beliefs: X type beliefs' when agent has beliefs",
+          "Tooltip shows price belief summary if available",
+          "Tooltip shows memory depth",
+          "Graceful handling when agent has no beliefs"
+        ],
+        "property": [
+          "Displayed values match BeliefSnapshot data"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/visualization/ -v"]
+    },
+    {
+      "id": "VIZ-005",
+      "name": "Belief Panel for Selected Agent",
+      "phase": 2,
+      "description": "When agent is selected, show detailed belief panel: list of type beliefs (who, believed alpha, confidence), price belief distribution.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Belief panel appears when agent with beliefs is selected",
+          "Panel lists type beliefs with target agent, believed alpha, confidence",
+          "Panel shows price belief mean and variance",
+          "Panel updates when stepping through replay"
+        ],
+        "property": [
+          "All displayed values match logged BeliefSnapshot"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    },
+    {
+      "id": "VIZ-006",
+      "name": "Belief Connection Lines",
+      "phase": 2,
+      "description": "Draw lines between agents representing belief relationships. Line thickness or opacity encodes confidence level.",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Toggle control for belief connections exists",
+          "Lines render between agents with type beliefs",
+          "Line appearance varies with confidence"
+        ],
+        "property": [
+          "Lines only appear for agent pairs with TypeBeliefSnapshot entries"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    },
+    {
+      "id": "VIZ-007",
+      "name": "Belief Evolution in Replay",
+      "phase": 2,
+      "description": "In replay mode, belief visualization updates as timeline scrubs. Show belief changes over time.",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Belief panel updates when tick changes",
+          "Belief connections update when tick changes",
+          "Can observe belief evolution by scrubbing timeline"
+        ],
+        "property": [
+          "Each tick's display matches that tick's BeliefSnapshot"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    },
+    {
+      "id": "VIZ-008",
+      "name": "PNG Screenshot Export",
+      "phase": 3,
+      "description": "Export current visualization state as PNG image. Support configurable resolution for publication quality.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Export button/menu item exists",
+          "Click triggers file save dialog or saves to configured path",
+          "PNG file is created and valid",
+          "Resolution can be configured (1x, 2x, custom DPI)"
+        ],
+        "property": [
+          "Exported image matches on-screen visualization"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/visualization/test_export.py -v"]
+    },
+    {
+      "id": "VIZ-009",
+      "name": "SVG Vector Export",
+      "phase": 3,
+      "description": "Export current visualization as SVG for publication figures that require vector graphics.",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "SVG export option exists",
+          "SVG file is created and valid",
+          "SVG can be opened in vector editors"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/visualization/test_export.py -v"]
+    },
+    {
+      "id": "VIZ-010",
+      "name": "GIF Animation Export",
+      "phase": 3,
+      "description": "Export simulation replay as animated GIF. Configurable frame rate and duration.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "GIF export option exists (replay mode)",
+          "Can specify start/end ticks",
+          "Can configure frame rate",
+          "GIF file is created and plays correctly"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/visualization/test_export.py -v"]
+    },
+    {
+      "id": "VIZ-011",
+      "name": "Data Export (CSV/JSON)",
+      "phase": 3,
+      "description": "Export simulation data as CSV or JSON for external analysis. Include agent states, trades, beliefs.",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Data export option exists",
+          "Can choose CSV or JSON format",
+          "Can select what data to include (agents, trades, beliefs)",
+          "Exported file is valid and parseable"
+        ],
+        "property": [
+          "Exported data matches simulation state"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/visualization/test_export.py -v"]
+    },
+    {
+      "id": "VIZ-012",
+      "name": "Trade Click Detection",
+      "phase": 4,
+      "description": "Detect clicks on trade animations or trade events in timeline. Open trade detail view on click.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Clicking on active trade animation opens detail view",
+          "Clicking on trade marker in timeline opens detail view",
+          "Trade detail modal/panel appears"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    },
+    {
+      "id": "VIZ-013",
+      "name": "Edgeworth Box Rendering",
+      "phase": 4,
+      "description": "Render Edgeworth box diagram showing 2-agent, 2-good allocation space with correct axes and orientation.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Edgeworth box renders in trade detail view",
+          "Axes labeled correctly (good X, good Y)",
+          "Origin for agent A at bottom-left, agent B at top-right",
+          "Total endowment determines box dimensions"
+        ],
+        "property": [],
+        "theory": [
+          "Box correctly represents feasible allocations"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/visualization/test_edgeworth.py -v"]
+    },
+    {
+      "id": "VIZ-014",
+      "name": "Edgeworth Box Content",
+      "phase": 4,
+      "description": "Draw trade-relevant content in Edgeworth box: initial endowment, final allocation, indifference curves, contract curve.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Initial endowment point marked",
+          "Final allocation point marked",
+          "Indifference curves through both points for both agents",
+          "Contract curve displayed",
+          "Gains from trade region visible"
+        ],
+        "property": [
+          "Indifference curves computed from agent preferences",
+          "Contract curve computed correctly"
+        ],
+        "theory": [
+          "Final allocation lies on contract curve (Pareto efficient)",
+          "Both agents on higher indifference curve after trade"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/visualization/test_edgeworth.py -v"]
+    },
+    {
+      "id": "VIZ-015",
+      "name": "Perspective Mode Toggle",
+      "phase": 5,
+      "description": "Add toggle to switch between omniscient view and agent perspective view.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Toggle control for perspective mode exists",
+          "Can switch between 'Omniscient' and 'Agent Perspective'",
+          "Agent selector appears when in perspective mode"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    },
+    {
+      "id": "VIZ-016",
+      "name": "Agent Perspective Rendering",
+      "phase": 5,
+      "description": "In perspective mode, render what the selected agent observes. Dim/hide agents outside perception radius. Show observed types (not true types) under noisy information.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Agents outside perception radius are dimmed or hidden",
+          "Selected agent highlighted",
+          "Perception radius circle displayed"
+        ],
+        "property": [
+          "Under NoisyAlphaInformation, agent colors reflect observed alpha (not true alpha)",
+          "Tooltip shows observed type, not true type"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    },
+    {
+      "id": "VIZ-017",
+      "name": "Perspective Comparison",
+      "phase": 5,
+      "description": "Allow split view or toggle to compare agent's view vs ground truth. Useful for understanding information asymmetry effects.",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Can view ground truth alongside agent perspective",
+          "Differences between observed and true types are highlighted"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    },
+    {
+      "id": "VIZ-018",
+      "name": "Trade Network Overlay",
+      "phase": 6,
+      "description": "Overlay showing trade relationships: edges between agents who have traded, edge thickness or color encoding trade frequency or recency.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Toggle control for trade network exists",
+          "Edges render between agents who have traded",
+          "Edge appearance encodes trade information (frequency, recency, or surplus)"
+        ],
+        "property": [
+          "Edges correspond to actual trades in log"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    },
+    {
+      "id": "VIZ-019",
+      "name": "Surplus Heatmap Overlay",
+      "phase": 6,
+      "description": "Heatmap overlay showing potential gains from trade across the grid. Highlights areas of high opportunity.",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Toggle control for surplus heatmap exists",
+          "Heatmap renders as color gradient over grid",
+          "Legend shows surplus scale"
+        ],
+        "property": [
+          "Heatmap values computed from agent pairwise surplus"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run python -m microecon.visualization"]
+    }
+  ],
+
+  "architectural_decisions": {
+    "resolved": [
+      {
+        "id": "ADR-VIZ-001",
+        "decision": "Overlay Toggle Architecture",
+        "choice": "Centralized toggle state with observer pattern - VisualizationApp maintains dict of toggle states, render methods check state before drawing",
+        "rationale": "Simple, matches existing pattern in app.py, easily extensible for new overlays",
+        "source": "inferred",
+        "canonical_reference": null
+      },
+      {
+        "id": "ADR-VIZ-002",
+        "decision": "Export Implementation Approach",
+        "choice": "Use DearPyGui's screenshot capability for PNG, Pillow for processing, imageio for GIF assembly",
+        "rationale": "DearPyGui provides frame capture, Pillow/imageio are standard Python imaging libraries",
+        "source": "inferred",
+        "canonical_reference": "DearPyGui documentation"
+      },
+      {
+        "id": "ADR-VIZ-003",
+        "decision": "Edgeworth Box Rendering",
+        "choice": "Render in separate DearPyGui window/modal using drawlist, compute curves numerically",
+        "rationale": "Consistent with existing visualization approach, allows high-quality rendering",
+        "source": "inferred",
+        "canonical_reference": "VISUALIZATION.md Section 4"
+      }
+    ],
+    "pending_adrs": []
+  },
+
+  "tracking": {
+    "theory_divergences_file": null,
+    "retrospective_template": null
+  },
+
+  "escalation_triggers": [
+    "Changes to core simulation logic (src/microecon/simulation.py, agent.py, etc.) - visualization should be read-only consumer",
+    "Breaking changes to existing visualization functionality",
+    "Significant performance degradation (frame rate drops below 30fps with 50 agents)",
+    "Changes to logging format that would break replay compatibility"
+  ],
+
+  "loop_parameters": {
+    "max_iterations": 100,
+    "progress_tracking": ["git_commits", "prd_status_updates"],
+    "on_phase_complete": "ask"
+  }
+}

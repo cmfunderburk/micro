@@ -445,7 +445,7 @@ class TestMarketEmergenceEdgeCases:
             config,
             bargaining_protocol=RubinsteinBargainingProtocol(),
         )
-        assert result.protocol_name == "RubinsteinBargaining"
+        assert result.protocol_name == "rubinsteinbargaining"
 
     def test_market_emergence_with_stable_matching(self):
         """Market emergence with stable roommates matching."""
@@ -459,7 +459,7 @@ class TestMarketEmergenceEdgeCases:
             config,
             matching_protocol=StableRoommatesMatchingProtocol(),
         )
-        assert result.matching_name == "StableRoommatesMatching"
+        assert result.matching_name == "stableroommatesmatching"
 
     def test_market_emergence_with_noisy_info(self):
         """Market emergence with noisy information."""

@@ -415,7 +415,11 @@ def _optimize_y1(
 
     where u1 = x1^a1 * y1^(1-a1), u2 = x2^a2 * (W_y - y1)^(1-a2)
 
-    We use golden section search for unimodal optimization.
+    The feasible region for y1 is constrained by individual rationality:
+    - u1(x1, y1) >= d1  =>  y1 >= y1_min
+    - u2(x2, W_y - y1) >= d2  =>  y1 <= y1_max
+
+    We first find this feasible region, then use golden section search.
 
     Args:
         alpha1, alpha2: Cobb-Douglas preference parameters
@@ -445,15 +449,59 @@ def _optimize_y1(
         # Asymmetric Nash product: (u1 - d1)^w1 * (u2 - d2)^w2
         return ((u1 - d1) ** weight1) * ((u2 - d2) ** weight2)
 
-    # Golden section search
+    # Find feasible bounds for y1 where IR constraints can be satisfied
+    # For u1 = x1^a1 * y1^(1-a1) >= d1:
+    #   y1 >= (d1 / x1^a1)^(1/(1-a1)) = y1_min
+    # For u2 = x2^a2 * y2^(1-a2) >= d2, y2 = W_y - y1:
+    #   y2 >= (d2 / x2^a2)^(1/(1-a2))
+    #   y1 <= W_y - (d2 / x2^a2)^(1/(1-a2)) = y1_max
+
+    if x1 <= 0 or x2 <= 0:
+        return W_y / 2, -float('inf')
+
+    # Compute y1_min from agent 1's IR constraint
+    x1_term = x1 ** alpha1
+    if x1_term <= 0 or d1 <= 0:
+        y1_min = bound_eps
+    else:
+        ratio1 = d1 / x1_term
+        if ratio1 <= 0:
+            y1_min = bound_eps
+        else:
+            y1_min = ratio1 ** (1 / (1 - alpha1))
+
+    # Compute y1_max from agent 2's IR constraint
+    x2_term = x2 ** alpha2
+    if x2_term <= 0 or d2 <= 0:
+        y1_max = W_y - bound_eps
+    else:
+        ratio2 = d2 / x2_term
+        if ratio2 <= 0:
+            y2_min = bound_eps
+        else:
+            y2_min = ratio2 ** (1 / (1 - alpha2))
+        y1_max = W_y - y2_min
+
+    # Clamp to valid range
+    y1_min = max(y1_min, bound_eps)
+    y1_max = min(y1_max, W_y - bound_eps)
+
+    # If no feasible region exists, return infeasible
+    if y1_min >= y1_max:
+        return W_y / 2, -float('inf')
+
+    # Golden section search within the feasible region
     phi = (1 + math.sqrt(5)) / 2
-    a, b = bound_eps, W_y - bound_eps
+    a, b = y1_min, y1_max
 
     c = b - (b - a) / phi
     d_pt = a + (b - a) / phi
 
     for _ in range(50):  # Sufficient iterations for convergence
-        if nash_product(c) > nash_product(d_pt):
+        np_c = nash_product(c)
+        np_d = nash_product(d_pt)
+
+        if np_c > np_d:
             b = d_pt
         else:
             a = c

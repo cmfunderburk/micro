@@ -165,5 +165,5 @@ class TestMarketEmergenceScenario:
 
         assert result.analysis.n_agents == 10
         assert result.analysis.total_ticks == 20
-        assert result.protocol_name == "NashBargaining"
-        assert result.matching_name == "OpportunisticMatching"
+        assert result.protocol_name == "nashbargaining"
+        assert result.matching_name == "opportunisticmatching"

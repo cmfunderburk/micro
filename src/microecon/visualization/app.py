@@ -24,6 +24,11 @@ from microecon.logging import AgentSnapshot, TickRecord, RunData
 from microecon.logging.events import BeliefSnapshot, TypeBeliefSnapshot, PriceBeliefSnapshot
 from microecon.visualization.replay import ReplayController
 from microecon.visualization.timeseries import TimeSeriesPanel, DualTimeSeriesPanel
+from microecon.visualization.export import (
+    export_png, export_svg, SVGExportConfig,
+    export_tick_json, export_agents_csv, export_trades_csv,
+    GIFRecorder, GIFExportConfig, DataExportConfig,
+)
 
 
 # ============================================================================
@@ -309,6 +314,11 @@ class VisualizationApp:
         # Time-series panel (initialized in setup)
         self.timeseries_panel: Optional[TimeSeriesPanel] = None
 
+        # Export state (VIZ-008 to VIZ-011)
+        self._gif_recorder: Optional[GIFRecorder] = None
+        self._gif_recording = False
+        self.export_status_text: int = 0  # UI element reference
+
     def grid_to_canvas(self, pos: Position) -> tuple[float, float]:
         """Convert grid position to canvas coordinates."""
         x = self.canvas_origin[0] + (pos.col + 0.5) * self.cell_size
@@ -512,6 +522,50 @@ class VisualizationApp:
                             callback=self._on_overlay_toggle,
                             user_data="belief_connections",
                         )
+
+                    # Export section (VIZ-008 to VIZ-011)
+                    dpg.add_separator()
+                    with dpg.collapsing_header(label="Export", default_open=False):
+                        with dpg.group(horizontal=True):
+                            dpg.add_button(
+                                label="PNG",
+                                callback=self._export_png,
+                                width=50,
+                            )
+                            dpg.add_button(
+                                label="SVG",
+                                callback=self._export_svg,
+                                width=50,
+                            )
+                        with dpg.group(horizontal=True):
+                            dpg.add_button(
+                                label="JSON",
+                                callback=self._export_json,
+                                width=50,
+                            )
+                            dpg.add_button(
+                                label="CSV",
+                                callback=self._export_csv,
+                                width=50,
+                            )
+                        # GIF recording (replay mode)
+                        if self.mode == "replay":
+                            dpg.add_separator()
+                            with dpg.group(horizontal=True):
+                                dpg.add_button(
+                                    label="Record GIF",
+                                    callback=self._start_gif_recording,
+                                    width=80,
+                                    tag="gif_record_btn",
+                                )
+                                dpg.add_button(
+                                    label="Stop & Save",
+                                    callback=self._stop_gif_recording,
+                                    width=80,
+                                    tag="gif_stop_btn",
+                                    enabled=False,
+                                )
+                        self.export_status_text = dpg.add_text("", color=(150, 200, 150))
 
                     # Time-series charts
                     dpg.add_separator()
@@ -1177,6 +1231,96 @@ class VisualizationApp:
                     parent=self.drawlist,
                 )
 
+    # ========================================================================
+    # Export methods (VIZ-008 to VIZ-011)
+    # ========================================================================
+
+    def _export_png(self) -> None:
+        """Export current frame as PNG (VIZ-008)."""
+        from pathlib import Path
+        import time as time_module
+        timestamp = time_module.strftime("%Y%m%d_%H%M%S")
+        output_path = Path(f"export/screenshot_{timestamp}.png")
+        if export_png(output_path):
+            dpg.set_value(self.export_status_text, f"Saved: {output_path}")
+        else:
+            dpg.set_value(self.export_status_text, "PNG export failed")
+
+    def _export_svg(self) -> None:
+        """Export current state as SVG (VIZ-009)."""
+        from pathlib import Path
+        import time as time_module
+        timestamp = time_module.strftime("%Y%m%d_%H%M%S")
+        output_path = Path(f"export/visualization_{timestamp}.svg")
+        config = SVGExportConfig(include_trails=self.overlay_toggles.get("trails", True))
+        if export_svg(self, output_path, config):
+            dpg.set_value(self.export_status_text, f"Saved: {output_path}")
+        else:
+            dpg.set_value(self.export_status_text, "SVG export failed")
+
+    def _export_json(self) -> None:
+        """Export current tick as JSON (VIZ-011)."""
+        from pathlib import Path
+        import time as time_module
+        tick_record = self._get_current_tick_record()
+        if tick_record is None:
+            dpg.set_value(self.export_status_text, "No tick data to export")
+            return
+        timestamp = time_module.strftime("%Y%m%d_%H%M%S")
+        output_path = Path(f"export/tick_{tick_record.tick}_{timestamp}.json")
+        if export_tick_json(tick_record, output_path):
+            dpg.set_value(self.export_status_text, f"Saved: {output_path}")
+        else:
+            dpg.set_value(self.export_status_text, "JSON export failed")
+
+    def _export_csv(self) -> None:
+        """Export current tick agents as CSV (VIZ-011)."""
+        from pathlib import Path
+        import time as time_module
+        tick_record = self._get_current_tick_record()
+        if tick_record is None:
+            dpg.set_value(self.export_status_text, "No tick data to export")
+            return
+        timestamp = time_module.strftime("%Y%m%d_%H%M%S")
+        output_path = Path(f"export/agents_{tick_record.tick}_{timestamp}.csv")
+        if export_agents_csv(tick_record, output_path):
+            dpg.set_value(self.export_status_text, f"Saved: {output_path}")
+        else:
+            dpg.set_value(self.export_status_text, "CSV export failed")
+
+    def _get_current_tick_record(self) -> Optional[TickRecord]:
+        """Get current tick record for export."""
+        if self.mode == "replay" and self.replay is not None:
+            return self.replay.get_state()
+        # Live mode doesn't have full tick records, return None
+        return None
+
+    def _start_gif_recording(self) -> None:
+        """Start GIF recording (VIZ-010)."""
+        self._gif_recorder = GIFRecorder()
+        self._gif_recording = True
+        dpg.configure_item("gif_record_btn", enabled=False)
+        dpg.configure_item("gif_stop_btn", enabled=True)
+        dpg.set_value(self.export_status_text, "Recording GIF...")
+
+    def _stop_gif_recording(self) -> None:
+        """Stop GIF recording and save (VIZ-010)."""
+        if self._gif_recorder is None:
+            return
+        from pathlib import Path
+        import time as time_module
+        timestamp = time_module.strftime("%Y%m%d_%H%M%S")
+        output_path = Path(f"export/animation_{timestamp}.gif")
+        config = GIFExportConfig(frame_duration_ms=200)
+        if self._gif_recorder.export(output_path, config):
+            dpg.set_value(self.export_status_text, f"Saved: {output_path} ({len(self._gif_recorder.frames)} frames)")
+        else:
+            dpg.set_value(self.export_status_text, "GIF export failed")
+        self._gif_recording = False
+        self._gif_recorder = None
+        dpg.configure_item("gif_record_btn", enabled=True)
+        dpg.configure_item("gif_stop_btn", enabled=False)
+
     def run(self) -> None:
         """Main application loop."""
         self.setup()
@@ -1187,6 +1331,10 @@ class VisualizationApp:
             self.update_selection()
             self.render()
             dpg.render_dearpygui_frame()
+
+            # Capture frame for GIF if recording (VIZ-010)
+            if self._gif_recording and self._gif_recorder is not None:
+                self._gif_recorder.capture_frame()
 
         dpg.destroy_context()
 

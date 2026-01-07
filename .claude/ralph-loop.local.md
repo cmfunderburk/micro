@@ -1,6 +1,6 @@
 ---
 active: true
-iteration: 2
+iteration: 3
 max_iterations: 100
 completion_promise: "<promise>VISUALIZATION-POLISH-COMPLETE</promise>"
 started_at: "2026-01-07T23:30:54Z"

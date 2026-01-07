@@ -245,7 +245,7 @@
       "phase": 3,
       "description": "Export current visualization state as PNG image. Support configurable resolution for publication quality.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Export button/menu item exists",
@@ -266,7 +266,7 @@
       "phase": 3,
       "description": "Export current visualization as SVG for publication figures that require vector graphics.",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "SVG export option exists",
@@ -284,7 +284,7 @@
       "phase": 3,
       "description": "Export simulation replay as animated GIF. Configurable frame rate and duration.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "GIF export option exists (replay mode)",
@@ -303,7 +303,7 @@
       "phase": 3,
       "description": "Export simulation data as CSV or JSON for external analysis. Include agent states, trades, beliefs.",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Data export option exists",

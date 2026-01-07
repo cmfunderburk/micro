@@ -163,7 +163,7 @@
       "phase": 2,
       "description": "Extend hover tooltip to show belief summary: number of type beliefs, price belief mean/variance, memory depth.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Tooltip shows 'Beliefs: X type beliefs' when agent has beliefs",
@@ -184,7 +184,7 @@
       "phase": 2,
       "description": "When agent is selected, show detailed belief panel: list of type beliefs (who, believed alpha, confidence), price belief distribution.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Belief panel appears when agent with beliefs is selected",
@@ -205,7 +205,7 @@
       "phase": 2,
       "description": "Draw lines between agents representing belief relationships. Line thickness or opacity encodes confidence level.",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Toggle control for belief connections exists",
@@ -225,7 +225,7 @@
       "phase": 2,
       "description": "In replay mode, belief visualization updates as timeline scrubs. Show belief changes over time.",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Belief panel updates when tick changes",

@@ -21,6 +21,7 @@ from microecon.simulation import Simulation, create_simple_economy, TradeEvent
 from microecon.grid import Position
 from microecon.agent import Agent
 from microecon.logging import AgentSnapshot, TickRecord, RunData
+from microecon.logging.events import BeliefSnapshot, TypeBeliefSnapshot, PriceBeliefSnapshot
 from microecon.visualization.replay import ReplayController
 from microecon.visualization.timeseries import TimeSeriesPanel, DualTimeSeriesPanel
 
@@ -94,6 +95,87 @@ class AgentProxy:
             endowment_y=snapshot.endowment[1],
             utility=snapshot.utility,
             perception_radius=perception_radius,
+        )
+
+
+# ============================================================================
+# Belief data proxy (VIZ-004 to VIZ-007)
+# ============================================================================
+
+@dataclass
+class BeliefProxy:
+    """
+    Proxy for agent belief data in visualization.
+
+    Provides access to an agent's beliefs about other agents (type beliefs)
+    and about market prices (price belief).
+    """
+    agent_id: str
+    type_beliefs: tuple[TypeBeliefSnapshot, ...]  # Beliefs about other agents
+    price_belief: Optional[PriceBeliefSnapshot]   # Belief about prices
+    n_trades_in_memory: int
+
+    @property
+    def n_type_beliefs(self) -> int:
+        """Number of type beliefs held."""
+        return len(self.type_beliefs)
+
+    @property
+    def has_beliefs(self) -> bool:
+        """Whether agent has any beliefs."""
+        return self.n_type_beliefs > 0 or (self.price_belief is not None and self.price_belief.n_observations > 0)
+
+    def get_belief_about(self, target_id: str) -> Optional[TypeBeliefSnapshot]:
+        """Get belief about a specific agent, if any."""
+        for tb in self.type_beliefs:
+            if tb.target_agent_id == target_id:
+                return tb
+        return None
+
+    @classmethod
+    def from_snapshot(cls, snapshot: BeliefSnapshot) -> "BeliefProxy":
+        """Create from logged BeliefSnapshot."""
+        return cls(
+            agent_id=snapshot.agent_id,
+            type_beliefs=snapshot.type_beliefs,
+            price_belief=snapshot.price_belief,
+            n_trades_in_memory=snapshot.n_trades_in_memory,
+        )
+
+    @classmethod
+    def from_agent(cls, agent: Agent) -> "BeliefProxy":
+        """Create from live Agent with belief system."""
+        if not agent.has_beliefs:
+            return cls(
+                agent_id=agent.id,
+                type_beliefs=(),
+                price_belief=None,
+                n_trades_in_memory=0,
+            )
+
+        # Convert type beliefs to snapshots
+        type_belief_snapshots = tuple(
+            TypeBeliefSnapshot(
+                target_agent_id=tb.agent_id,
+                believed_alpha=tb.believed_alpha,
+                confidence=tb.confidence,
+                n_interactions=tb.n_interactions,
+            )
+            for tb in agent.type_beliefs.values()
+        )
+
+        # Convert price belief to snapshot
+        price_snapshot = PriceBeliefSnapshot(
+            mean=agent.price_belief.mean,
+            variance=agent.price_belief.variance,
+            n_observations=agent.price_belief.n_observations,
+        ) if agent.price_belief else None
+
+        return cls(
+            agent_id=agent.id,
+            type_beliefs=type_belief_snapshots,
+            price_belief=price_snapshot,
+            n_trades_in_memory=agent.memory.n_trades() if agent.memory else 0,
         )
 
 
@@ -211,14 +293,18 @@ class VisualizationApp:
         self._agent_proxies: list[AgentProxy] = []
         self._agents_by_id: dict[str, AgentProxy] = {}
 
-        # Overlay toggle state (VIZ-001, VIZ-002, VIZ-003)
+        # Overlay toggle state (VIZ-001, VIZ-002, VIZ-003, VIZ-006)
         self.overlay_toggles: dict[str, bool] = {
             "trails": True,              # Default ON for backward compatibility
             "perception_selected": True,  # Show perception for selected agent
             "perception_all": False,      # Show perception for all agents
+            "belief_connections": False,  # Show belief connections between agents (VIZ-006)
         }
         # UI element references for toggles
         self.overlay_toggle_ids: dict[str, int] = {}
+
+        # Belief proxy cache (VIZ-004 to VIZ-007)
+        self._belief_proxies: dict[str, BeliefProxy] = {}  # agent_id -> BeliefProxy
 
         # Time-series panel (initialized in setup)
         self.timeseries_panel: Optional[TimeSeriesPanel] = None
@@ -245,6 +331,7 @@ class VisualizationApp:
         """Rebuild agent proxy cache from current state."""
         self._agent_proxies = []
         self._agents_by_id = {}
+        self._belief_proxies = {}
 
         if self.mode == "live" and self.sim is not None:
             for agent in self.sim.agents:
@@ -253,6 +340,9 @@ class VisualizationApp:
                     proxy = AgentProxy.from_agent(agent, pos)
                     self._agent_proxies.append(proxy)
                     self._agents_by_id[proxy.id] = proxy
+                    # Build belief proxy (VIZ-004 to VIZ-007)
+                    if agent.has_beliefs:
+                        self._belief_proxies[agent.id] = BeliefProxy.from_agent(agent)
         elif self.mode == "replay" and self.replay is not None:
             state = self.replay.get_state()
             if state is not None:
@@ -262,6 +352,9 @@ class VisualizationApp:
                     proxy = AgentProxy.from_snapshot(snapshot, perception_radius)
                     self._agent_proxies.append(proxy)
                     self._agents_by_id[proxy.id] = proxy
+                # Build belief proxies from tick record (VIZ-007)
+                for belief_snapshot in state.belief_snapshots:
+                    self._belief_proxies[belief_snapshot.agent_id] = BeliefProxy.from_snapshot(belief_snapshot)
 
     def get_agents(self) -> list[AgentProxy]:
         """Get all agents as AgentProxy objects."""
@@ -270,6 +363,10 @@ class VisualizationApp:
     def get_agent_by_id(self, agent_id: str) -> Optional[AgentProxy]:
         """Get agent by ID."""
         return self._agents_by_id.get(agent_id)
+
+    def get_belief_by_id(self, agent_id: str) -> Optional[BeliefProxy]:
+        """Get belief proxy by agent ID (VIZ-004)."""
+        return self._belief_proxies.get(agent_id)
 
     def get_current_tick(self) -> int:
         """Get current tick number."""
@@ -371,6 +468,22 @@ class VisualizationApp:
                     self.hover_alpha_text = dpg.add_text("Alpha: -")
                     self.hover_endow_text = dpg.add_text("Endowment: -")
                     self.hover_utility_text = dpg.add_text("Utility: -")
+                    # Belief summary in hover (VIZ-004)
+                    self.hover_beliefs_text = dpg.add_text("Beliefs: -")
+
+                    # Belief panel for selected agent (VIZ-005)
+                    dpg.add_separator()
+                    with dpg.collapsing_header(label="Selected Agent Beliefs", default_open=False, tag="belief_panel_header"):
+                        self.belief_panel_agent_text = dpg.add_text("Agent: -")
+                        self.belief_panel_price_text = dpg.add_text("Price belief: -")
+                        self.belief_panel_memory_text = dpg.add_text("Trades in memory: -")
+                        dpg.add_separator()
+                        dpg.add_text("Type Beliefs:", color=(180, 180, 180))
+                        # Dynamic list of type beliefs (up to 5 shown)
+                        self.belief_panel_type_texts = []
+                        for i in range(5):
+                            txt = dpg.add_text(f"  -")
+                            self.belief_panel_type_texts.append(txt)
 
                     # Overlay toggles section (VIZ-001)
                     dpg.add_separator()
@@ -392,6 +505,12 @@ class VisualizationApp:
                             default_value=self.overlay_toggles["perception_all"],
                             callback=self._on_overlay_toggle,
                             user_data="perception_all",
+                        )
+                        self.overlay_toggle_ids["belief_connections"] = dpg.add_checkbox(
+                            label="Belief Connections",
+                            default_value=self.overlay_toggles["belief_connections"],
+                            callback=self._on_overlay_toggle,
+                            user_data="belief_connections",
                         )
 
                     # Time-series charts
@@ -704,10 +823,12 @@ class VisualizationApp:
         self.render_grid()
         self.render_trails()              # Trails behind agents
         self.render_perception_overlay()  # Radius behind agents
+        self.render_belief_connections()  # Belief lines behind agents (VIZ-006)
         self.render_trade_animations()
         self.render_agents()
         self.render_metrics()
         self.render_hover_info()
+        self.render_belief_panel()        # Belief panel for selected agent (VIZ-005)
 
     def render_grid(self) -> None:
         """Render the grid lines."""
@@ -942,7 +1063,7 @@ class VisualizationApp:
         dpg.set_value(self.gains_text, f"Gains: {self.get_welfare_gains():.1f}")
 
     def render_hover_info(self) -> None:
-        """Update hover information panel."""
+        """Update hover information panel (VIZ-004)."""
         if self.hovered_agent is not None:
             agent = self.hovered_agent
             dpg.set_value(self.hover_id_text, f"ID: {agent.id[:8]}...")
@@ -952,11 +1073,109 @@ class VisualizationApp:
                 f"Endowment: ({agent.endowment_x:.1f}, {agent.endowment_y:.1f})"
             )
             dpg.set_value(self.hover_utility_text, f"Utility: {agent.utility:.2f}")
+            # Belief summary (VIZ-004)
+            belief = self.get_belief_by_id(agent.id)
+            if belief and belief.has_beliefs:
+                price_info = ""
+                if belief.price_belief and belief.price_belief.n_observations > 0:
+                    price_info = f", p={belief.price_belief.mean:.2f}"
+                dpg.set_value(
+                    self.hover_beliefs_text,
+                    f"Beliefs: {belief.n_type_beliefs} types, {belief.n_trades_in_memory} mem{price_info}"
+                )
+            else:
+                dpg.set_value(self.hover_beliefs_text, "Beliefs: none")
         else:
             dpg.set_value(self.hover_id_text, "ID: -")
             dpg.set_value(self.hover_alpha_text, "Alpha: -")
             dpg.set_value(self.hover_endow_text, "Endowment: -")
             dpg.set_value(self.hover_utility_text, "Utility: -")
+            dpg.set_value(self.hover_beliefs_text, "Beliefs: -")
+
+    def render_belief_panel(self) -> None:
+        """Update belief panel for selected agent (VIZ-005)."""
+        if self.selected_agent is None:
+            dpg.set_value(self.belief_panel_agent_text, "Agent: (none selected)")
+            dpg.set_value(self.belief_panel_price_text, "Price belief: -")
+            dpg.set_value(self.belief_panel_memory_text, "Trades in memory: -")
+            for txt in self.belief_panel_type_texts:
+                dpg.set_value(txt, "  -")
+            return
+
+        belief = self.get_belief_by_id(self.selected_agent.id)
+        dpg.set_value(self.belief_panel_agent_text, f"Agent: {self.selected_agent.id[:8]}...")
+
+        if belief is None or not belief.has_beliefs:
+            dpg.set_value(self.belief_panel_price_text, "Price belief: (no beliefs)")
+            dpg.set_value(self.belief_panel_memory_text, "Trades in memory: 0")
+            for txt in self.belief_panel_type_texts:
+                dpg.set_value(txt, "  -")
+            return
+
+        # Price belief
+        if belief.price_belief and belief.price_belief.n_observations > 0:
+            dpg.set_value(
+                self.belief_panel_price_text,
+                f"Price belief: μ={belief.price_belief.mean:.2f}, σ²={belief.price_belief.variance:.3f}"
+            )
+        else:
+            dpg.set_value(self.belief_panel_price_text, "Price belief: none")
+
+        dpg.set_value(self.belief_panel_memory_text, f"Trades in memory: {belief.n_trades_in_memory}")
+
+        # Type beliefs (show up to 5)
+        type_beliefs_sorted = sorted(
+            belief.type_beliefs,
+            key=lambda tb: tb.confidence,
+            reverse=True
+        )[:5]
+
+        for i, txt in enumerate(self.belief_panel_type_texts):
+            if i < len(type_beliefs_sorted):
+                tb = type_beliefs_sorted[i]
+                dpg.set_value(
+                    txt,
+                    f"  {tb.target_agent_id[:6]}: α={tb.believed_alpha:.2f} (c={tb.confidence:.2f})"
+                )
+            else:
+                dpg.set_value(txt, "  -")
+
+    def render_belief_connections(self) -> None:
+        """Draw belief connection lines between agents (VIZ-006).
+
+        Lines connect agents who have beliefs about each other.
+        Line opacity encodes confidence level.
+        """
+        if not self.overlay_toggles.get("belief_connections", False):
+            return
+
+        # Draw lines for all type beliefs
+        for agent_id, belief in self._belief_proxies.items():
+            observer = self.get_agent_by_id(agent_id)
+            if observer is None:
+                continue
+
+            for type_belief in belief.type_beliefs:
+                target = self.get_agent_by_id(type_belief.target_agent_id)
+                if target is None:
+                    continue
+
+                # Draw line with opacity based on confidence
+                opacity = int(40 + type_belief.confidence * 160)  # 40-200
+                color = (150, 200, 255, opacity)
+
+                p1 = self.grid_to_canvas(observer.position)
+                p2 = self.grid_to_canvas(target.position)
+
+                # Line thickness based on confidence
+                thickness = 1 + type_belief.confidence * 2  # 1-3
+
+                dpg.draw_line(
+                    p1, p2,
+                    color=color,
+                    thickness=thickness,
+                    parent=self.drawlist,
+                )
 
     def run(self) -> None:
         """Main application loop."""

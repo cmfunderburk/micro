@@ -107,7 +107,7 @@
       "phase": 1,
       "description": "Add a collapsible panel in the metrics area with toggle controls for overlays. Establish consistent toggle pattern.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Toggle panel renders in metrics area",
@@ -125,7 +125,7 @@
       "phase": 1,
       "description": "Make movement trails toggleable. Default to ON for backward compatibility.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Toggle control for trails exists",
@@ -144,7 +144,7 @@
       "phase": 1,
       "description": "Add toggle for perception radius overlay. When enabled, shows radius for selected agent (existing behavior) OR all agents.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Toggle control for perception radius exists",

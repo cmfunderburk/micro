@@ -211,6 +211,15 @@ class VisualizationApp:
         self._agent_proxies: list[AgentProxy] = []
         self._agents_by_id: dict[str, AgentProxy] = {}
 
+        # Overlay toggle state (VIZ-001, VIZ-002, VIZ-003)
+        self.overlay_toggles: dict[str, bool] = {
+            "trails": True,              # Default ON for backward compatibility
+            "perception_selected": True,  # Show perception for selected agent
+            "perception_all": False,      # Show perception for all agents
+        }
+        # UI element references for toggles
+        self.overlay_toggle_ids: dict[str, int] = {}
+
         # Time-series panel (initialized in setup)
         self.timeseries_panel: Optional[TimeSeriesPanel] = None
 
@@ -363,6 +372,28 @@ class VisualizationApp:
                     self.hover_endow_text = dpg.add_text("Endowment: -")
                     self.hover_utility_text = dpg.add_text("Utility: -")
 
+                    # Overlay toggles section (VIZ-001)
+                    dpg.add_separator()
+                    with dpg.collapsing_header(label="Overlays", default_open=True):
+                        self.overlay_toggle_ids["trails"] = dpg.add_checkbox(
+                            label="Movement Trails",
+                            default_value=self.overlay_toggles["trails"],
+                            callback=self._on_overlay_toggle,
+                            user_data="trails",
+                        )
+                        self.overlay_toggle_ids["perception_selected"] = dpg.add_checkbox(
+                            label="Perception (Selected)",
+                            default_value=self.overlay_toggles["perception_selected"],
+                            callback=self._on_overlay_toggle,
+                            user_data="perception_selected",
+                        )
+                        self.overlay_toggle_ids["perception_all"] = dpg.add_checkbox(
+                            label="Perception (All Agents)",
+                            default_value=self.overlay_toggles["perception_all"],
+                            callback=self._on_overlay_toggle,
+                            user_data="perception_all",
+                        )
+
                     # Time-series charts
                     dpg.add_separator()
                     self.timeseries_panel = TimeSeriesPanel("metrics_panel")
@@ -472,6 +503,10 @@ class VisualizationApp:
     def on_speed_change(self, sender: int, app_data: float) -> None:
         """Handle speed slider change."""
         self.ticks_per_second = app_data
+
+    def _on_overlay_toggle(self, sender: int, app_data: bool, user_data: str) -> None:
+        """Handle overlay toggle checkbox change (VIZ-001)."""
+        self.overlay_toggles[user_data] = app_data
 
     def on_timeline_change(self, sender: int, app_data: int) -> None:
         """Handle timeline slider change (replay mode)."""
@@ -699,7 +734,9 @@ class VisualizationApp:
             )
 
     def render_trails(self) -> None:
-        """Draw movement trails for all agents."""
+        """Draw movement trails for all agents (VIZ-002)."""
+        if not self.overlay_toggles.get("trails", True):
+            return  # Toggle is OFF
         for agent in self.get_agents():
             history = self.position_history.get(agent.id, [])
             if len(history) < 2:
@@ -722,28 +759,51 @@ class VisualizationApp:
                 dpg.draw_line(p1, p2, color=trail_color, thickness=2, parent=self.drawlist)
 
     def render_perception_overlay(self) -> None:
-        """Draw perception radius circle for selected agent."""
-        if self.selected_agent is None:
-            return
+        """Draw perception radius circles (VIZ-003).
 
-        # In replay mode, need to verify agent still exists (selection may be stale)
-        current_agent = self.get_agent_by_id(self.selected_agent.id)
-        if current_agent is None:
-            self.selected_agent = None
-            return
+        Supports two modes controlled by toggles:
+        - perception_selected: Show radius for selected agent only
+        - perception_all: Show radius for all agents
+        """
+        show_selected = self.overlay_toggles.get("perception_selected", True)
+        show_all = self.overlay_toggles.get("perception_all", False)
 
-        cx, cy = self.grid_to_canvas(current_agent.position)
-        # Convert perception_radius (grid units) to canvas pixels
-        radius_px = current_agent.perception_radius * self.cell_size
+        if not show_selected and not show_all:
+            return  # Both toggles OFF
 
-        # Draw semi-transparent circle
-        dpg.draw_circle(
-            (cx, cy),
-            radius_px,
-            color=(100, 150, 255, 60),  # Light blue stroke
-            fill=(100, 150, 255, 30),   # Very subtle fill
-            parent=self.drawlist,
-        )
+        agents_to_show = []
+
+        if show_all:
+            # Show perception for all agents
+            agents_to_show = self.get_agents()
+        elif show_selected and self.selected_agent is not None:
+            # Only show for selected agent
+            current_agent = self.get_agent_by_id(self.selected_agent.id)
+            if current_agent is None:
+                self.selected_agent = None
+                return
+            agents_to_show = [current_agent]
+
+        for agent in agents_to_show:
+            cx, cy = self.grid_to_canvas(agent.position)
+            # Convert perception_radius (grid units) to canvas pixels
+            radius_px = agent.perception_radius * self.cell_size
+
+            # Use different opacity when showing all agents (less prominent)
+            if show_all and len(agents_to_show) > 1:
+                stroke_color = (100, 150, 255, 40)
+                fill_color = (100, 150, 255, 15)
+            else:
+                stroke_color = (100, 150, 255, 60)
+                fill_color = (100, 150, 255, 30)
+
+            dpg.draw_circle(
+                (cx, cy),
+                radius_px,
+                color=stroke_color,
+                fill=fill_color,
+                parent=self.drawlist,
+            )
 
     def render_agents(self) -> None:
         """Render all agents on the grid."""
@@ -1017,6 +1077,13 @@ class DualVisualizationApp:
         self.events_a = self._precompute_events(run_a)
         self.events_b = self._precompute_events(run_b)
 
+        # Overlay toggle state (VIZ-001, VIZ-002, VIZ-003)
+        self.overlay_toggles: dict[str, bool] = {
+            "trails": True,  # Default ON for backward compatibility
+        }
+        # UI element references for toggles
+        self.overlay_toggle_ids: dict[str, int] = {}
+
         # Timeline drawlist reference
         self.timeline_drawlist: int = 0
         self.timeline_width = 400  # Will be updated in render
@@ -1148,6 +1215,16 @@ class DualVisualizationApp:
                     self.welfare_diff_text = dpg.add_text("  Welfare: +0.0")
                     self.trades_diff_text = dpg.add_text("  Trades: +0")
 
+                    # Overlay toggles section (VIZ-001)
+                    dpg.add_separator()
+                    with dpg.collapsing_header(label="Overlays", default_open=True):
+                        self.overlay_toggle_ids["trails"] = dpg.add_checkbox(
+                            label="Movement Trails",
+                            default_value=self.overlay_toggles["trails"],
+                            callback=self._on_overlay_toggle,
+                            user_data="trails",
+                        )
+
                     # Time-series charts for comparison
                     dpg.add_separator()
                     self.timeseries_panel = DualTimeSeriesPanel(
@@ -1262,6 +1339,10 @@ class DualVisualizationApp:
     def on_speed_change(self, sender: int, app_data: float) -> None:
         """Handle speed slider change."""
         self.ticks_per_second = app_data
+
+    def _on_overlay_toggle(self, sender: int, app_data: bool, user_data: str) -> None:
+        """Handle overlay toggle checkbox change (VIZ-001)."""
+        self.overlay_toggles[user_data] = app_data
 
     def on_timeline_change(self, sender: int, app_data: int) -> None:
         """Handle timeline slider change."""
@@ -1482,25 +1563,26 @@ class DualVisualizationApp:
                 parent=drawlist,
             )
 
-        # Draw movement trails (behind agents)
-        for agent in agents:
-            history = position_history.get(agent.id, [])
-            if len(history) < 2:
-                continue
+        # Draw movement trails (behind agents) - VIZ-002
+        if self.overlay_toggles.get("trails", True):
+            for agent in agents:
+                history = position_history.get(agent.id, [])
+                if len(history) < 2:
+                    continue
 
-            # Build point list: history + current (oldest to newest)
-            points = history + [agent.position]
+                # Build point list: history + current (oldest to newest)
+                points = history + [agent.position]
 
-            # Draw line segments with fading opacity
-            for i in range(len(points) - 1):
-                opacity = int(40 + (i / len(points)) * 80)  # 40 to 120
-                p1 = self.grid_to_canvas(points[i], origin)
-                p2 = self.grid_to_canvas(points[i + 1], origin)
+                # Draw line segments with fading opacity
+                for i in range(len(points) - 1):
+                    opacity = int(40 + (i / len(points)) * 80)  # 40 to 120
+                    p1 = self.grid_to_canvas(points[i], origin)
+                    p2 = self.grid_to_canvas(points[i + 1], origin)
 
-                base_color = alpha_to_color(agent.alpha)
-                trail_color = (base_color[0], base_color[1], base_color[2], opacity)
+                    base_color = alpha_to_color(agent.alpha)
+                    trail_color = (base_color[0], base_color[1], base_color[2], opacity)
 
-                dpg.draw_line(p1, p2, color=trail_color, thickness=2, parent=drawlist)
+                    dpg.draw_line(p1, p2, color=trail_color, thickness=2, parent=drawlist)
 
         # Draw trade animations
         current_time = time.time()

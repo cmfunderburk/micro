@@ -8,21 +8,25 @@ This module provides:
 
 from .events import (
     AgentSnapshot,
+    BeliefSnapshot,
     CommitmentBrokenEvent,
     CommitmentFormedEvent,
     MovementEvent,
+    PriceBeliefSnapshot,
     RunSummary,
     SearchDecision,
     SimulationConfig,
     TargetEvaluation,
     TickRecord,
     TradeEvent,
+    TypeBeliefSnapshot,
 )
 from .formats import JSONLinesFormat, LogFormat, load_batch, load_run
 from .logger import (
     RunData,
     SimulationLogger,
     create_agent_snapshot,
+    create_belief_snapshot,
     create_commitment_broken_event,
     create_commitment_formed_event,
     create_movement_event,
@@ -35,20 +39,24 @@ from .logger import (
 __all__ = [
     # Events
     "AgentSnapshot",
+    "BeliefSnapshot",
     "CommitmentBrokenEvent",
     "CommitmentFormedEvent",
     "MovementEvent",
+    "PriceBeliefSnapshot",
     "RunSummary",
     "SearchDecision",
     "SimulationConfig",
     "TargetEvaluation",
     "TickRecord",
     "TradeEvent",
+    "TypeBeliefSnapshot",
     # Logger
     "RunData",
     "SimulationLogger",
     # Helpers
     "create_agent_snapshot",
+    "create_belief_snapshot",
     "create_commitment_broken_event",
     "create_commitment_formed_event",
     "create_movement_event",

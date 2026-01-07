@@ -10,15 +10,18 @@ from typing import TYPE_CHECKING
 
 from .events import (
     AgentSnapshot,
+    BeliefSnapshot,
     CommitmentBrokenEvent,
     CommitmentFormedEvent,
     MovementEvent,
+    PriceBeliefSnapshot,
     RunSummary,
     SearchDecision,
     SimulationConfig,
     TargetEvaluation,
     TickRecord,
     TradeEvent,
+    TypeBeliefSnapshot,
 )
 
 if TYPE_CHECKING:
@@ -287,6 +290,43 @@ def create_commitment_broken_event(
     )
 
 
+def create_belief_snapshot(
+    agent_id: str,
+    type_beliefs: list[tuple[str, float, float, int]],  # (target_id, alpha, confidence, n_interactions)
+    price_belief: tuple[float, float, int],  # (mean, variance, n_observations)
+    n_trades_in_memory: int,
+) -> BeliefSnapshot:
+    """Create a BeliefSnapshot from agent's belief state.
+
+    Args:
+        agent_id: ID of the agent whose beliefs are captured
+        type_beliefs: List of (target_agent_id, believed_alpha, confidence, n_interactions)
+        price_belief: Tuple of (mean, variance, n_observations)
+        n_trades_in_memory: Number of trades in agent's memory
+
+    Returns:
+        BeliefSnapshot with complete belief state
+    """
+    return BeliefSnapshot(
+        agent_id=agent_id,
+        type_beliefs=tuple(
+            TypeBeliefSnapshot(
+                target_agent_id=target_id,
+                believed_alpha=alpha,
+                confidence=confidence,
+                n_interactions=n_interactions,
+            )
+            for target_id, alpha, confidence, n_interactions in type_beliefs
+        ),
+        price_belief=PriceBeliefSnapshot(
+            mean=price_belief[0],
+            variance=price_belief[1],
+            n_observations=price_belief[2],
+        ),
+        n_trades_in_memory=n_trades_in_memory,
+    )
+
+
 def create_tick_record(
     tick: int,
     agent_snapshots: list[AgentSnapshot],
@@ -297,6 +337,7 @@ def create_tick_record(
     cumulative_trades: int,
     commitments_formed: list[CommitmentFormedEvent] | None = None,
     commitments_broken: list[CommitmentBrokenEvent] | None = None,
+    belief_snapshots: list[BeliefSnapshot] | None = None,
 ) -> TickRecord:
     """Create a TickRecord from tick execution."""
     return TickRecord(
@@ -309,4 +350,5 @@ def create_tick_record(
         cumulative_trades=cumulative_trades,
         commitments_formed=tuple(commitments_formed or []),
         commitments_broken=tuple(commitments_broken or []),
+        belief_snapshots=tuple(belief_snapshots or []),
     )

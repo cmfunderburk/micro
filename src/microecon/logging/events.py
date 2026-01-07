@@ -301,6 +301,90 @@ class CommitmentBrokenEvent:
 
 
 @dataclass(frozen=True)
+class TypeBeliefSnapshot:
+    """Snapshot of an agent's belief about another agent's type."""
+
+    target_agent_id: str
+    believed_alpha: float
+    confidence: float
+    n_interactions: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "target_agent_id": self.target_agent_id,
+            "believed_alpha": self.believed_alpha,
+            "confidence": self.confidence,
+            "n_interactions": self.n_interactions,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "TypeBeliefSnapshot":
+        return cls(
+            target_agent_id=d["target_agent_id"],
+            believed_alpha=d["believed_alpha"],
+            confidence=d["confidence"],
+            n_interactions=d["n_interactions"],
+        )
+
+
+@dataclass(frozen=True)
+class PriceBeliefSnapshot:
+    """Snapshot of an agent's price belief."""
+
+    mean: float
+    variance: float
+    n_observations: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "mean": self.mean,
+            "variance": self.variance,
+            "n_observations": self.n_observations,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "PriceBeliefSnapshot":
+        return cls(
+            mean=d["mean"],
+            variance=d["variance"],
+            n_observations=d["n_observations"],
+        )
+
+
+@dataclass(frozen=True)
+class BeliefSnapshot:
+    """Complete snapshot of an agent's belief state at a point in time.
+
+    Enables belief trajectory analysis: tracking how beliefs evolve
+    across ticks as agents interact and learn.
+    """
+
+    agent_id: str
+    type_beliefs: tuple[TypeBeliefSnapshot, ...]  # Beliefs about other agents
+    price_belief: PriceBeliefSnapshot
+    n_trades_in_memory: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "agent_id": self.agent_id,
+            "type_beliefs": [tb.to_dict() for tb in self.type_beliefs],
+            "price_belief": self.price_belief.to_dict(),
+            "n_trades_in_memory": self.n_trades_in_memory,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "BeliefSnapshot":
+        return cls(
+            agent_id=d["agent_id"],
+            type_beliefs=tuple(
+                TypeBeliefSnapshot.from_dict(tb) for tb in d["type_beliefs"]
+            ),
+            price_belief=PriceBeliefSnapshot.from_dict(d["price_belief"]),
+            n_trades_in_memory=d["n_trades_in_memory"],
+        )
+
+
+@dataclass(frozen=True)
 class TickRecord:
     """Complete record of a single simulation tick."""
 
@@ -314,6 +398,8 @@ class TickRecord:
     # Commitment events (for committed matching protocols)
     commitments_formed: tuple[CommitmentFormedEvent, ...] = ()
     commitments_broken: tuple[CommitmentBrokenEvent, ...] = ()
+    # Belief snapshots (for belief-enabled agents)
+    belief_snapshots: tuple[BeliefSnapshot, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -326,6 +412,7 @@ class TickRecord:
             "cumulative_trades": self.cumulative_trades,
             "commitments_formed": [c.to_dict() for c in self.commitments_formed],
             "commitments_broken": [c.to_dict() for c in self.commitments_broken],
+            "belief_snapshots": [b.to_dict() for b in self.belief_snapshots],
         }
 
     @classmethod
@@ -347,6 +434,9 @@ class TickRecord:
             ),
             commitments_broken=tuple(
                 CommitmentBrokenEvent.from_dict(c) for c in d.get("commitments_broken", [])
+            ),
+            belief_snapshots=tuple(
+                BeliefSnapshot.from_dict(b) for b in d.get("belief_snapshots", [])
             ),
         )
 

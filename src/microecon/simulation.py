@@ -479,6 +479,7 @@ class Simulation:
         """Create and log a complete tick record."""
         from microecon.logging import (
             create_agent_snapshot,
+            create_belief_snapshot,
             create_commitment_broken_event,
             create_commitment_formed_event,
             create_search_decision,
@@ -568,6 +569,33 @@ class Simulation:
             for a, b, reason in commitments_broken_data
         ]
 
+        # Create belief snapshots for agents with beliefs
+        belief_snapshots = []
+        for agent in self.agents:
+            if agent.has_beliefs:
+                # Collect type beliefs
+                type_beliefs_data = [
+                    (
+                        tb.agent_id,
+                        tb.believed_alpha,
+                        tb.confidence,
+                        tb.n_interactions,
+                    )
+                    for tb in agent.type_beliefs.values()
+                ]
+                # Collect price belief
+                price_belief_data = (
+                    agent.price_belief.mean,
+                    agent.price_belief.variance,
+                    agent.price_belief.n_observations,
+                )
+                belief_snapshots.append(create_belief_snapshot(
+                    agent_id=agent.id,
+                    type_beliefs=type_beliefs_data,
+                    price_belief=price_belief_data,
+                    n_trades_in_memory=agent.memory.n_trades(),
+                ))
+
         # Create and log the tick record
         tick_record = create_tick_record(
             tick=self.tick,
@@ -579,6 +607,7 @@ class Simulation:
             cumulative_trades=len(self.trades),
             commitments_formed=commitments_formed,
             commitments_broken=commitments_broken,
+            belief_snapshots=belief_snapshots,
         )
 
         self.logger.log_tick(tick_record)

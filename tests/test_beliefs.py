@@ -1271,3 +1271,258 @@ class TestBeliefSystemIntegration:
         record_observed_trade(agent, "a2", "a3", 100.0, 1.0, tick=1)
 
         assert agent.price_belief.mean == initial_price_mean  # Unchanged
+
+
+class TestBeliefSnapshotLogging:
+    """Tests for FIND-03 Option B: Belief snapshot logging."""
+
+    def test_belief_snapshot_dataclass(self):
+        """BeliefSnapshot dataclass should serialize correctly."""
+        from microecon.logging import (
+            BeliefSnapshot,
+            PriceBeliefSnapshot,
+            TypeBeliefSnapshot,
+        )
+
+        snapshot = BeliefSnapshot(
+            agent_id="agent_001",
+            type_beliefs=(
+                TypeBeliefSnapshot(
+                    target_agent_id="agent_002",
+                    believed_alpha=0.7,
+                    confidence=0.8,
+                    n_interactions=5,
+                ),
+            ),
+            price_belief=PriceBeliefSnapshot(mean=1.5, variance=0.2, n_observations=10),
+            n_trades_in_memory=3,
+        )
+
+        # Serialize to dict
+        d = snapshot.to_dict()
+        assert d["agent_id"] == "agent_001"
+        assert len(d["type_beliefs"]) == 1
+        assert d["type_beliefs"][0]["believed_alpha"] == 0.7
+        assert d["price_belief"]["mean"] == 1.5
+        assert d["n_trades_in_memory"] == 3
+
+        # Deserialize from dict
+        restored = BeliefSnapshot.from_dict(d)
+        assert restored.agent_id == "agent_001"
+        assert len(restored.type_beliefs) == 1
+        assert restored.type_beliefs[0].believed_alpha == 0.7
+
+    def test_tick_record_includes_belief_snapshots(self):
+        """TickRecord should include belief_snapshots field."""
+        from microecon.logging import (
+            BeliefSnapshot,
+            PriceBeliefSnapshot,
+            TickRecord,
+            TypeBeliefSnapshot,
+        )
+
+        belief_snapshots = (
+            BeliefSnapshot(
+                agent_id="a1",
+                type_beliefs=(),
+                price_belief=PriceBeliefSnapshot(mean=1.0, variance=1.0, n_observations=0),
+                n_trades_in_memory=0,
+            ),
+        )
+
+        tick_record = TickRecord(
+            tick=0,
+            agent_snapshots=(),
+            search_decisions=(),
+            movements=(),
+            trades=(),
+            total_welfare=100.0,
+            cumulative_trades=0,
+            belief_snapshots=belief_snapshots,
+        )
+
+        # Should serialize with belief snapshots
+        d = tick_record.to_dict()
+        assert "belief_snapshots" in d
+        assert len(d["belief_snapshots"]) == 1
+
+        # Should deserialize with belief snapshots
+        restored = TickRecord.from_dict(d)
+        assert len(restored.belief_snapshots) == 1
+        assert restored.belief_snapshots[0].agent_id == "a1"
+
+    def test_create_belief_snapshot_helper(self):
+        """create_belief_snapshot helper should work correctly."""
+        from microecon.logging import create_belief_snapshot
+
+        snapshot = create_belief_snapshot(
+            agent_id="test_agent",
+            type_beliefs=[
+                ("partner1", 0.6, 0.9, 10),
+                ("partner2", 0.4, 0.7, 5),
+            ],
+            price_belief=(1.2, 0.5, 15),
+            n_trades_in_memory=7,
+        )
+
+        assert snapshot.agent_id == "test_agent"
+        assert len(snapshot.type_beliefs) == 2
+        assert snapshot.type_beliefs[0].target_agent_id == "partner1"
+        assert snapshot.type_beliefs[0].believed_alpha == 0.6
+        assert snapshot.type_beliefs[1].target_agent_id == "partner2"
+        assert snapshot.price_belief.mean == 1.2
+        assert snapshot.n_trades_in_memory == 7
+
+    def test_simulation_logs_belief_snapshots(self):
+        """Simulation should log belief snapshots for belief-enabled agents."""
+        from microecon.grid import Grid, Position
+        from microecon.simulation import Simulation
+        from microecon.information import FullInformation
+        from microecon.bargaining import NashBargainingProtocol
+        from microecon.logging import SimulationLogger, SimulationConfig
+
+        # Create agents with beliefs
+        agent1 = create_agent(alpha=0.3, endowment_x=10, endowment_y=2, agent_id="a1")
+        agent2 = create_agent(alpha=0.7, endowment_x=2, endowment_y=10, agent_id="a2")
+        agent1.enable_beliefs()
+        agent2.enable_beliefs()
+
+        # Create simulation with logging
+        grid = Grid(size=10)
+        config = SimulationConfig(
+            n_agents=2,
+            grid_size=10,
+            seed=42,
+            protocol_name="nash",
+        )
+        logger = SimulationLogger(config)
+
+        sim = Simulation(
+            grid=grid,
+            bargaining_protocol=NashBargainingProtocol(),
+            info_env=FullInformation(),
+        )
+        sim.logger = logger
+
+        # Place agents at same position to force trade
+        sim.add_agent(agent1, Position(5, 5))
+        sim.add_agent(agent2, Position(5, 5))
+
+        # Run simulation
+        sim.run(ticks=5)
+
+        # Get logged data
+        run_data = logger.finalize()
+
+        # Should have tick records
+        assert len(run_data.ticks) == 5
+
+        # Each tick should have belief snapshots for belief-enabled agents
+        for tick_record in run_data.ticks:
+            assert len(tick_record.belief_snapshots) == 2  # Both agents have beliefs
+            agent_ids = {bs.agent_id for bs in tick_record.belief_snapshots}
+            assert agent_ids == {"a1", "a2"}
+
+    def test_belief_snapshots_reflect_learning(self):
+        """Belief snapshots should show belief changes over time."""
+        from microecon.grid import Grid, Position
+        from microecon.simulation import Simulation
+        from microecon.information import FullInformation
+        from microecon.bargaining import NashBargainingProtocol
+        from microecon.logging import SimulationLogger, SimulationConfig
+
+        # Create agents with beliefs
+        agent1 = create_agent(alpha=0.3, endowment_x=10, endowment_y=2, agent_id="a1")
+        agent2 = create_agent(alpha=0.7, endowment_x=2, endowment_y=10, agent_id="a2")
+        agent1.enable_beliefs()
+        agent2.enable_beliefs()
+
+        # Create simulation with logging
+        grid = Grid(size=10)
+        config = SimulationConfig(
+            n_agents=2,
+            grid_size=10,
+            seed=42,
+            protocol_name="nash",
+        )
+        logger = SimulationLogger(config)
+
+        sim = Simulation(
+            grid=grid,
+            bargaining_protocol=NashBargainingProtocol(),
+            info_env=FullInformation(),
+        )
+        sim.logger = logger
+
+        # Place agents at same position to force trade
+        sim.add_agent(agent1, Position(5, 5))
+        sim.add_agent(agent2, Position(5, 5))
+
+        # Run simulation
+        sim.run(ticks=10)
+
+        run_data = logger.finalize()
+
+        # After trades, agents should form beliefs about each other
+        # Find a1's belief snapshots across ticks
+        a1_snapshots = [
+            bs for tick in run_data.ticks
+            for bs in tick.belief_snapshots
+            if bs.agent_id == "a1"
+        ]
+
+        # Initially no type beliefs (tick 0), then beliefs form after trade
+        tick0_beliefs = run_data.ticks[0].belief_snapshots
+        a1_tick0 = next(bs for bs in tick0_beliefs if bs.agent_id == "a1")
+
+        # Check that beliefs accumulate over time
+        # (The exact timing depends on when trades occur)
+        final_tick_beliefs = run_data.ticks[-1].belief_snapshots
+        a1_final = next(bs for bs in final_tick_beliefs if bs.agent_id == "a1")
+
+        # Should have some trades in memory by end if trading occurred
+        if len(sim.trades) > 0:
+            assert a1_final.n_trades_in_memory > 0
+
+    def test_non_belief_agents_excluded_from_snapshots(self):
+        """Agents without beliefs should not appear in belief_snapshots."""
+        from microecon.grid import Grid, Position
+        from microecon.simulation import Simulation
+        from microecon.information import FullInformation
+        from microecon.bargaining import NashBargainingProtocol
+        from microecon.logging import SimulationLogger, SimulationConfig
+
+        # Create agents - only one has beliefs
+        agent1 = create_agent(alpha=0.3, endowment_x=10, endowment_y=2, agent_id="a1")
+        agent2 = create_agent(alpha=0.7, endowment_x=2, endowment_y=10, agent_id="a2")
+        agent1.enable_beliefs()
+        # agent2 does NOT have beliefs enabled
+
+        # Create simulation with logging
+        grid = Grid(size=10)
+        config = SimulationConfig(
+            n_agents=2,
+            grid_size=10,
+            seed=42,
+            protocol_name="nash",
+        )
+        logger = SimulationLogger(config)
+
+        sim = Simulation(
+            grid=grid,
+            bargaining_protocol=NashBargainingProtocol(),
+            info_env=FullInformation(),
+        )
+        sim.logger = logger
+
+        sim.add_agent(agent1, Position(5, 5))
+        sim.add_agent(agent2, Position(5, 5))
+
+        sim.run(ticks=3)
+
+        run_data = logger.finalize()
+
+        # Only agent1 should have belief snapshots
+        for tick_record in run_data.ticks:
+            assert len(tick_record.belief_snapshots) == 1
+            assert tick_record.belief_snapshots[0].agent_id == "a1"

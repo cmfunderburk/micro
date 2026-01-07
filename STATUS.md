@@ -1,7 +1,7 @@
 # Current Project Status
 
-**Version:** 0.1.0 (community release)
-**Date:** 2026-01-05
+**Version:** 0.1.1 (belief system release)
+**Date:** 2026-01-07
 **Purpose:** Definitive reference for current capabilities
 
 This document describes what exists and works today. For the long-term vision, see VISION.md. For the full visualization design, see VISUALIZATION.md.
@@ -18,13 +18,14 @@ A complete simulation engine for bilateral exchange in a spatial economy:
 |--------|------------|
 | `bundle.py` | 2-good bundles with arithmetic operations |
 | `preferences.py` | Cobb-Douglas utility with MRS, indifference curves, Marshallian demand |
-| `agent.py` | Agents with private state / observable type separation |
+| `agent.py` | Agents with private state / observable type separation, optional belief system |
 | `grid.py` | NxN toroidal grid, positions, movement, spatial queries |
-| `information.py` | Information environment abstraction (`FullInformation` implemented) |
-| `bargaining.py` | Nash and Rubinstein bargaining protocols |
-| `search.py` | Target evaluation (discounted surplus), movement decisions |
+| `information.py` | Information environment abstraction (`FullInformation`, `NoisyAlphaInformation`) |
+| `beliefs.py` | Agent memory, type beliefs, price beliefs, Bayesian and heuristic update rules |
+| `bargaining.py` | Nash and Rubinstein bargaining protocols with belief-aware surplus calculation |
+| `search.py` | Target evaluation (discounted surplus), movement decisions, belief integration |
 | `matching.py` | Matching protocols (Opportunistic, StableRoommates) with commitment state |
-| `simulation.py` | Four-phase tick loop, `create_simple_economy()` factory |
+| `simulation.py` | Four-phase tick loop, `create_simple_economy()` factory with belief support |
 
 ### Bargaining Protocols
 
@@ -56,6 +57,37 @@ Two complete implementations enabling institutional comparison:
 - Produces stable matching (no blocking pairs)
 
 **Empirical finding**: In trading chain scenario (4 agents), committed matching achieves 2.2% higher welfare than opportunistic matching. Matching protocols affect outcomes, not just paths.
+
+### Agent Belief System (Phase 1)
+
+Complete belief architecture enabling agent learning:
+
+**Memory System**
+- Trade history: Records trades with partner ID, bundles exchanged, tick
+- Price observations: Observed exchange rates from trades
+- Partner interaction history: Encounters and trade outcomes by partner
+- Configurable memory depth (bounded or unlimited)
+
+**Type Beliefs**
+- Beliefs about trading partners' preference parameters (alpha)
+- Confidence tracking based on number of interactions
+- Updated after trades via configurable update rules
+
+**Price Beliefs**
+- Mean-variance representation of expected exchange rate
+- Updated from observed trades (own and others')
+- Currently deferred from decision logic (Phase 2)
+
+**Update Rules**
+- `BayesianUpdateRule`: Conjugate prior updates (optimal learning)
+- `HeuristicUpdateRule`: Exponential moving average (bounded rationality)
+- Extensible interface for custom rules
+
+**Integration**
+- Beliefs wire into search: agents use believed types for surplus calculation
+- Beliefs wire into bargaining: protocols accept effective types
+- Beliefs update during simulation: trades trigger belief updates
+- Belief snapshots logged each tick for trajectory analysis
 
 ### Batch Runs & Logging
 
@@ -127,7 +159,7 @@ run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
 
 ### Test Coverage
 
-450+ tests covering all core modules. Run with: `uv run pytest`
+650+ tests covering all core modules including theory verification and belief system. Run with: `uv run pytest`
 
 ---
 
@@ -135,21 +167,20 @@ run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
 
 ### Architectural
 
-**Search uses Nash surplus regardless of protocol**
-- Agents evaluate potential partners using Nash bargaining surplus
-- This applies even when using Rubinstein protocol for actual exchange
-- Intentional simplification pending information environment architecture
-- Does not affect bargaining outcomes, only partner selection heuristics
+**Search uses protocol-specific surplus**
+- Agents evaluate potential partners using the actual bargaining protocol's surplus calculation
+- When beliefs are enabled, agents use believed types (not true types) for surplus calculation
+- Search is now institution-aware
 
 **2-good economy only**
 - `Bundle(x, y)` is hardcoded for 2 goods
 - Cobb-Douglas preferences assume 2 goods
 - Visualization color encoding assumes 2 goods
 
-**No learning agents**
-- Agents follow fixed behavioral rules
-- No reinforcement learning or evolutionary dynamics
-- No adaptive behavior over time
+**Belief system limitations**
+- Price beliefs exist but are not yet consumed by decision logic (deferred to Phase 2)
+- Type beliefs track alpha only (not full AgentType with endowments)
+- No reinforcement learning or evolutionary dynamics beyond belief updates
 
 ### Scale Boundaries
 
@@ -301,7 +332,8 @@ uv run pytest --cov=microecon
 | Equilibrium benchmarks | Bargaining only; no Walrasian/GE |
 | Information regimes | **Implemented** (FullInformation, NoisyAlphaInformation) |
 | Search/matching mechanisms | **Implemented** (Opportunistic, StableRoommates) |
-| Agent sophistication levels | Single level; no learning agents |
+| Agent sophistication levels | **Implemented** (belief-enabled vs simple agents, Bayesian vs heuristic updates) |
+| Agent beliefs and learning | **Implemented** (type beliefs, memory, belief updates during trade) |
 | Market emergence metrics | **Implemented** (trade networks, welfare efficiency, spatial clustering) |
 
 ### vs VISUALIZATION.md
@@ -347,6 +379,7 @@ src/microecon/
 ├── agent.py
 ├── grid.py
 ├── information.py
+├── beliefs.py             # Agent memory, type/price beliefs, update rules
 ├── bargaining.py
 ├── search.py
 ├── matching.py
@@ -354,7 +387,7 @@ src/microecon/
 ├── batch.py
 ├── logging/
 │   ├── __init__.py
-│   ├── events.py
+│   ├── events.py          # Includes BeliefSnapshot, TypeBeliefSnapshot
 │   ├── logger.py
 │   └── formats.py
 ├── analysis/
@@ -363,7 +396,7 @@ src/microecon/
 │   ├── timeseries.py
 │   ├── distributions.py
 │   ├── tracking.py
-│   └── emergence.py      # Market emergence metrics
+│   └── emergence.py       # Market emergence metrics
 ├── scenarios/
 │   ├── __init__.py
 │   ├── schema.py          # YAML scenario schema
@@ -376,9 +409,19 @@ src/microecon/
     ├── replay.py
     ├── browser.py         # Scenario browser UI
     └── timeseries.py      # Time-series charts (ImPlot)
+
+tests/
+├── theory/                # Theory verification tests (Phase 0)
+│   ├── test_nash_bargaining.py
+│   ├── test_rubinstein_bargaining.py
+│   ├── test_preferences.py
+│   ├── test_gains_from_trade.py
+│   └── test_pareto_efficiency.py
+├── test_beliefs.py        # Belief system tests (Phase 1)
+└── ...                    # Other test modules
 ```
 
 ---
 
-**Document Version:** 0.0.1
-**Last Updated:** 2026-01-02
+**Document Version:** 0.1.1
+**Last Updated:** 2026-01-07

@@ -28,6 +28,24 @@ from microecon.matching import (
     CommitmentState,
 )
 from microecon.simulation import Simulation, create_simple_economy
+from microecon.beliefs import (
+    # Memory structures
+    TradeMemory,
+    PriceObservation,
+    InteractionRecord,
+    AgentMemory,
+    # Belief representations
+    PriceBelief,
+    TypeBelief,
+    # Update rules
+    BeliefUpdateRule,
+    BayesianUpdateRule,
+    HeuristicUpdateRule,
+    # Integration functions
+    record_trade_observation,
+    record_encounter,
+    record_observed_trade,
+)
 
 __all__ = [
     # Core types
@@ -61,4 +79,20 @@ __all__ = [
     # Simulation
     "Simulation",
     "create_simple_economy",
+    # Beliefs - Memory structures
+    "TradeMemory",
+    "PriceObservation",
+    "InteractionRecord",
+    "AgentMemory",
+    # Beliefs - Belief representations
+    "PriceBelief",
+    "TypeBelief",
+    # Beliefs - Update rules
+    "BeliefUpdateRule",
+    "BayesianUpdateRule",
+    "HeuristicUpdateRule",
+    # Beliefs - Integration functions
+    "record_trade_observation",
+    "record_encounter",
+    "record_observed_trade",
 ]

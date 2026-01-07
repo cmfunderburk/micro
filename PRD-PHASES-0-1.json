@@ -73,7 +73,7 @@
       "phase": 0,
       "description": "Add tests verifying NashBargainingProtocol correctly maximizes the Nash product (u1-d1)(u2-d2). Test that no feasible allocation achieves higher Nash product than computed solution.",
       "priority": 1,
-      "status": "pending",
+      "status": "completed",
       "criteria": {
         "functional": [
           "Test computes Nash product at solution",
@@ -101,7 +101,7 @@
       "phase": 0,
       "description": "Add tests verifying RubinsteinBargainingProtocol computes correct SPE allocation per BRW (1986). Verify bargaining weights match formula: w1 = ln(d2)/(ln(d1)+ln(d2)).",
       "priority": 2,
-      "status": "pending",
+      "status": "completed",
       "criteria": {
         "functional": [
           "Test BRW weight formula directly",
@@ -131,7 +131,7 @@
       "phase": 0,
       "description": "Add tests verifying CobbDouglas preferences match textbook formulas. MRS = (alpha/(1-alpha)) * (y/x). Marshallian demand x* = alpha*M/px, y* = (1-alpha)*M/py.",
       "priority": 3,
-      "status": "pending",
+      "status": "completed",
       "criteria": {
         "functional": [
           "Test MRS formula across range of bundles",
@@ -163,7 +163,7 @@
       "phase": 0,
       "description": "Add tests verifying gains from trade are computed correctly and fully exhausted at bargaining solution. At solution, no remaining bilateral gains should exist.",
       "priority": 4,
-      "status": "pending",
+      "status": "completed",
       "criteria": {
         "functional": [
           "Test total surplus = sum of individual utility gains",
@@ -192,7 +192,7 @@
       "phase": 0,
       "description": "Add tests verifying bargaining outcomes are Pareto efficient. No feasible reallocation should Pareto-dominate the solution. MRS equality at solution.",
       "priority": 5,
-      "status": "pending",
+      "status": "completed",
       "criteria": {
         "functional": [
           "Test no Pareto-dominating allocation exists (grid search)",
@@ -221,7 +221,7 @@
       "phase": 0,
       "description": "Compile findings from THEORY-001 through THEORY-005. Document any divergences between implementation and theory. Fix implementation issues or document acceptable divergences with rationale.",
       "priority": 6,
-      "status": "pending",
+      "status": "completed",
       "criteria": {
         "functional": [
           "Divergences documented in markdown file",
@@ -248,7 +248,7 @@
       "phase": 1,
       "description": "Create Architecture Decision Record for belief system. Must cover: belief representation (price beliefs, partner beliefs), memory structure, update rule interface. Review against Kreps I Ch 5-7. Requires explicit user approval before implementation proceeds.",
       "priority": 1,
-      "status": "pending",
+      "status": "completed",
       "criteria": {
         "functional": [
           "ADR document exists at docs/current/ADR-BELIEF-ARCHITECTURE.md",
@@ -283,7 +283,7 @@
       "phase": 1,
       "description": "Extend Agent class with memory/observation history. Trade history, price observations, partner interaction history. Configurable memory depth.",
       "priority": 2,
-      "status": "pending",
+      "status": "completed",
       "depends_on": ["BELIEF-001"],
       "criteria": {
         "functional": [
@@ -314,7 +314,7 @@
       "phase": 1,
       "description": "Create beliefs module with update rule interface and multiple implementations. Interface (ABC) with at least two concrete implementations: Bayesian (conjugate priors where tractable) and heuristic (exponential moving average).",
       "priority": 3,
-      "status": "pending",
+      "status": "completed",
       "depends_on": ["BELIEF-001", "BELIEF-002"],
       "criteria": {
         "functional": [
@@ -346,7 +346,7 @@
       "phase": 1,
       "description": "Update search logic to incorporate beliefs. Target evaluation uses beliefs about partner types (not just observed types). Price expectations influence surplus calculation.",
       "priority": 4,
-      "status": "pending",
+      "status": "completed",
       "depends_on": ["BELIEF-003"],
       "criteria": {
         "functional": [
@@ -376,7 +376,7 @@
       "phase": 1,
       "description": "Update bargaining to incorporate beliefs. Agents use believed types for strategy (not true types when info asymmetric). Beliefs update post-trade based on revealed information.",
       "priority": 5,
-      "status": "pending",
+      "status": "completed",
       "depends_on": ["BELIEF-003"],
       "criteria": {
         "functional": [
@@ -406,7 +406,7 @@
       "phase": 1,
       "description": "Comprehensive integration tests for belief architecture. Full simulation with belief-enabled agents. Verify no regression in existing functionality.",
       "priority": 6,
-      "status": "pending",
+      "status": "completed",
       "depends_on": ["BELIEF-004", "BELIEF-005"],
       "criteria": {
         "functional": [
@@ -464,13 +464,7 @@
         "source": "interview"
       }
     ],
-    "pending_adrs": [
-      {
-        "id": "BELIEF-001",
-        "description": "Agent belief architecture design",
-        "blocking": ["BELIEF-002", "BELIEF-003", "BELIEF-004", "BELIEF-005", "BELIEF-006"]
-      }
-    ]
+    "pending_adrs": []
   },
 
   "escalation_triggers": [

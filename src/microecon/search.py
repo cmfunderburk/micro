@@ -9,6 +9,10 @@ Agents search for trade partners by:
 
 This couples search costs (movement time) with expected gains from trade.
 
+When agents have beliefs enabled (see ADR-BELIEF-ARCHITECTURE.md), they can use
+their beliefs about partner types instead of raw observations. This allows
+learning from past interactions to influence future search decisions.
+
 Reference: CLAUDE.md (First Milestone - Target selection logic)
 """
 
@@ -19,9 +23,10 @@ from typing import Optional, TYPE_CHECKING
 from microecon.grid import Grid, Position
 from microecon.bargaining import compute_nash_surplus, BargainingProtocol
 from microecon.information import InformationEnvironment
+from microecon.preferences import CobbDouglas
 
 if TYPE_CHECKING:
-    from microecon.agent import Agent
+    from microecon.agent import Agent, AgentType
 
 
 @dataclass
@@ -39,6 +44,8 @@ class TargetEvaluationResult:
     expected_surplus: float  # Nash bargaining surplus
     discounted_value: float  # surplus * delta^ticks
     observed_alpha: float  # Alpha as perceived by observer (may differ from true if noisy)
+    used_belief: bool = False  # Whether belief was used instead of observation
+    believed_alpha: Optional[float] = None  # Alpha from belief (if used)
 
 
 @dataclass
@@ -58,12 +65,50 @@ class SearchResult:
     visible_agents: int
 
 
+def _get_effective_type(
+    observer: Agent,
+    target: Agent,
+    observed_type: AgentType,
+    use_beliefs: bool,
+) -> tuple[AgentType, bool, Optional[float]]:
+    """
+    Get the type to use for surplus calculation, incorporating beliefs if enabled.
+
+    Args:
+        observer: The agent doing the evaluation
+        target: The agent being evaluated
+        observed_type: The type from the information environment
+        use_beliefs: Whether to use beliefs if available
+
+    Returns:
+        Tuple of (effective_type, used_belief, believed_alpha)
+    """
+    from microecon.agent import AgentType
+    from microecon.bundle import Bundle
+
+    if not use_beliefs or not observer.has_beliefs:
+        return observed_type, False, None
+
+    believed_alpha = observer.get_believed_alpha(target.id)
+    if believed_alpha is None:
+        return observed_type, False, None
+
+    # Construct type using believed alpha but observed endowment
+    # (endowments are directly observable in our model)
+    believed_type = AgentType(
+        preferences=CobbDouglas(believed_alpha),
+        endowment=observed_type.endowment,
+    )
+    return believed_type, True, believed_alpha
+
+
 def evaluate_targets(
     agent: Agent,
     grid: Grid,
     info_env: InformationEnvironment,
     agents_by_id: dict[str, Agent],
     bargaining_protocol: Optional[BargainingProtocol] = None,
+    use_beliefs: bool = True,
 ) -> SearchResult:
     """
     Evaluate all visible agents and find the best trade target.
@@ -74,12 +119,17 @@ def evaluate_targets(
 
     Returns the target with maximum discounted value.
 
+    If the agent has beliefs enabled and use_beliefs=True, beliefs about
+    partner types are used for surplus calculation instead of raw observations.
+    This allows agents to learn from past interactions.
+
     Args:
         agent: The searching agent
         grid: The grid with agent positions
         info_env: Information environment for observing types
         agents_by_id: Map from agent ID to Agent object
         bargaining_protocol: Protocol for computing expected surplus (uses Nash if None)
+        use_beliefs: Whether to use beliefs instead of observations (default True)
 
     Returns:
         SearchResult with best target information
@@ -117,12 +167,15 @@ def evaluate_targets(
         visible_count += 1
 
         # Get target's observable type (may include noise depending on info_env)
-        target_type = info_env.get_observable_type(target)
+        observed_type = info_env.get_observable_type(target)
+
+        # Get effective type (may use beliefs if available)
+        effective_type, _, _ = _get_effective_type(agent, target, observed_type, use_beliefs)
 
         # Compute expected surplus based on observer's beliefs about target
         # Always use Nash surplus as the evaluation heuristic (agent's estimate of value)
         # The actual bargaining protocol affects outcomes, not beliefs during search
-        expected_surplus = compute_nash_surplus(observer_type, target_type)
+        expected_surplus = compute_nash_surplus(observer_type, effective_type)
 
         if expected_surplus <= 0:
             continue
@@ -157,6 +210,7 @@ def evaluate_targets_detailed(
     info_env: InformationEnvironment,
     agents_by_id: dict[str, Agent],
     bargaining_protocol: Optional[BargainingProtocol] = None,
+    use_beliefs: bool = True,
 ) -> tuple[SearchResult, list[TargetEvaluationResult]]:
     """
     Evaluate all visible agents and return detailed evaluation data.
@@ -164,12 +218,16 @@ def evaluate_targets_detailed(
     Like evaluate_targets(), but also returns evaluation details for every
     visible target, enabling analysis of search decisions and missed opportunities.
 
+    If the agent has beliefs enabled and use_beliefs=True, beliefs about
+    partner types are used for surplus calculation instead of raw observations.
+
     Args:
         agent: The searching agent
         grid: The grid with agent positions
         info_env: Information environment for observing types
         agents_by_id: Map from agent ID to Agent object
         bargaining_protocol: Protocol for computing expected surplus (uses Nash if None)
+        use_beliefs: Whether to use beliefs instead of observations (default True)
 
     Returns:
         Tuple of (SearchResult, list of TargetEvaluationResult for all evaluated targets)
@@ -211,12 +269,17 @@ def evaluate_targets_detailed(
         visible_count += 1
 
         # Get target's observable type (may include noise depending on info_env)
-        target_type = info_env.get_observable_type(target)
+        observed_type = info_env.get_observable_type(target)
+
+        # Get effective type (may use beliefs if available)
+        effective_type, used_belief, believed_alpha = _get_effective_type(
+            agent, target, observed_type, use_beliefs
+        )
 
         # Compute expected surplus based on observer's beliefs about target
         # Always use Nash surplus as the evaluation heuristic (agent's estimate of value)
         # The actual bargaining protocol affects outcomes, not beliefs during search
-        expected_surplus = compute_nash_surplus(observer_type, target_type)
+        expected_surplus = compute_nash_surplus(observer_type, effective_type)
 
         # Compute ticks to reach target (using Chebyshev distance, respects grid wrapping)
         ticks_to_reach = grid.chebyshev_distance(agent_pos, target_pos)
@@ -233,7 +296,9 @@ def evaluate_targets_detailed(
                 ticks_to_reach=ticks_to_reach,
                 expected_surplus=expected_surplus,
                 discounted_value=discounted_value,
-                observed_alpha=target_type.preferences.alpha,
+                observed_alpha=observed_type.preferences.alpha,
+                used_belief=used_belief,
+                believed_alpha=believed_alpha,
             )
         )
 
@@ -265,6 +330,7 @@ def compute_move_target(
     info_env: InformationEnvironment,
     agents_by_id: dict[str, Agent],
     bargaining_protocol: Optional[BargainingProtocol] = None,
+    use_beliefs: bool = True,
 ) -> Optional[Position]:
     """
     Determine where an agent should move.
@@ -272,17 +338,23 @@ def compute_move_target(
     If there's a beneficial trade target visible, move toward it.
     Otherwise, return None (agent stays put or moves randomly).
 
+    If the agent has beliefs enabled and use_beliefs=True, beliefs about
+    partner types are used for target evaluation.
+
     Args:
         agent: The agent deciding where to move
         grid: The grid
         info_env: Information environment
         agents_by_id: Map of agents
         bargaining_protocol: Protocol for computing expected surplus (uses Nash if None)
+        use_beliefs: Whether to use beliefs instead of observations (default True)
 
     Returns:
         Target position to move toward, or None if no good target
     """
-    result = evaluate_targets(agent, grid, info_env, agents_by_id, bargaining_protocol)
+    result = evaluate_targets(
+        agent, grid, info_env, agents_by_id, bargaining_protocol, use_beliefs
+    )
     return result.best_target_position
 
 
@@ -291,19 +363,24 @@ def should_trade(
     agent2: Agent,
     info_env: InformationEnvironment,
     bargaining_protocol: Optional[BargainingProtocol] = None,
+    use_beliefs: bool = True,
 ) -> bool:
     """
     Check if two agents at the same position should trade.
 
     Trade occurs if both agents believe there are mutual gains based on
-    their observations. Each agent knows their own true type but observes
-    the other through the information environment.
+    their observations (or beliefs, if enabled). Each agent knows their
+    own true type but observes the other through the information environment.
+
+    If agents have beliefs enabled and use_beliefs=True, beliefs about
+    partner types are used instead of raw observations.
 
     Args:
         agent1: First agent
         agent2: Second agent
         info_env: Information environment
         bargaining_protocol: Protocol (ignored - trade willingness uses Nash heuristic)
+        use_beliefs: Whether to use beliefs instead of observations (default True)
 
     Returns:
         True if both agents believe trade would be beneficial
@@ -318,10 +395,14 @@ def should_trade(
     observed_type2 = info_env.get_observable_type(agent2)  # agent1's view of agent2
     observed_type1 = info_env.get_observable_type(agent1)  # agent2's view of agent1
 
-    # Agent1 evaluates: "do I expect gains trading with what I observe about agent2?"
-    surplus1 = compute_nash_surplus(true_type1, observed_type2)
+    # Get effective types (may use beliefs if available)
+    effective_type2, _, _ = _get_effective_type(agent1, agent2, observed_type2, use_beliefs)
+    effective_type1, _, _ = _get_effective_type(agent2, agent1, observed_type1, use_beliefs)
 
-    # Agent2 evaluates: "do I expect gains trading with what I observe about agent1?"
-    surplus2 = compute_nash_surplus(true_type2, observed_type1)
+    # Agent1 evaluates: "do I expect gains trading with what I believe about agent2?"
+    surplus1 = compute_nash_surplus(true_type1, effective_type2)
+
+    # Agent2 evaluates: "do I expect gains trading with what I believe about agent1?"
+    surplus2 = compute_nash_surplus(true_type2, effective_type1)
 
     return surplus1 > 0 and surplus2 > 0

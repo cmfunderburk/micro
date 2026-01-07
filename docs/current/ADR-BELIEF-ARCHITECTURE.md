@@ -372,3 +372,57 @@ Store only current beliefs, not raw observation history.
 1. **Initial beliefs:** What should uninformative priors be? (Currently: mean=1.0, var=1.0 for prices)
 2. **Information revelation:** How much does a trade reveal about partner type?
 3. **Forgetting:** Should old observations be down-weighted even without eviction?
+
+---
+
+## Implementation Notes (Phase 1.5)
+
+### Simplified Type Representation
+
+The ADR originally specified `AgentType` for storing observed partner types in memory:
+
+```python
+# ADR Design (Section 2.2)
+observed_partner_type: AgentType  # What I observed at trade time
+```
+
+The Phase 1 implementation uses a simplified representation:
+
+```python
+# Actual Implementation
+observed_partner_alpha: float  # Preference parameter only
+```
+
+**Rationale:**
+1. For Cobb-Douglas preferences with observable endowments, alpha is the only uncertain parameter
+2. Simpler memory structure reduces overhead
+3. Endowments are directly observable and tracked separately
+
+**Future Extension Path:**
+When multi-dimensional type learning is needed (e.g., hidden endowments, signaling), extend to full `AgentType`:
+- `TypeBelief.believed_alpha` would expand to `TypeBelief.believed_type: AgentType`
+- Memory records would store full types instead of just alpha
+
+### Price Beliefs (Deferred)
+
+The `PriceBelief` class is implemented but not consumed by any decision logic in Phase 1.
+
+**Current State:**
+- `PriceBelief` dataclass exists with mean/variance/n_observations
+- `update_price_belief` methods implemented in both update rules
+- `record_trade_observation` updates price beliefs after trades
+- No code reads price beliefs to influence behavior
+
+**Rationale for Deferral:**
+1. Type beliefs (alpha) are sufficient for Phase 1 research questions
+2. Price belief influence on search/exchange requires additional theoretical grounding:
+   - How should price expectations affect target selection?
+   - What is "price" in a 2-good barter economy?
+   - Should price beliefs create reservation prices?
+
+**Phase 2 Considerations:**
+- Option A: Price-filtered target selection (skip targets with bad expected prices)
+- Option B: Price-adjusted surplus (risk penalty for uncertain prices)
+- Option C: Reservation prices derived from beliefs
+
+See `docs/current/PHASE1-RESOLUTIONS.md` for detailed analysis.

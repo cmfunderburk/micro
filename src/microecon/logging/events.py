@@ -73,6 +73,10 @@ class AgentSnapshot:
     endowment: tuple[float, float]  # (x, y)
     alpha: float  # preference parameter
     utility: float
+    # Belief state (optional for backward compatibility)
+    has_beliefs: bool = False
+    n_trades_in_memory: int = 0
+    n_type_beliefs: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +85,9 @@ class AgentSnapshot:
             "endowment": list(self.endowment),
             "alpha": self.alpha,
             "utility": self.utility,
+            "has_beliefs": self.has_beliefs,
+            "n_trades_in_memory": self.n_trades_in_memory,
+            "n_type_beliefs": self.n_type_beliefs,
         }
 
     @classmethod
@@ -91,6 +98,9 @@ class AgentSnapshot:
             endowment=tuple(d["endowment"]),
             alpha=d["alpha"],
             utility=d["utility"],
+            has_beliefs=d.get("has_beliefs", False),
+            n_trades_in_memory=d.get("n_trades_in_memory", 0),
+            n_type_beliefs=d.get("n_type_beliefs", 0),
         )
 
 
@@ -105,6 +115,9 @@ class TargetEvaluation:
     expected_surplus: float  # Nash bargaining surplus
     discounted_value: float  # surplus * (delta ^ ticks_to_reach)
     observed_alpha: float  # Alpha as perceived by observer (enables V-1 visualization)
+    # Belief tracking (optional for backward compatibility)
+    used_belief: bool = False  # Whether belief was used instead of observation
+    believed_alpha: float | None = None  # Alpha from belief (if used)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -115,6 +128,8 @@ class TargetEvaluation:
             "expected_surplus": self.expected_surplus,
             "discounted_value": self.discounted_value,
             "observed_alpha": self.observed_alpha,
+            "used_belief": self.used_belief,
+            "believed_alpha": self.believed_alpha,
         }
 
     @classmethod
@@ -127,6 +142,8 @@ class TargetEvaluation:
             expected_surplus=d["expected_surplus"],
             discounted_value=d["discounted_value"],
             observed_alpha=d.get("observed_alpha", d.get("alpha", 0.5)),  # fallback for old logs
+            used_belief=d.get("used_belief", False),
+            believed_alpha=d.get("believed_alpha"),
         )
 
 

@@ -745,7 +745,7 @@ class TestSearchIntegration:
         from microecon.information import FullInformation
         from microecon.search import should_trade
 
-        # Create agents
+        # Create agents with identical true types (no real gains from trade)
         agent1 = create_agent(alpha=0.5, endowment_x=10, endowment_y=10, agent_id="a1")
         agent2 = create_agent(alpha=0.5, endowment_x=10, endowment_y=10, agent_id="a2")
 
@@ -753,23 +753,34 @@ class TestSearchIntegration:
 
         # Without beliefs (same endowments and preferences = no gains)
         result_no_beliefs = should_trade(agent1, agent2, info_env, use_beliefs=False)
-        assert result_no_beliefs is False  # No gains from trade with identical agents
+        assert result_no_beliefs is False, "Identical agents should not trade"
 
-        # Enable beliefs and set belief that partner has different alpha
+        # Enable beliefs for BOTH agents with mutual perceived gains
+        # Agent1 believes agent2 prefers good x more (alpha=0.8)
         agent1.enable_beliefs()
         agent1.type_beliefs["a2"] = TypeBelief(
             agent_id="a2",
-            believed_alpha=0.8,  # Believes agent2 has different preferences
+            believed_alpha=0.8,
             confidence=0.9,
             n_interactions=10,
         )
 
-        # With beliefs, agent1 thinks there are gains
+        # Agent2 believes agent1 prefers good y more (alpha=0.2)
+        agent2.enable_beliefs()
+        agent2.type_beliefs["a1"] = TypeBelief(
+            agent_id="a1",
+            believed_alpha=0.2,
+            confidence=0.9,
+            n_interactions=10,
+        )
+
+        # With mutual beliefs that create perceived complementarity, both see gains
         result_with_beliefs = should_trade(agent1, agent2, info_env, use_beliefs=True)
-        # Note: Agent2 doesn't have beliefs, so uses observation
-        # Agent1 believes there are gains, Agent2 observes no gains
-        # Result depends on both agents' beliefs/observations
-        # This tests that the belief system is being used
+        assert result_with_beliefs is True, "Mutual beliefs should create perceived gains"
+
+        # Verify that use_beliefs=False ignores beliefs (back to no trade)
+        result_beliefs_disabled = should_trade(agent1, agent2, info_env, use_beliefs=False)
+        assert result_beliefs_disabled is False, "use_beliefs=False should ignore beliefs"
 
     def test_use_beliefs_false_ignores_beliefs(self):
         """use_beliefs=False should ignore all beliefs."""
@@ -1053,6 +1064,16 @@ class TestBeliefSystemIntegration:
         assert agents[0].has_beliefs
         assert agents[1].has_beliefs
 
+        # If trades occurred, beliefs should have updated
+        if len(sim.trades) > 0:
+            # At least one agent should have trade memory
+            total_trades = agents[0].memory.n_trades() + agents[1].memory.n_trades()
+            assert total_trades > 0, "Trades occurred but no belief updates recorded"
+
+            # Both agents should have formed beliefs about each other
+            assert "a2" in agents[0].type_beliefs, "Agent1 should have belief about agent2"
+            assert "a1" in agents[1].type_beliefs, "Agent2 should have belief about agent1"
+
     def test_beliefs_backward_compatible(self):
         """Agents without beliefs should work as before."""
         from microecon.grid import Grid, Position
@@ -1082,6 +1103,39 @@ class TestBeliefSystemIntegration:
 
         assert agents[0].memory is None
         assert agents[1].memory is None
+
+    def test_create_simple_economy_with_beliefs(self):
+        """create_simple_economy should enable beliefs when use_beliefs=True."""
+        from microecon.simulation import create_simple_economy
+
+        # Create economy with beliefs enabled
+        sim = create_simple_economy(n_agents=4, grid_size=10, seed=42, use_beliefs=True)
+
+        # All agents should have beliefs enabled
+        for agent in sim.agents:
+            assert agent.has_beliefs, f"Agent {agent.id} should have beliefs enabled"
+            assert agent.memory is not None
+            assert agent.type_beliefs is not None
+
+        # Run simulation and verify beliefs update
+        sim.run(ticks=50)
+
+        # If trades occurred, at least some agents should have memories
+        if len(sim.trades) > 0:
+            agents_with_memories = [a for a in sim.agents if a.memory.n_trades() > 0]
+            assert len(agents_with_memories) > 0, "No belief updates after trades"
+
+    def test_create_simple_economy_without_beliefs(self):
+        """create_simple_economy should not enable beliefs by default."""
+        from microecon.simulation import create_simple_economy
+
+        # Create economy without beliefs (default)
+        sim = create_simple_economy(n_agents=4, grid_size=10, seed=42)
+
+        # No agents should have beliefs enabled
+        for agent in sim.agents:
+            assert not agent.has_beliefs, f"Agent {agent.id} should not have beliefs"
+            assert agent.memory is None
 
     def test_memory_serialization(self):
         """Agent memory should be serializable to dict."""

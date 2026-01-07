@@ -741,6 +741,8 @@ class BargainingProtocol(ABC):
         agent1: Agent,
         agent2: Agent,
         proposer: Agent | None = None,
+        effective_type_1: AgentType | None = None,
+        effective_type_2: AgentType | None = None,
     ) -> BargainingOutcome:
         """
         Compute bargaining outcome between two agents.
@@ -749,6 +751,8 @@ class BargainingProtocol(ABC):
             agent1: First agent
             agent2: Second agent
             proposer: Which agent proposes first (relevant for asymmetric protocols)
+            effective_type_1: Override type for agent1 (for belief-based bargaining)
+            effective_type_2: Override type for agent2 (for belief-based bargaining)
 
         Returns:
             BargainingOutcome with allocations and gains
@@ -761,6 +765,8 @@ class BargainingProtocol(ABC):
         agent1: Agent,
         agent2: Agent,
         proposer: Agent | None = None,
+        effective_type_1: AgentType | None = None,
+        effective_type_2: AgentType | None = None,
     ) -> float:
         """
         Compute expected surplus for agent1 from potential trade.
@@ -772,6 +778,8 @@ class BargainingProtocol(ABC):
             agent1: Evaluating agent
             agent2: Potential trade partner
             proposer: Which agent would propose first
+            effective_type_1: Override type for agent1 (for belief-based evaluation)
+            effective_type_2: Override type for agent2 (for belief-based evaluation)
 
         Returns:
             Expected surplus for agent1
@@ -783,6 +791,8 @@ class BargainingProtocol(ABC):
         agent1: Agent,
         agent2: Agent,
         proposer: Agent | None = None,
+        effective_type_1: AgentType | None = None,
+        effective_type_2: AgentType | None = None,
     ) -> BargainingOutcome:
         """
         Execute bargaining and update agent endowments.
@@ -794,11 +804,13 @@ class BargainingProtocol(ABC):
             agent1: First agent
             agent2: Second agent
             proposer: Which agent proposes first
+            effective_type_1: Override type for agent1 (for belief-based bargaining)
+            effective_type_2: Override type for agent2 (for belief-based bargaining)
 
         Returns:
             BargainingOutcome describing what happened
         """
-        outcome = self.solve(agent1, agent2, proposer)
+        outcome = self.solve(agent1, agent2, proposer, effective_type_1, effective_type_2)
 
         if outcome.trade_occurred:
             agent1.endowment = outcome.allocation_1
@@ -827,25 +839,30 @@ class NashBargainingProtocol(BargainingProtocol):
         agent1: Agent,
         agent2: Agent,
         proposer: Agent | None = None,
+        effective_type_1: AgentType | None = None,
+        effective_type_2: AgentType | None = None,
     ) -> BargainingOutcome:
         """Compute Nash bargaining solution. Proposer is ignored (symmetric)."""
-        return nash_bargaining_solution(
-            agent1.preferences,
-            agent1.endowment,
-            agent2.preferences,
-            agent2.endowment,
-        )
+        # Use effective types if provided, otherwise use agent's true type
+        prefs_1 = effective_type_1.preferences if effective_type_1 else agent1.preferences
+        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.endowment
+        prefs_2 = effective_type_2.preferences if effective_type_2 else agent2.preferences
+        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.endowment
+
+        return nash_bargaining_solution(prefs_1, endow_1, prefs_2, endow_2)
 
     def compute_expected_surplus(
         self,
         agent1: Agent,
         agent2: Agent,
         proposer: Agent | None = None,
+        effective_type_1: AgentType | None = None,
+        effective_type_2: AgentType | None = None,
     ) -> float:
         """Compute expected surplus for agent1. Proposer is ignored."""
-        # Create observable types from agents (full information case)
-        type1 = AgentType(agent1.preferences, agent1.endowment)
-        type2 = AgentType(agent2.preferences, agent2.endowment)
+        # Use effective types if provided, otherwise construct from agent
+        type1 = effective_type_1 or AgentType(agent1.preferences, agent1.endowment)
+        type2 = effective_type_2 or AgentType(agent2.preferences, agent2.endowment)
         return compute_nash_surplus(type1, type2)
 
 
@@ -876,6 +893,8 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
         agent1: Agent,
         agent2: Agent,
         proposer: Agent | None = None,
+        effective_type_1: AgentType | None = None,
+        effective_type_2: AgentType | None = None,
     ) -> BargainingOutcome:
         """
         Compute Rubinstein bargaining solution using BRW asymmetric Nash.
@@ -884,15 +903,20 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
             agent1: First agent
             agent2: Second agent
             proposer: Retained for API compatibility (no longer affects outcome)
+            effective_type_1: Override type for agent1 (for belief-based bargaining)
+            effective_type_2: Override type for agent2 (for belief-based bargaining)
 
         Returns:
             BargainingOutcome with asymmetric Nash allocation based on patience
         """
+        # Use effective types if provided, otherwise use agent's true type
+        prefs_1 = effective_type_1.preferences if effective_type_1 else agent1.preferences
+        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.endowment
+        prefs_2 = effective_type_2.preferences if effective_type_2 else agent2.preferences
+        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.endowment
+
         return rubinstein_bargaining_solution(
-            agent1.preferences,
-            agent1.endowment,
-            agent2.preferences,
-            agent2.endowment,
+            prefs_1, endow_1, prefs_2, endow_2,
             agent1.discount_factor,
             agent2.discount_factor,
         )
@@ -902,6 +926,8 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
         agent1: Agent,
         agent2: Agent,
         proposer: Agent | None = None,
+        effective_type_1: AgentType | None = None,
+        effective_type_2: AgentType | None = None,
     ) -> float:
         """
         Compute expected surplus for agent1 under Rubinstein/BRW.
@@ -913,13 +939,15 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
             agent1: Evaluating agent
             agent2: Potential trade partner
             proposer: Retained for API compatibility (no longer affects outcome)
+            effective_type_1: Override type for agent1 (for belief-based evaluation)
+            effective_type_2: Override type for agent2 (for belief-based evaluation)
 
         Returns:
             Expected surplus for agent1
         """
-        # Create observable types from agents (full information case)
-        type1 = AgentType(agent1.preferences, agent1.endowment)
-        type2 = AgentType(agent2.preferences, agent2.endowment)
+        # Use effective types if provided, otherwise construct from agent
+        type1 = effective_type_1 or AgentType(agent1.preferences, agent1.endowment)
+        type2 = effective_type_2 or AgentType(agent2.preferences, agent2.endowment)
 
         return compute_rubinstein_surplus(
             type1,

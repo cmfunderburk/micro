@@ -162,6 +162,9 @@ def create_agent_snapshot(
     endowment: tuple[float, float],
     alpha: float,
     utility: float,
+    has_beliefs: bool = False,
+    n_trades_in_memory: int = 0,
+    n_type_beliefs: int = 0,
 ) -> AgentSnapshot:
     """Create an AgentSnapshot from simulation state."""
     return AgentSnapshot(
@@ -170,6 +173,9 @@ def create_agent_snapshot(
         endowment=endowment,
         alpha=alpha,
         utility=utility,
+        has_beliefs=has_beliefs,
+        n_trades_in_memory=n_trades_in_memory,
+        n_type_beliefs=n_type_beliefs,
     )
 
 
@@ -181,6 +187,8 @@ def create_target_evaluation(
     expected_surplus: float,
     discounted_value: float,
     observed_alpha: float,
+    used_belief: bool = False,
+    believed_alpha: float | None = None,
 ) -> TargetEvaluation:
     """Create a TargetEvaluation from search computation."""
     return TargetEvaluation(
@@ -191,6 +199,8 @@ def create_target_evaluation(
         expected_surplus=expected_surplus,
         discounted_value=discounted_value,
         observed_alpha=observed_alpha,
+        used_belief=used_belief,
+        believed_alpha=believed_alpha,
     )
 
 

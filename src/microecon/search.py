@@ -128,7 +128,9 @@ def evaluate_targets(
         grid: The grid with agent positions
         info_env: Information environment for observing types
         agents_by_id: Map from agent ID to Agent object
-        bargaining_protocol: Protocol for computing expected surplus (uses Nash if None)
+        bargaining_protocol: Protocol for computing expected surplus.
+            If provided, uses protocol.compute_expected_surplus().
+            If None, falls back to Nash surplus heuristic.
         use_beliefs: Whether to use beliefs instead of observations (default True)
 
     Returns:
@@ -173,9 +175,16 @@ def evaluate_targets(
         effective_type, _, _ = _get_effective_type(agent, target, observed_type, use_beliefs)
 
         # Compute expected surplus based on observer's beliefs about target
-        # Always use Nash surplus as the evaluation heuristic (agent's estimate of value)
-        # The actual bargaining protocol affects outcomes, not beliefs during search
-        expected_surplus = compute_nash_surplus(observer_type, effective_type)
+        if bargaining_protocol is not None:
+            # Use protocol's surplus calculation for institution-aware search
+            expected_surplus = bargaining_protocol.compute_expected_surplus(
+                agent, target,
+                effective_type_1=observer_type,
+                effective_type_2=effective_type,
+            )
+        else:
+            # Fall back to Nash surplus heuristic
+            expected_surplus = compute_nash_surplus(observer_type, effective_type)
 
         if expected_surplus <= 0:
             continue
@@ -226,7 +235,9 @@ def evaluate_targets_detailed(
         grid: The grid with agent positions
         info_env: Information environment for observing types
         agents_by_id: Map from agent ID to Agent object
-        bargaining_protocol: Protocol for computing expected surplus (uses Nash if None)
+        bargaining_protocol: Protocol for computing expected surplus.
+            If provided, uses protocol.compute_expected_surplus().
+            If None, falls back to Nash surplus heuristic.
         use_beliefs: Whether to use beliefs instead of observations (default True)
 
     Returns:
@@ -277,9 +288,16 @@ def evaluate_targets_detailed(
         )
 
         # Compute expected surplus based on observer's beliefs about target
-        # Always use Nash surplus as the evaluation heuristic (agent's estimate of value)
-        # The actual bargaining protocol affects outcomes, not beliefs during search
-        expected_surplus = compute_nash_surplus(observer_type, effective_type)
+        if bargaining_protocol is not None:
+            # Use protocol's surplus calculation for institution-aware search
+            expected_surplus = bargaining_protocol.compute_expected_surplus(
+                agent, target,
+                effective_type_1=observer_type,
+                effective_type_2=effective_type,
+            )
+        else:
+            # Fall back to Nash surplus heuristic
+            expected_surplus = compute_nash_surplus(observer_type, effective_type)
 
         # Compute ticks to reach target (using Chebyshev distance, respects grid wrapping)
         ticks_to_reach = grid.chebyshev_distance(agent_pos, target_pos)

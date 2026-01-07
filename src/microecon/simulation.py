@@ -17,8 +17,10 @@ import random as random_module
 from random import Random
 
 from microecon.agent import Agent, create_agent
+from microecon.bundle import Bundle
 from microecon.grid import Grid, Position
 from microecon.information import InformationEnvironment, FullInformation
+from microecon.beliefs import record_trade_observation
 from microecon.bargaining import (
     BargainingOutcome,
     BargainingProtocol,
@@ -375,6 +377,27 @@ class Simulation:
                         traded_this_tick.add(agent.id)
                         traded_this_tick.add(other.id)
 
+                        # Update beliefs for both traders
+                        observed_type1 = self.info_env.get_observable_type(agent)
+                        observed_type2 = self.info_env.get_observable_type(other)
+
+                        record_trade_observation(
+                            agent=agent,
+                            partner=other,
+                            bundle_before=Bundle(pre_endowment1[0], pre_endowment1[1]),
+                            bundle_after=outcome.allocation_1,
+                            observed_partner_alpha=observed_type2.preferences.alpha,
+                            tick=self.tick,
+                        )
+                        record_trade_observation(
+                            agent=other,
+                            partner=agent,
+                            bundle_before=Bundle(pre_endowment2[0], pre_endowment2[1]),
+                            bundle_after=outcome.allocation_2,
+                            observed_partner_alpha=observed_type1.preferences.alpha,
+                            tick=self.tick,
+                        )
+
                         # Break commitment after successful trade (committed mode)
                         if self.matching_protocol.requires_commitment:
                             self.commitments.break_commitment(agent.id, other.id)
@@ -477,6 +500,9 @@ class Simulation:
                     endowment=(agent.endowment.x, agent.endowment.y),
                     alpha=agent.preferences.alpha,
                     utility=agent.utility(),
+                    has_beliefs=agent.has_beliefs,
+                    n_trades_in_memory=agent.memory.n_trades() if agent.has_beliefs else 0,
+                    n_type_beliefs=len(agent.type_beliefs) if agent.has_beliefs else 0,
                 ))
 
         # Create search decisions
@@ -491,6 +517,8 @@ class Simulation:
                     expected_surplus=e.expected_surplus,
                     discounted_value=e.discounted_value,
                     observed_alpha=e.observed_alpha,
+                    used_belief=e.used_belief,
+                    believed_alpha=e.believed_alpha,
                 )
                 for e in evals
             ]
@@ -601,6 +629,7 @@ def create_simple_economy(
     seed: Optional[int] = None,
     bargaining_protocol: Optional[BargainingProtocol] = None,
     matching_protocol: Optional[MatchingProtocol] = None,
+    use_beliefs: bool = False,
 ) -> Simulation:
     """
     Create a simple economy with heterogeneous agents.
@@ -620,6 +649,7 @@ def create_simple_economy(
         seed: Random seed for reproducibility
         bargaining_protocol: Protocol for bilateral bargaining (default: Nash)
         matching_protocol: Protocol for forming trading pairs (default: Opportunistic)
+        use_beliefs: Enable belief system for agents (default: False)
 
     Returns:
         Configured Simulation ready to run
@@ -658,5 +688,8 @@ def create_simple_economy(
         )
 
         sim.add_agent_random(agent)
+
+        if use_beliefs:
+            agent.enable_beliefs()
 
     return sim

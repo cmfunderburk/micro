@@ -1,4 +1,4 @@
-# Ralph Interview Protocol v3
+# Ralph Interview Protocol v4
 
 A vision-anchored interview process for transforming project goals into ralph-ready PRDs and operational artifacts.
 
@@ -263,6 +263,30 @@ During clarification, identify decisions that warrant Architecture Decision Reco
 *Awaiting approval before implementation proceeds.*
 ```
 
+**When to create separate ADR files vs inline in PRD:**
+
+| Separate ADR File | Inline in PRD |
+|-------------------|---------------|
+| Architectural decisions affecting multiple PRDs | Decisions scoped to this PRD only |
+| Theory-grounded decisions with literature references | Implementation choices without theoretical basis |
+| Decisions that should be discoverable across project | Routine design choices |
+| Decisions requiring detailed justification (>1 page) | Brief decisions (few paragraphs) |
+
+**Separate ADR file naming:** `ADR-[TOPIC]-[SHORT-TITLE].md` (e.g., `ADR-BELIEF-ARCHITECTURE.md`)
+
+**Inline ADR format:** Use the `architectural_decisions.resolved` array in the PRD JSON, with abbreviated fields:
+```json
+{
+  "id": "ADR-XXX-001",
+  "decision": "brief description",
+  "choice": "what was decided",
+  "rationale": "why",
+  "source": "vision | interview | inferred"
+}
+```
+
+For research software projects, major theory-grounded decisions should almost always be separate files to capture the full theoretical justification and literature references.
+
 **Do NOT ask:**
 - "What do you want to build?" (vision tells us)
 - "What type of work is this?" (Phase 0 determined this)
@@ -271,6 +295,64 @@ During clarification, identify decisions that warrant Architecture Decision Reco
 **Phase exit:**
 - Convergence check - agent summarizes understanding, user confirms
 - ADR drafts presented for decisions requiring them
+
+---
+
+### Phase 2.5: Design Sketch (UI/Visualization Projects Only)
+
+**Objective:** Validate visual/interaction design before committing to implementation.
+
+**When to include this phase:**
+- The PRD includes significant UI or visualization work
+- The design involves novel visual encodings or interaction patterns
+- Previous implementations have required mid-execution redesign
+
+**Why this phase exists:**
+UI/visualization work often reveals design problems only when implemented. The session log showed a trade network overlay that "didn't work well" on the simulation grid, requiring a complete redesign as a separate panel. Early design validation prevents wasted implementation effort.
+
+**Agent actions:**
+
+1. For each major visual/UI feature, present a design sketch:
+
+```
+## Design Sketch: [Feature Name]
+
+### Visual Concept
+[ASCII art or description of what it will look like]
+
+### Information Encoded
+| Visual Property | Data Property | Why This Encoding |
+|-----------------|---------------|-------------------|
+| Color | [what] | [rationale] |
+| Position | [what] | [rationale] |
+| Size | [what] | [rationale] |
+
+### Interaction Model
+- Click: [behavior]
+- Hover: [behavior]
+- Drag: [behavior if any]
+
+### Potential Issues
+- [Issue 1]: [why it might not work]
+- [Issue 2]: [why it might not work]
+
+### Alternatives Considered
+1. [Alternative A]: [why rejected]
+2. [Alternative B]: [why rejected]
+```
+
+2. Ask user to validate design before proceeding:
+   - "Does this design approach make sense?"
+   - "Are there obvious issues I'm missing?"
+   - "Should I prototype this before committing to full PRD?"
+
+**Design validation options:**
+- **Approve** - Proceed to PRD generation with this design
+- **Revise** - Iterate on the design sketch
+- **Prototype first** - Create a minimal implementation spike before PRD
+- **Split** - Design is too uncertain; create separate discovery PRD first
+
+**Phase exit:** User approves design sketches or authorizes proceeding despite uncertainty.
 
 ---
 
@@ -437,11 +519,18 @@ Q4.1: "The vision encompasses [large scope]. Given [resource constraints if any]
 
 **Objective:** Set execution parameters for the ralph-loop.
 
+**Critical clarification on iterations:**
+The `--max-iterations` parameter sets the budget for the **entire** ralph-loop invocation, not per-phase. The loop should complete the **entire PRD** within the iteration budget, not just one phase. Do not specify "iterations per phase" - phases are logical groupings, not separate loop invocations.
+
+- A loop with `--max-iterations 50` should complete all phases if possible
+- The loop terminates when the completion promise is emitted OR iterations exhausted
+- If interrupted mid-PRD, use a Resume Prompt to continue with fresh iterations
+
 ```
-Q5.1: "What iteration budget is appropriate?"
-- Conservative (10-20) - for well-specified phases
-- Standard (20-50) - for moderate complexity
-- Extended (50-100) - for exploratory or large work
+Q5.1: "What iteration budget is appropriate for the ENTIRE PRD?"
+- Conservative (20-40) - for small PRDs (5-10 features)
+- Standard (40-80) - for medium PRDs (10-20 features)
+- Extended (80-150) - for large PRDs (20+ features) or exploratory work
 - Specify number
 
 Q5.2: "Progress tracking preferences?"
@@ -449,10 +538,12 @@ Q5.2: "Progress tracking preferences?"
 - Git commits + progress.txt
 - All methods (git + progress + PRD status updates)
 
-Q5.3: "If a phase completes early, should the loop:"
-- Stop and await next phase approval
-- Continue to next phase automatically
-- Ask before continuing
+Q5.3: "Phase transition behavior - when a phase completes, should the loop:"
+- **continue** - Proceed to next phase automatically (recommended for HOTL mode)
+- **ask** - Use AskUserQuestion to request approval before next phase
+- **stop** - Emit phase-specific promise, require new loop invocation for next phase (recommended for AFK mode)
+
+See "HOTL vs AFK Mode Considerations" section below for guidance.
 
 Q5.4: "Escalation triggers - loop should STOP if:"
 - [Default: changes to core architecture without ADR]
@@ -635,8 +726,7 @@ Generate PRD in this JSON format:
       "description": "What this phase accomplishes",
       "features": ["FEAT-001", "FEAT-002"],
       "entry_criteria": "what must be true to start",
-      "exit_criteria": "what must be true to complete",
-      "estimated_iterations": 20
+      "exit_criteria": "what must be true to complete"
     }
   ],
 
@@ -681,10 +771,13 @@ Generate PRD in this JSON format:
   ],
 
   "loop_parameters": {
-    "max_iterations": 30,
+    "max_iterations": null,
     "progress_tracking": ["git_commits", "progress_file"],
     "on_phase_complete": "stop | continue | ask"
   }
+  // Note: max_iterations is null in PRD because it's set at ralph-loop invocation time
+  // via --max-iterations flag. The PRD records the user's preference but doesn't
+  // constrain the actual invocation.
 }
 ```
 
@@ -861,9 +954,10 @@ Before concluding, verify:
 - [ ] Project type determined and confirmed
 - [ ] Gap analysis completed
 - [ ] All ambiguities from vision clarified
+- [ ] Design sketches validated (UI/visualization projects)
 - [ ] Every goal has verification criteria appropriate to project type
 - [ ] Scope confirmed (full vision or explicit subset)
-- [ ] Loop parameters set
+- [ ] Loop parameters set (including HOTL vs AFK mode)
 - [ ] Convergence check passed
 - [ ] PRD generated and presented
 
@@ -882,6 +976,104 @@ Before concluding, verify:
 ### Optional (if applicable)
 - [ ] Resource constraint analysis completed
 - [ ] Scope adjusted for constraints
+
+---
+
+## HOTL vs AFK Mode Considerations
+
+The interview should establish which execution mode the user intends, as this affects phase transition behavior and iteration budgets.
+
+### HOTL (Human On The Loop)
+
+User is actively monitoring the session and can intervene.
+
+**Recommended settings:**
+- `on_phase_complete: "continue"` - User can interrupt if needed
+- Moderate iteration budgets - can always restart if exhausted
+- More aggressive escalation triggers - user can resolve quickly
+- AskUserQuestion for design decisions as they arise
+
+**Best for:**
+- Exploratory work where direction may shift
+- UI/visualization work requiring visual feedback
+- First-time PRD execution on a codebase
+- Complex multi-phase work where inter-phase review adds value
+
+### AFK (Away From Keyboard)
+
+User will leave the loop running unattended (overnight, etc.).
+
+**Recommended settings:**
+- `on_phase_complete: "stop"` or `"ask"` - Creates natural checkpoints
+- Generous iteration budgets with safety margin
+- Conservative escalation triggers - prefer false stops over runaway loops
+- All decisions pre-resolved in ADRs before loop starts
+
+**Best for:**
+- Well-specified implementation tasks
+- Repetitive work (test coverage, documentation)
+- Tasks where partial progress is still valuable
+
+### Mixed-Mode Strategy
+
+For multi-phase PRDs, consider:
+1. **HOTL for Phase 1** - Establish patterns, catch early issues
+2. **AFK for middle phases** - Execute established patterns overnight
+3. **HOTL for final phase** - Polish and integration review
+
+The START-RALPH-LOOP document should include prompts for both modes:
+- Full-PRD prompt for HOTL (expects to complete everything)
+- Per-phase prompts for AFK (natural stopping points)
+
+---
+
+## Emergent PRD Pattern
+
+Sometimes during PRD execution, issues are discovered that require a fundamentally different approach. Rather than forcing the original PRD to accommodate the change, it may be appropriate to spawn a new PRD.
+
+### When to Spawn a New PRD
+
+**Spawn a new PRD when:**
+- The original design assumption was fundamentally flawed (e.g., "grid overlay for trade network" → "dedicated panel needed")
+- The scope expansion would more than double the original PRD
+- The new work has different success criteria than the original
+- The new work could be useful independent of the original PRD
+
+**Do NOT spawn a new PRD when:**
+- It's just a bug fix or design refinement
+- The scope creep is modest and related to original goals
+- Splitting would create artificial boundaries
+
+### Process for Mid-Execution PRD Spawning
+
+1. **Complete or checkpoint the current PRD** - Don't leave it in a broken state
+2. **Document the discovery** - What was learned? Why is the original approach inadequate?
+3. **Invoke the interview protocol** - Use this protocol (RALPH-INTERVIEW.md) to create the new PRD
+4. **Cross-reference** - Both PRDs should reference each other in their context sections
+5. **Decide execution order** - Does the new PRD block the original? Can they proceed in parallel?
+
+### Example: Trade Network Panel
+
+From the session log:
+```
+Original PRD: VIZ-018 "Trade Network Overlay" - draw lines on simulation grid
+Problem discovered: Lines connect agents at current positions, not trade locations
+                   Makes overlay meaningless as agents move
+Solution: Spawn new PRD for dedicated Trade Network Panel with proper graph layout
+```
+
+The new PRD (Trade Network Panel) was created using this interview protocol, producing:
+- Gap analysis showing existing code that could be reused
+- Design decisions captured as ADRs (dockable window, both layouts, encoding scheme)
+- Properly scoped features (11 features across 4 phases)
+- START-RALPH-LOOP document for execution
+
+### Updating the Original PRD
+
+When spawning a new PRD obsoletes features in the original:
+- Mark obsolete features as `"passes": true` with note: `"superseded by [NEW-PRD]"`
+- Or remove them and update phase structure
+- Document the change in the original PRD's context or a changelog field
 
 ---
 
@@ -907,19 +1099,141 @@ When this file is mentioned (`@ralph/RALPH-INTERVIEW.md`):
 3. **Execute Phase 1** - Gap analysis against codebase
 4. **Execute Phase 1.5** - Resource constraint analysis (if applicable)
 5. **Execute Phase 2** - Clarification interview AND ADR identification
-6. **Execute Phase 3** - Design verification criteria (per project type)
-7. **Execute Phase 3.5** - Divergence tracking setup (research software only)
-8. **Execute Phase 4** - Confirm scope (default: full vision)
-9. **Execute Phase 5** - Set loop parameters
-10. **Convergence check** - Summarize, get confirmation
-11. **Generate PRD** - Comprehensive, phased, verifiable
-12. **Execute Phase 6** - Create START-RALPH-LOOP.md
-13. **Generate additional artifacts** - Per project type (retrospective template, paper analysis)
-14. **Await approval** - User must confirm all artifacts before loop execution
+6. **Execute Phase 2.5** - Design sketch validation (UI/visualization projects only)
+7. **Execute Phase 3** - Design verification criteria (per project type)
+8. **Execute Phase 3.5** - Divergence tracking setup (research software only)
+9. **Execute Phase 4** - Confirm scope (default: full vision)
+10. **Execute Phase 5** - Set loop parameters (including HOTL vs AFK mode)
+11. **Convergence check** - Summarize, get confirmation
+12. **Generate PRD** - Comprehensive, phased, verifiable
+13. **Execute Phase 6** - Create START-RALPH-LOOP.md
+14. **Generate additional artifacts** - Per project type (retrospective template, paper analysis)
+15. **Await approval** - User must confirm all artifacts before loop execution
+
+---
+
+## Appendix: Example Interview Snippets
+
+These examples from actual sessions demonstrate effective interview patterns.
+
+### Good Gap Analysis Presentation
+
+```
+## Gap Analysis
+
+### Vision Requirement → Current State → Gap
+
+| Requirement | Exists? | Current State | Work Needed |
+|-------------|---------|---------------|-------------|
+| Trade network data structure | Yes | analysis/emergence.py: TradeEdge, build_trade_network() | Can reuse for panel |
+| Network statistics | Yes | trade_network_stats(): density, clustering, degrees | Can reuse for panel |
+| Network visualization | Partial | render_trade_network() draws lines on grid (doesn't work well) | Need dedicated panel with graph layout |
+| Left-side panel | No | Only right-side metrics panel exists | Need new panel infrastructure |
+| Graph layout algorithm | No | No layout code exists | Need force-directed or circular layout |
+```
+
+Note: The table clearly shows what exists vs. what's needed, making the scope of work visible.
+
+### Good Clarifying Questions
+
+```
+Q1.1: Panel location and sizing
+The vision mentions a left-side panel. Should it be:
+- Same width as right metrics panel (~300px)?
+- Resizable/collapsible?
+- Or a separate dockable window?
+
+Q1.2: Layout algorithm preference
+For the network graph layout:
+- Force-directed - Naturally clusters connected agents, more organic
+- Circular - All agents on a ring, edges cross through center, cleaner
+- Both - Toggle between layouts?
+
+Q1.3: Node encoding
+What should node appearance encode?
+- Color = alpha (same as grid view) - maintains visual consistency
+- Size = trade count (total trades) or degree (unique partners)?
+```
+
+Note: Questions are specific, provide options, and explain tradeoffs.
+
+### Good User Responses
+
+```
+User: 1.1 - separate dockable window
+       1.2 - both, toggle
+       1.3 - color = alpha, let's not resize them as that may be overly cluttered
+       1.4 - thickness = trade count, color = recency
+```
+
+Note: Concise, decisive, addresses all questions. This is ideal input for the interview.
+
+### Good Convergence Check
+
+```
+## Understanding Summary
+
+**Project**: Trade Network Panel
+**Project Type**: Implementation
+
+**Vision in my words**: Create a dedicated dockable window that visualizes
+trade relationships as a network graph, replacing the ineffective grid-overlay
+approach. The panel shows who traded with whom using force-directed or circular
+layouts, with nodes colored by alpha and edges encoding frequency (thickness)
+and recency (color).
+
+**Scope**: Full feature as discussed
+
+**Phases I'll define**:
+1. Window Infrastructure: Dockable window, menu/button to open, basic layout
+2. Graph Rendering: Node drawing, edge drawing, layout algorithms
+3. Visual Encoding: Alpha colors, edge thickness/color, layout toggle
+4. Interaction & Integration: Click-to-select, live/replay modes, metrics display
+
+**Key clarifications received**:
+- Separate dockable window (not embedded panel)
+- Both layout algorithms with toggle
+- Node color = alpha, fixed size
+- Edge thickness = trade count, color = recency
+
+**ADRs to include**: ADR-NET-001 (window architecture)
+
+**Verification approach**: Functional testing, visual inspection
+
+Does this accurately capture what the PRD should specify?
+```
+
+Note: Restates understanding in agent's own words, lists all decisions, asks for confirmation.
+
+### Good Phase Transition Request
+
+```
+Phase 5 is complete. Let me ask for review before proceeding to Phase 6:
+
+[AskUserQuestion]
+Question: "Phase 5 (Agent Perspective Mode) is complete. Should I proceed
+          with Phase 6 (Advanced Overlays)?"
+Options:
+- Yes, proceed to Phase 6
+- Review implementation first
+- Stop here
+```
+
+Note: Clear summary of what completed, explicit options for user.
 
 ---
 
 ## Changelog
+
+### v4 (2026-01-07)
+- Clarified iteration budget semantics (entire loop, not per-phase)
+- Added HOTL vs AFK Mode Considerations section
+- Added Phase 2.5: Design Sketch for UI/visualization projects
+- Added ADR file creation guidance (separate files vs inline)
+- Added Emergent PRD Pattern section
+- Added example interview snippets appendix
+- Updated PRD schema to remove per-phase estimated_iterations
+- Updated Phase 5 questions for clarity on phase transitions
 
 ### v3 (2026-01-07)
 - Added project type determination (research software / learning / implementation)

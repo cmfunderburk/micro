@@ -1,0 +1,33 @@
+meta:
+  title: "Two-Agent Baseline"
+  complexity: 1
+  description: |
+    Simplest possible exchange scenario: two agents with complementary preferences.
+
+    Agent A (alpha=0.3) values good Y relatively more.
+    Agent B (alpha=0.7) values good X relatively more.
+
+    Starting from identical endowments (5,5), both agents benefit from trade.
+    Nash bargaining produces a Pareto-efficient allocation where both agents
+    move toward their preferred good.
+
+    This is the fundamental building block for understanding bilateral exchange.
+  tags:
+    - baseline
+    - bilateral
+    - simple
+
+config:
+  grid_size: 10
+  perception_radius: 10.0
+  discount_factor: 0.95
+
+  agents:
+    - id: A
+      position: [2, 5]
+      alpha: 0.3
+      endowment: [5.0, 5.0]
+    - id: B
+      position: [7, 5]
+      alpha: 0.7
+      endowment: [5.0, 5.0]

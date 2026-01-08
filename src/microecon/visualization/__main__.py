@@ -1,6 +1,6 @@
 """Allow running as: python -m microecon.visualization"""
 
-from microecon.visualization.app import run_visualization
+from microecon.visualization.browser import run_with_startup_selector
 
 if __name__ == "__main__":
-    run_visualization()
+    run_with_startup_selector()

@@ -44,13 +44,28 @@ class Position:
         """
         return abs(self.row - other.row) + abs(self.col - other.col)
 
-    def chebyshev_distance_to(self, other: Position) -> int:
+    def chebyshev_distance_to(self, other: Position, grid_size: int | None = None) -> int:
         """
         Compute Chebyshev distance (max of absolute differences).
 
         This is the number of moves needed if diagonal moves are allowed.
+
+        Args:
+            other: Target position
+            grid_size: If provided, compute wrapped distance on a torus of this size
+
+        Returns:
+            Number of diagonal moves needed to reach other position
         """
-        return max(abs(self.row - other.row), abs(self.col - other.col))
+        dr = abs(self.row - other.row)
+        dc = abs(self.col - other.col)
+
+        if grid_size is not None:
+            # Consider wraparound
+            dr = min(dr, grid_size - dr)
+            dc = min(dc, grid_size - dc)
+
+        return max(dr, dc)
 
     def neighbors(self, include_diagonal: bool = True) -> list[Position]:
         """
@@ -208,13 +223,16 @@ class Grid:
         """
         Find all agents within radius of center position.
 
+        Uses Chebyshev distance (diagonal moves allowed) for consistency with
+        movement mechanics. This means perception area is square, not circular.
+
         Args:
             center: Center position for search
-            radius: Maximum distance
+            radius: Maximum Chebyshev distance (number of diagonal moves)
             exclude_center: If True, exclude agents at the exact center position
 
         Yields:
-            Tuples of (agent_id, position, distance)
+            Tuples of (agent_id, position, chebyshev_distance)
         """
         # For efficiency on large grids, we could use spatial indexing.
         # For now, iterate all agents (fine for small simulations).
@@ -222,9 +240,9 @@ class Grid:
             if exclude_center and pos == center:
                 continue
 
-            dist = self._wrapped_distance(center, pos) if self.wrap else center.distance_to(pos)
+            dist = self.chebyshev_distance(center, pos)
             if dist <= radius:
-                yield (agent_id, pos, dist)
+                yield (agent_id, pos, float(dist))
 
     def agents_at_same_position(self, agent: Agent) -> set[str]:
         """
@@ -258,7 +276,7 @@ class Grid:
             )
 
     def _wrapped_distance(self, p1: Position, p2: Position) -> float:
-        """Compute distance with wraparound (torus topology)."""
+        """Compute Euclidean distance with wraparound (torus topology)."""
         dr = abs(p1.row - p2.row)
         dc = abs(p1.col - p2.col)
 
@@ -267,6 +285,10 @@ class Grid:
         dc = min(dc, self.size - dc)
 
         return math.sqrt(dr ** 2 + dc ** 2)
+
+    def chebyshev_distance(self, p1: Position, p2: Position) -> int:
+        """Compute Chebyshev distance between two positions (respecting wrap setting)."""
+        return p1.chebyshev_distance_to(p2, grid_size=self.size if self.wrap else None)
 
     def all_positions(self) -> Iterator[Position]:
         """Iterate over all grid positions."""

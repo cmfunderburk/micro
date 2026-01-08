@@ -1,0 +1,48 @@
+meta:
+  title: "Hub and Spoke"
+  complexity: 2
+  description: |
+    A central agent surrounded by peripheral agents in a ring formation.
+
+    The hub agent (alpha=0.5) has balanced preferences and sits at the center.
+    Four spoke agents with varying preferences (0.2, 0.4, 0.6, 0.8) are positioned
+    equidistant from the hub.
+
+    This scenario demonstrates:
+    - How a central agent can facilitate multiple trades
+    - Competition among spoke agents to reach the hub
+    - The effect of spatial position on trading opportunities
+
+    Under opportunistic matching, the hub may trade sequentially with multiple
+    spokes. Under committed matching, only one spoke pairs with the hub.
+  tags:
+    - spatial
+    - asymmetric
+    - multi-agent
+
+config:
+  grid_size: 15
+  perception_radius: 10.0
+  discount_factor: 0.9
+
+  agents:
+    - id: Hub
+      position: [7, 7]
+      alpha: 0.5
+      endowment: [10.0, 10.0]
+    - id: North
+      position: [7, 2]
+      alpha: 0.2
+      endowment: [5.0, 5.0]
+    - id: East
+      position: [12, 7]
+      alpha: 0.4
+      endowment: [5.0, 5.0]
+    - id: South
+      position: [7, 12]
+      alpha: 0.6
+      endowment: [5.0, 5.0]
+    - id: West
+      position: [2, 7]
+      alpha: 0.8
+      endowment: [5.0, 5.0]

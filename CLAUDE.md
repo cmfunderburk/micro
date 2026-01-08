@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a research-first agent-based microeconomics platform that gives canonical theoretical microeconomics computational form. The core insight is **institutional visibility**: making economic institutions (bargaining protocols, information structures, search mechanisms) explicit, configurable, and comparable.
 
-See VISION.md for the authoritative statement of project identity and methodology.
+See VISION.md for the authoritative statement of project identity and methodology. See STATUS.md for current capabilities and known limitations.
 
-## Current Implementation Status
+## Current Implementation Status (Summary)
 
 ### Simulation Core (Complete)
 
@@ -20,37 +20,70 @@ The core simulation infrastructure in `src/microecon/`:
 | `preferences.py` | `CobbDouglas(alpha)` - u(x,y) = x^α * y^(1-α) |
 | `agent.py` | Agent with private state / observable type separation |
 | `grid.py` | `Grid(size)`, `Position`, movement, spatial queries |
-| `information.py` | `InformationEnvironment` abstraction, `FullInformation` implementation |
-| `bargaining.py` | Nash bargaining solution, surplus calculation, trade execution |
-| `search.py` | Target evaluation (discounted Nash surplus), movement decisions |
-| `simulation.py` | `Simulation` engine with tick loop, `create_simple_economy()` factory |
+| `information.py` | `InformationEnvironment` abstraction (`FullInformation`, `NoisyAlphaInformation`) |
+| `beliefs.py` | Agent beliefs (type beliefs, price beliefs, memory, update rules) |
+| `bargaining.py` | Bargaining solutions (Nash, Rubinstein), protocol abstraction |
+| `search.py` | Target evaluation (discounted surplus), movement decisions, belief integration |
+| `matching.py` | Matching protocols (Opportunistic, StableRoommates), commitment state |
+| `simulation.py` | `Simulation` engine with four-phase tick loop, `create_simple_economy()` factory |
+| `batch.py` | `BatchRunner` for parameter sweeps and systematic comparisons |
 
-### Visualization (MVP Complete)
+### Logging & Analysis (Complete)
+
+Infrastructure for capturing simulation state and analyzing results:
+
+| Module | Purpose |
+|--------|---------|
+| `logging/events.py` | Event dataclasses (`TickRecord`, `SearchDecision`, `TradeEvent`, etc.) |
+| `logging/logger.py` | `SimulationLogger` hooks into simulation, captures full state |
+| `logging/formats.py` | JSON lines format for human-readable logs |
+| `analysis/loader.py` | `load_run()`, `load_batch()`, grouping utilities |
+| `analysis/timeseries.py` | Welfare/trades over time, agent trajectories |
+| `analysis/distributions.py` | Cross-run comparisons, statistical tests |
+| `analysis/tracking.py` | Agent-level outcomes, search efficiency analysis |
+| `visualization/replay.py` | `ReplayController`, `DualReplayController` for playback |
+
+### Visualization (Feature Complete)
 
 DearPyGui-based visualization in `src/microecon/visualization/`. See VISUALIZATION.md for full design vision.
 
-**Implemented:**
+**Core Features:**
 - Grid rendering with agents colored by preference parameter (alpha)
 - Play/pause/step/reset controls with speed slider
 - Trade animations (line flash between trading agents)
 - Metrics panel (tick, trades, welfare, gains)
 - Hover tooltips showing agent details
 - Click-to-select with perception radius overlay
-- Movement trails
+- Toggleable overlays (movement trails, perception radius, surplus heatmap, trade network)
+- Time-series charts (welfare and trade count over time)
 
-**From VISUALIZATION.md, not yet implemented:**
-- Trade zoom view / Edgeworth box
-- Time series charts (ImPlot integration)
-- Agent perspective mode (for information asymmetry)
-- Export capabilities (PNG, GIF, CSV, SVG)
-- Config file support (YAML/JSON scenarios)
-- Replay mode (currently live-only)
+**Configuration:**
+- Live configuration modal for simulation setup
+- Institutional parameter selection (Nash/Rubinstein, Opportunistic/Stable Roommates)
+- Search parameters (perception radius, discount factor)
+
+**Trade Inspection:**
+- Trade history panel with scrollable list
+- Edgeworth box popup with indifference curves, contract curve, utility breakdown
+
+**Agent Perspective Mode:**
+- View simulation from selected agent's perspective
+- Belief visualization for belief-enabled agents
+
+**Export:**
+- PNG/SVG frame export
+- GIF recording
+- CSV/JSON data export
+
+**Trade Network Panel** (separate window):
+- Force-directed and circular graph layouts
+- Visual encoding of trade frequency and recency
 
 Run with: `uv run python -m microecon.visualization`
 
 ### Test Coverage
 
-92 tests covering all core modules. Run with: `uv run pytest`
+669 tests covering all core modules. Run with: `uv run pytest`
 
 ## Architecture
 
@@ -61,21 +94,57 @@ src/microecon/
 ├── preferences.py       # Utility functions (Cobb-Douglas)
 ├── agent.py             # Agent, AgentPrivateState, AgentType
 ├── grid.py              # Spatial grid and positions
-├── information.py       # Information environment abstraction
-├── bargaining.py        # Nash bargaining solution
+├── information.py       # Information environments (Full, NoisyAlpha)
+├── beliefs.py           # Agent beliefs (type beliefs, price beliefs, memory)
+├── bargaining.py        # Bargaining protocols (Nash, Rubinstein)
 ├── search.py            # Target selection and movement
-├── simulation.py        # Main simulation engine
+├── matching.py          # Matching protocols (Opportunistic, StableRoommates)
+├── simulation.py        # Main simulation engine (four-phase tick)
+├── batch.py             # BatchRunner for parameter sweeps
+├── logging/
+│   ├── __init__.py
+│   ├── events.py        # Event dataclasses (includes BeliefSnapshot)
+│   ├── logger.py        # SimulationLogger
+│   └── formats.py       # JSON lines format
+├── analysis/
+│   ├── __init__.py
+│   ├── loader.py        # Run loading utilities
+│   ├── timeseries.py    # Time series analysis
+│   ├── distributions.py # Cross-run comparisons
+│   ├── tracking.py      # Agent-level tracking
+│   └── emergence.py     # Market emergence metrics
+├── scenarios/
+│   ├── __init__.py
+│   ├── schema.py        # YAML scenario schema
+│   ├── loader.py        # Scenario loading utilities
+│   └── market_emergence.py  # MarketEmergenceConfig
 └── visualization/
     ├── __init__.py
     ├── __main__.py      # Entry point for -m invocation
-    └── app.py           # DearPyGui visualization
+    ├── app.py           # Main visualization application
+    ├── replay.py        # Replay controllers
+    ├── browser.py       # Scenario browser UI, LiveConfigModal
+    ├── timeseries.py    # Time-series charts (ImPlot)
+    ├── edgeworth.py     # Edgeworth box trade visualization
+    ├── export.py        # PNG/SVG/GIF/CSV/JSON export
+    └── network.py       # Trade network panel
 ```
 
 ### Key Abstractions
 
-**Agent state vs. observable type**: Agents have private state (true preferences, endowments) separate from observable type (what others can see). Currently type = private state (full information), but the architecture supports future information environments.
+**Agent state vs. observable type**: Agents have private state (true preferences, endowments) separate from observable type (what others can see). Under `FullInformation`, type = private state. Under `NoisyAlphaInformation`, observed types differ from true types.
 
-**Information environment**: `InformationEnvironment` interface determines what agents can observe about each other. `FullInformation` exposes everything; future implementations can restrict visibility.
+**Information environment**: `InformationEnvironment` interface determines what agents can observe about each other. `FullInformation` exposes everything; `NoisyAlphaInformation` adds noise to observed preference parameters, enabling information asymmetry studies.
+
+**Bargaining protocol**: `BargainingProtocol` ABC enables swapping institutional rules. Two implementations:
+- `NashBargainingProtocol`: Axiomatic solution (symmetric, maximizes Nash product)
+- `RubinsteinBargainingProtocol`: Strategic alternating-offers (first-mover advantage, patience = power)
+
+**Matching protocol**: `MatchingProtocol` ABC determines how agents form trading pairs. Two implementations:
+- `OpportunisticMatchingProtocol`: Any co-located pair can trade (default, myopic)
+- `StableRoommatesMatchingProtocol`: Irving's algorithm forms committed pairs (stable, globally optimal)
+
+Both abstractions enable the core research question: "What difference does the institution make?"
 
 **Search with discounted surplus**: Agents evaluate visible others by computing Nash bargaining surplus, discounted by distance. This couples search meaningfully to exchange - agents pursue opportunities that maximize expected gains from trade.
 
@@ -93,6 +162,28 @@ uv run python -m microecon.visualization
 
 # Run visualization with custom parameters
 uv run python -c "from microecon.visualization import run_visualization; run_visualization(n_agents=20, grid_size=20, seed=42)"
+
+# Run batch comparison (Nash vs Rubinstein)
+uv run python -c "
+from microecon.batch import run_comparison
+from microecon.analysis import compare_protocols
+results = run_comparison(n_agents=10, ticks=100, seeds=range(5))
+for name, comp in compare_protocols([r.run_data for r in results]).items():
+    print(comp.summary())
+"
+
+# Run with logging to disk
+uv run python -c "
+from pathlib import Path
+from microecon.batch import BatchRunner
+from microecon.bargaining import NashBargainingProtocol
+runner = BatchRunner(
+    base_config={'n_agents': 10, 'grid_size': 15, 'seed': 42},
+    output_dir=Path('./runs/test')
+)
+results = runner.run(ticks=100)
+print(f'Saved to {results[0].log_path}')
+"
 ```
 
 ## Theoretical Grounding Requirements
@@ -109,34 +200,28 @@ All behavioral rules, bargaining protocols, and institutional mechanisms must ha
 ## Document Hierarchy
 
 1. **VISION.md** - Authoritative on identity, scope, methodology
-2. **theoretical-foundations.md** - Textbook mappings and derivations
-3. **VISUALIZATION.md** - Full visualization design vision (UI/UX, technology choices, future features)
-4. **VISUALIZATION_MVP_SPEC.md** - MVP requirements (complete, checklist at bottom shows all items done)
-5. **CLAUDE.md** - Development guidance and current status
+2. **STATUS.md** - Current capabilities and known limitations (what exists today)
+3. **theoretical-foundations.md** - Textbook mappings and derivations
+4. **VISUALIZATION.md** - Full visualization design vision (UI/UX, technology choices, future features)
+5. **CLAUDE.md** - Development guidance and conventions
 
 ## Next Development Directions
 
-The simulation and visualization foundations are complete. Potential next steps (not prioritized):
+See STATUS.md §5 for a detailed gap analysis vs VISION.md and VISUALIZATION.md.
+
+**Visualization enhancements** (see VISUALIZATION.md for full specs)
+- Trade zoom view with Edgeworth box
+- Export: PNG/SVG frames, GIF/MP4 animations
+- Overlay toggles (trails, perception radius)
+- Agent perspective mode (visualize what agents observe under noisy info)
 
 **Institutional comparisons** (core research value per VISION.md)
-- Alternative bargaining protocols (Rubinstein, TIOLI, posted prices)
-- Swappable matching mechanisms
-- Compare outcomes under different institutional rules
+- Additional bargaining protocols (TIOLI, posted prices, double auction)
+- Protocol-aware search (currently uses Nash surplus for all protocols)
 
 **Information environments**
-- Private information (type ≠ private state)
-- Signaling and screening
-- Partial observability
-- Agent perspective mode in visualization (see what agent X sees)
+- Signaling and screening mechanisms
+- Additional noise models beyond NoisyAlphaInformation
 
-**Visualization enhancements** (see VISUALIZATION.md §4-9 for full specs)
-- Trade zoom view with Edgeworth box (§4)
-- Time series charts via ImPlot (§9)
-- Export: PNG/SVG frames, GIF/MP4 animations, CSV data logs (§12)
-- Replay mode from logged history (§14)
-
-**Analysis infrastructure**
+**Analysis extensions**
 - Equilibrium benchmarks (Walrasian prices for comparison)
-- Statistical summaries across runs
-- Config files for reproducible scenarios (YAML/JSON)
-- Parameter sweep tools

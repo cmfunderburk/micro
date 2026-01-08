@@ -312,22 +312,125 @@ Options:
 
 ---
 
-## 6. Agent Decision Architecture
+## 6. Tick Model and Action Budget
 
-### 6.1 Current Decision Structure
+### 6.1 Current Tick Structure (Problem)
+
+The current implementation has a four-phase tick:
+```
+EVALUATE → DECIDE → MOVE → EXCHANGE
+```
+
+**Issue 1: Move AND Trade in same tick.** Agents move in Phase 3, then trade in Phase 4 if co-located. This means agents don't face a real choice between moving and trading.
+
+**Issue 2: Automatic trade trigger.** Co-location + positive surplus = trade. No consent mechanism; no option to decline a co-located trade to pursue better opportunities.
+
+**Issue 3: No action exclusivity.** With future additions (gathering, production), we need a model where agents choose ONE action per tick.
+
+### 6.2 Revised Tick Model (Decided)
+
+```
+PHASE 0: PERCEPTION (free, all agents)
+─────────────────────────────────────
+For each agent A:
+  • Observe all agents within perception_radius
+  • Compute expected_surplus(A, B) for each visible B
+  • Identify co-located set: {B : distance(A, B) = 0}
+  • Identify rejection_cooldown set: {B : A rejected by B within last K ticks}
+
+PHASE 1: CO-LOCATION RESOLUTION (mandatory before other actions)
+────────────────────────────────────────────────────────────────
+1. Identify all co-located groups
+
+2. For each agent A with co-located partners:
+   • Eligible partners = co-located − rejection_cooldown
+   • If any eligible partner has expected_surplus > 0:
+     → A selects preferred: argmax_{B ∈ eligible} expected_surplus(A, B)
+     → A marks intent: ENGAGE
+   • Else:
+     → A marks intent: DECLINE (proceed to Phase 2)
+
+3. Match selections (simultaneous resolution):
+   • MUTUAL MATCH: A selected B AND B selected A
+   • NO MATCH: otherwise
+
+4. For each MUTUAL MATCH (A, B):
+   • Proposer = agent with higher expected_surplus
+   • Proposer makes offer via bargaining protocol
+   • Responder decides: ACCEPT or REJECT
+     → ACCEPT: Trade executes. Both agents DONE for this tick.
+     → REJECT: No trade. Rejection recorded (cooldown starts).
+               Both agents proceed to Phase 2.
+
+5. Agents not in mutual match proceed to Phase 2
+
+PHASE 2: ACTION SELECTION (agents not DONE)
+───────────────────────────────────────────
+Each agent selects ONE action:
+  • MOVE(target): Move toward target position
+  • WAIT: Do nothing
+  • (Future) GATHER: Extract resources at current location
+  • (Future) PRODUCE: Transform goods at current location
+
+Note: TRADE is not available here—only in Phase 1
+
+PHASE 3: EXECUTION
+──────────────────
+• All MOVE actions execute (respecting movement_budget)
+• All GATHER/PRODUCE actions execute
+• Crossing detection (agents moving toward each other meet)
+```
+
+### 6.3 Key Design Decisions
+
+| Decision | Resolution | Rationale |
+|----------|------------|-----------|
+| **Proposer determination** | Higher expected_surplus agent | Reveals preference intensity; configurable later |
+| **Multi-agent co-location** | Simultaneous partner selection | Cleaner than sequential; configurable later |
+| **Rejection cooldown** | 3 ticks | Prevents degenerate loops; institutional variable |
+| **Declining cost** | Free | Agent can decline co-located trade to pursue distant partner; explore later |
+
+### 6.4 Properties of This Model
+
+**Action exclusivity:** Agent does exactly ONE of {Trade, Move, Gather, Produce, Wait} per tick.
+
+**Co-location priority:** Must resolve co-located opportunities before other actions. But can decline if no positive surplus or prefer distant option.
+
+**Consent required:** Trade requires MUTUAL MATCH + ACCEPT. Three opt-out points: DECLINE (don't engage), no mutual selection, REJECT proposal.
+
+**No infinite loops:** Rejection cooldown prevents repeated unwanted engagement.
+
+**Clean extension:** Gather/Produce slot into Phase 2 as alternatives to Move.
+
+### 6.5 Institutional Variables (Flagged for Future Configuration)
+
+These parameters are currently fixed but represent potential research variables:
+
+| Parameter | Current | Alternatives to Explore |
+|-----------|---------|------------------------|
+| Proposer rule | Higher surplus | Random, initiator advantage, by type |
+| Cooldown duration | 3 ticks | 1-5 ticks, or adaptive |
+| Declining cost | Free | Partial action cost |
+| Multi-agent resolution | Simultaneous | Sequential, priority-based |
+
+---
+
+## 7. Agent Decision Architecture
+
+### 7.1 Current Decision Structure
 
 Agents currently decide:
 1. **Target selection:** Who to approach (discounted surplus)
 2. **Match acceptance:** Whether to trade (implicit: yes if surplus > 0)
 3. **Bargaining:** Determined by protocol
 
-### 6.2 Expanded Decision Structure
+### 7.2 Expanded Decision Structure
 
 With production/gathering, agents must also decide:
 4. **Activity choice:** Produce? Gather? Search for trade? Go home? Consume?
 5. **Location choice:** Which resource node? Which market? Specific partner?
 
-### 6.3 Theoretical Approaches to Activity Choice
+### 7.3 Theoretical Approaches to Activity Choice
 
 #### Option A: Full Optimization
 
@@ -360,7 +463,7 @@ With production/gathering, agents must also decide:
 - **Aligns with:** VISION.md emphasis on institutional/behavioral comparison
 - **Complexity:** Higher implementation, but enables research flexibility
 
-### 6.4 Decision Questions (Open)
+### 7.4 Decision Questions (Open)
 
 **Q7: Activity choice architecture**
 - (a) Full optimization
@@ -380,7 +483,7 @@ With production/gathering, agents must also decide:
 
 ---
 
-## 7. Proposed Development Phases
+## 8. Proposed Development Phases
 
 ### Phase A: Bilateral Protocol Expansion
 
@@ -457,38 +560,49 @@ With production/gathering, agents must also decide:
 
 ---
 
-## 8. Open Questions Summary
+## 9. Open Questions Summary
 
 ### Protocol Design
 
 | ID | Question | Options | Status |
 |----|----------|---------|--------|
 | Q1 | TIOLI proposer selection | Random / First-mover / By type / Configurable | **Decided: Configurable** |
-| Q2 | Asymmetric Nash β determination | Fixed per agent / Derived / Situational / Configurable | Open |
-| Q3 | Nash Demand Game demand representation | Surplus share / Bundle / Exchange rate | Open |
-| Q4 | Nash Demand disagreement handling | Walk away / Fallback / Retry | Open |
+| Q2 | Asymmetric Nash β determination | Fixed per agent / Derived / Situational / Configurable | **Decided: Per-agent w_i, β = w_i/(w_i+w_j)** — configurable per scenario; can derive from δ or make situational later |
+| Q3 | Nash Demand Game demand representation | Surplus share / Bundle / Exchange rate | **Decided: Surplus share** — scalar s_i ∈ [0,1], compatible if s_A + s_B ≤ 1 |
+| Q4 | Nash Demand disagreement handling | Walk away / Fallback / Retry | **Decided: Walk away** — preserves coordination failure content |
 
 ### Economy Design
 
 | ID | Question | Options | Status |
 |----|----------|---------|--------|
-| Q5 | Resource node placement | Fixed / Random / Clustered / Configurable | Open |
-| Q6 | Resource regeneration | None / Fixed rate / Stochastic / Depletion-recovery | Open |
-| Q7 | Activity choice architecture | Full optimization / Hierarchical / Learning / Configurable | Open |
-| Q8 | Consumption modeling | Passive / Active depletion / Location-specific | Open |
-| Q9 | Location priority | Nodes only / + Homes / Full system | Open |
+| Q5 | Resource node placement | Fixed / Random / Clustered / Configurable | **Decided: Fixed** — scenario-specified; random as optional mode for robustness |
+| Q6 | Resource regeneration | None / Fixed rate / Stochastic / Depletion-recovery | **Decided: Fixed rate with cap** — standard renewable resource; depletion-recovery later |
+| Q7 | Activity choice architecture | Full optimization / Hierarchical / Learning / Configurable | **Decided: Heuristic first** — "gather if low, trade if opportunity" behind swappable interface |
+| Q8 | Consumption modeling | Passive / Active depletion / Location-specific | **Decided: Active depletion** — either fixed consumption or % decay; breaks one-shot dynamics |
+| Q9 | Location priority | Nodes only / + Homes / Full system | **Decided: Nodes only** — minimal sustained economy first; homes/markets later |
 
 ### Architecture
 
 | ID | Question | Options | Status |
 |----|----------|---------|--------|
-| Q10 | Search with multiple protocols | Use active protocol / Agent protocol preferences | Open |
-| Q11 | Locations: fixed vs emergent | Fixed / Emergent / Hybrid | Open |
-| Q12 | Market location mechanics | Definitional / Mechanical / Institutional | Open |
+| Q10 | Search with multiple protocols | Use active protocol / Agent protocol preferences | **Decided: Use active protocol** — search evaluates using protocol's surplus; preferences later |
+| Q11 | Locations: fixed vs emergent | Fixed / Emergent / Hybrid | **Decided: Fixed** — for resources; markets may emerge definitionally |
+| Q12 | Market location mechanics | Definitional / Mechanical / Institutional | **Decided: Definitional first** — markets are where agents congregate; mechanical effects later |
+
+### Tick Model (New)
+
+| ID | Question | Options | Status |
+|----|----------|---------|--------|
+| Q13 | Action exclusivity | Move+Trade same tick / Mutually exclusive | **Decided: Mutually exclusive** — one action per tick |
+| Q14 | Trade trigger | Auto (co-location + surplus) / Consent required | **Decided: Consent required** — mutual selection + proposal + acceptance |
+| Q15 | Proposer determination (co-location) | Random / Higher surplus / Initiator / Configurable | **Decided: Higher surplus** — configurable later |
+| Q16 | Multi-agent co-location | Sequential pairwise / Simultaneous selection | **Decided: Simultaneous selection** — configurable later |
+| Q17 | Rejection cooldown | None / Fixed ticks / Adaptive | **Decided: 3 ticks** — institutional variable |
+| Q18 | Declining cost | Free / Partial action cost | **Decided: Free** — explore later |
 
 ---
 
-## 9. References
+## 10. References
 
 ### Canonical Sources
 
@@ -518,16 +632,28 @@ With production/gathering, agents must also decide:
 
 ---
 
-## 10. Next Steps
+## 11. Next Steps
 
-1. **Review this document** - Consider open questions, note preferences
-2. **Session 2** - Resolve key decisions, prioritize phases
-3. **Draft PRD** - Using Ralph Interview protocol once decisions firm
-4. **Implementation** - Phased execution per roadmap
+1. ~~**Review this document** - Consider open questions, note preferences~~ ✓
+2. ~~**Session 2** - Resolve key decisions~~ ✓ (18 questions resolved)
+3. **Remaining discussions:**
+   - Finalize consumption model specifics (fixed rate vs % decay)
+   - Crowding externalities at resource nodes (GPT-5.2/Gemini both flagged)
+   - Nash Demand Game: how agents form demands (beliefs? focal points? learning?)
+4. **Draft PRD** - Using Ralph Interview protocol once remaining items resolved
+5. **Implementation** - Phased execution per roadmap
 
 ---
 
-**Document Version:** 1.0
+**Document Version:** 2.0
 **Created:** 2026-01-08
-**For Review By:** [User]
-**Next Session:** TBD
+**Updated:** 2026-01-08 (Session 2)
+**Status:** Most design questions resolved; ready for PRD drafting after final items
+
+### Change Log
+
+**v2.0 (Session 2):**
+- Added Section 6: Tick Model and Action Budget (new architecture)
+- Resolved Q2-Q18 based on discussion and external review
+- Added tick model institutional variables table
+- Renumbered sections 7-11

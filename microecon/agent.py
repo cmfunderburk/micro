@@ -105,6 +105,8 @@ class Agent:
         private_state: True characteristics
         perception_radius: How far the agent can see (in grid units)
         discount_factor: Time preference (delta), used to discount future trades
+        bargaining_power: Intrinsic institutional bargaining power (w_i), used by
+            AsymmetricNashBargainingProtocol. Independent of discount_factor.
         movement_budget: Squares per tick the agent can move
         memory: Observation and interaction history (optional)
         price_belief: Belief about exchange rates (optional)
@@ -114,6 +116,7 @@ class Agent:
     private_state: AgentPrivateState
     perception_radius: float = 3.0
     discount_factor: float = 0.95
+    bargaining_power: float = 1.0
     movement_budget: int = 1
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
 
@@ -223,6 +226,7 @@ def create_agent(
     endowment_y: float,
     perception_radius: float = 3.0,
     discount_factor: float = 0.95,
+    bargaining_power: float = 1.0,
     movement_budget: int = 1,
     agent_id: str | None = None,
 ) -> Agent:
@@ -235,6 +239,8 @@ def create_agent(
         endowment_y: Initial holdings of good y
         perception_radius: How far the agent can observe
         discount_factor: Time preference delta in (0, 1)
+        bargaining_power: Intrinsic bargaining power w_i (default 1.0). Used by
+            AsymmetricNashBargainingProtocol. Independent of discount_factor.
         movement_budget: Squares per tick
         agent_id: Optional explicit ID (for reproducibility). If None, uses UUID.
 
@@ -249,6 +255,7 @@ def create_agent(
         private_state=private_state,
         perception_radius=perception_radius,
         discount_factor=discount_factor,
+        bargaining_power=bargaining_power,
         movement_budget=movement_budget,
     )
 

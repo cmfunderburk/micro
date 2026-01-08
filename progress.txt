@@ -1,0 +1,47 @@
+# Progress Log: Bilateral Protocols Expansion
+
+## Format
+Each entry: [timestamp] [phase] [status] [description]
+
+---
+
+## Log
+
+### Phase 1: Core Protocol Implementation
+
+#### Completed
+- [2026-01-08 16:00] FEAT-001: bargaining_power attribute - Added to Agent dataclass with default 1.0
+- [2026-01-08 16:15] FEAT-002: tioli_bargaining_solution - Closed-form implementation with golden section search
+- [2026-01-08 16:20] FEAT-003: TIOLIBargainingProtocol - Protocol class with lexicographic proposer selection
+- [2026-01-08 16:20] FEAT-004: AsymmetricNashBargainingProtocol - Protocol class using bargaining_power weights
+- [2026-01-08 16:25] FEAT-005: Package exports - Added to microecon/__init__.py
+- [2026-01-08 16:30] Phase 1 Gate - All checks pass, 667 tests still pass
+
+#### Issues Encountered
+- [2026-01-08 16:10] ISSUE: TIOLI search bounds inverted
+  - Root cause: Confused upper/lower bound calculation for indifference curve
+  - Resolution: Fixed x_r_at_y_limit to be lower bound (small x_r → large y_r)
+
+#### Skipped/Deferred
+- None
+
+---
+
+### Phase 2: Theory Tests
+[starting]
+
+### Phase 3: Server & UI Integration
+[not started]
+
+### Phase 4: Documentation
+[not started]
+
+---
+
+## Summary Statistics
+| Metric | Count |
+|--------|-------|
+| Features completed | 5/17 |
+| Features skipped | 0 |
+| Issues encountered | 1 |
+| Phases completed | 1/4 |

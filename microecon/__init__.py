@@ -17,9 +17,13 @@ from microecon.bargaining import (
     rubinstein_share,
     rubinstein_bargaining_solution,
     compute_rubinstein_surplus,
+    tioli_bargaining_solution,
+    asymmetric_nash_bargaining_solution,
     BargainingProtocol,
     NashBargainingProtocol,
     RubinsteinBargainingProtocol,
+    TIOLIBargainingProtocol,
+    AsymmetricNashBargainingProtocol,
 )
 from microecon.matching import (
     MatchingProtocol,
@@ -63,14 +67,19 @@ __all__ = [
     # Bargaining - Nash (axiomatic)
     "nash_bargaining_solution",
     "compute_nash_surplus",
+    "asymmetric_nash_bargaining_solution",
     # Bargaining - Rubinstein (strategic)
     "rubinstein_share",
     "rubinstein_bargaining_solution",
     "compute_rubinstein_surplus",
+    # Bargaining - TIOLI
+    "tioli_bargaining_solution",
     # Bargaining protocols (institutional abstraction)
     "BargainingProtocol",
     "NashBargainingProtocol",
     "RubinsteinBargainingProtocol",
+    "TIOLIBargainingProtocol",
+    "AsymmetricNashBargainingProtocol",
     # Matching protocols (institutional abstraction)
     "MatchingProtocol",
     "OpportunisticMatchingProtocol",

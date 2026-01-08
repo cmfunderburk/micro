@@ -1,4 +1,4 @@
-# Ralph Interview Protocol v4
+# Ralph Interview Protocol v5
 
 A vision-anchored interview process for transforming project goals into ralph-ready PRDs and operational artifacts.
 
@@ -194,6 +194,156 @@ Q1.5.2: "Do resource constraints affect scope?"
 ```
 
 **Phase exit:** Resource constraints documented, scope implications understood.
+
+---
+
+### Phase 1.7: Operational Model (Conditional)
+
+**Objective:** Establish how the system will be used in practice, preventing architectural mismatches discovered during implementation.
+
+**When to include this phase:**
+- Multi-user or networked systems
+- Systems with shared state across components
+- Real-time or event-driven applications
+- Anything involving concurrency, sessions, or persistence
+
+**Why this phase exists:**
+The microecon web frontend assumed single-user operation. Phase 5 (Comparison Mode) discovered the need for per-client simulation instances, requiring architectural changes that could have been prevented by explicit operational model discussion upfront.
+
+**Agent actions:**
+
+1. Based on vision and gap analysis, infer the likely operational model
+2. Present assumptions and ask for confirmation/correction:
+
+```
+## Operational Model
+
+### Usage Pattern
+| Aspect | Assumption | Alternatives |
+|--------|------------|--------------|
+| Users | Single user | Multiple concurrent users |
+| Sessions | Stateless requests | Persistent sessions |
+| State sharing | Shared instance | Per-user isolation |
+| Execution | Synchronous | Async / event-driven |
+
+### Concurrency Model
+- [ ] Single-threaded, single-user (simplest)
+- [ ] Single-threaded, request-queued (web server pattern)
+- [ ] Multi-threaded with shared state (requires synchronization)
+- [ ] Process-per-user isolation (highest isolation, highest overhead)
+
+### State Lifecycle
+- **Creation**: [when/how state is initialized]
+- **Persistence**: [ephemeral / session / permanent]
+- **Reset semantics**: [what "reset" means - clear all? preserve config?]
+- **Cleanup**: [when/how state is destroyed]
+```
+
+**Questions to ask:**
+
+```
+Q1.7.1: "Will multiple users/clients interact with this simultaneously?"
+- Single user only
+- Multiple users, independent sessions
+- Multiple users, shared state (collaboration)
+- Multiple users, comparison mode (same inputs, different views)
+
+Q1.7.2: "What happens on 'reset' or 'restart'?"
+- Clear all state, fresh start
+- Preserve configuration, clear data
+- Preserve history, reset to checkpoint
+- [Other - specify]
+
+Q1.7.3: "How should state be shared between components?"
+- Single source of truth (one component owns state)
+- Event-driven synchronization (pub/sub)
+- Polling/refresh on demand
+- Real-time sync (WebSocket, SSE)
+```
+
+**Phase exit:** Operational model documented, concurrency and state semantics explicit.
+
+---
+
+### Phase 1.8: Integration Inventory (Conditional)
+
+**Objective:** Map all data flows between components with explicit type specifications, preventing mid-execution consistency bugs.
+
+**When to include this phase:**
+- Multi-component systems (frontend/backend, services)
+- Systems integrating with existing codebases
+- Migration or porting projects
+- Any work crossing module boundaries with shared data structures
+
+**Why this phase exists:**
+The microecon project had two `TradeEvent` classes (in simulation.py and logging/events.py) with divergent fields. This was discovered only when the visualization layer tried to display pre/post trade state. Explicit integration inventory would have caught this upfront.
+
+**Agent actions:**
+
+1. Identify all component boundaries the work will cross
+2. Map data structures that flow between components
+3. Flag inconsistencies or underspecified types
+4. Present inventory for validation:
+
+```
+## Integration Inventory
+
+### Component Boundaries
+| From | To | Transport | Data Format |
+|------|-----|-----------|-------------|
+| [component A] | [component B] | [HTTP/WS/IPC/import] | [JSON/Protobuf/Python objects] |
+
+### Shared Data Structures
+
+#### [Structure Name] (e.g., TradeEvent)
+| Field | Source Component | Consumer Component | Type | Notes |
+|-------|------------------|-------------------|------|-------|
+| [field_name] | [where defined] | [where used] | [type] | [mismatches?] |
+
+### Identified Inconsistencies
+| Issue | Components | Impact | Resolution Needed |
+|-------|------------|--------|-------------------|
+| [e.g., field missing] | [A, B] | [data loss / runtime error] | [add field / create adapter] |
+
+### Type Specifications Required
+For each boundary, explicit contracts:
+- [ ] [Component A → B]: [schema or interface definition]
+- [ ] [Component B → C]: [schema or interface definition]
+```
+
+**Questions to ask:**
+
+```
+Q1.8.1: "I found [N] data structures crossing component boundaries.
+        Should I document type contracts for all of them, or focus on [subset]?"
+
+Q1.8.2: "There's inconsistency in [structure]: [component A] has [fields],
+        [component B] expects [different fields]. Should I:
+        - Unify to single source of truth
+        - Create explicit adapter/transformer
+        - Document as known divergence with rationale"
+
+Q1.8.3: "For [boundary], should type contracts be:
+        - Informal (documented in PRD only)
+        - Semi-formal (TypeScript interfaces / Python dataclasses)
+        - Formal (JSON Schema / Protobuf / OpenAPI spec)"
+```
+
+**For migration/porting projects, add:**
+
+```
+### Feature Parity Matrix
+| Feature | Source System | Target System | Parity Status |
+|---------|---------------|---------------|---------------|
+| [feature] | ✅ [how implemented] | ⚠️ [partial/missing] | [gap description] |
+
+### Field Mapping
+| Source Field | Source Type | Target Field | Target Type | Transform |
+|--------------|-------------|--------------|-------------|-----------|
+| [name] | [type] | [name] | [type] | [none/conversion/derived] |
+```
+
+**Phase exit:** All component boundaries mapped, type contracts specified, inconsistencies flagged for resolution.
 
 ---
 
@@ -447,6 +597,85 @@ Q3.x: "[Goal] - how should completion be verified?"
 
 ---
 
+### Phase 3.2: Testability Planning (Conditional)
+
+**Objective:** Identify what cannot be manually tested and establish automation requirements before implementation begins.
+
+**When to include this phase:**
+- Systems with concurrency, race conditions, or timing-dependent behavior
+- Features requiring load/stress testing
+- Output formats requiring automated validation (exports, generated files)
+- State consistency that can't be visually verified
+- Any feature where "it looks right" is insufficient verification
+
+**Why this phase exists:**
+The microecon web frontend assumed visual testing was sufficient. WebSocket race conditions, export file validation, and state consistency issues were discovered post-implementation because no testability planning identified them as requiring automation.
+
+**Agent actions:**
+
+1. Review all features and verification criteria from Phase 3
+2. For each feature, classify testability:
+
+```
+## Testability Analysis
+
+### Manual Testing Sufficient
+| Feature | Manual Test | Why Sufficient |
+|---------|-------------|----------------|
+| [feature] | [test description] | [visual output / simple interaction / etc.] |
+
+### Automation Required
+| Feature | Why Manual Insufficient | Automation Type | Priority |
+|---------|------------------------|-----------------|----------|
+| [feature] | [race condition / scale / precision] | [unit / integration / load / property] | [P0-P2] |
+
+### Untestable Without Infrastructure
+| Feature | Missing Infrastructure | Mitigation |
+|---------|----------------------|------------|
+| [feature] | [GPU / external service / etc.] | [mock / defer / conditional] |
+```
+
+3. For automation-required features, specify what the test must verify:
+
+```
+### Automation Specifications
+
+#### [Feature]: [Test Name]
+**Type:** [unit / integration / load / property / visual regression]
+**Verifies:** [specific behavior or invariant]
+**Inputs:** [test data / scenarios]
+**Expected output:** [success criteria]
+**Tolerance:** [exact match / threshold / statistical]
+```
+
+**Questions to ask:**
+
+```
+Q3.2.1: "These features have concurrency or timing concerns: [list].
+        Should I specify:
+        - Load tests with specific concurrency levels
+        - Race condition property tests
+        - Timeout/retry behavior tests
+        - Manual testing is acceptable for MVP"
+
+Q3.2.2: "These features produce file outputs: [list].
+        Validation approach:
+        - Checksum/hash comparison against golden files
+        - Structural validation (parse and verify schema)
+        - Content spot-checks only
+        - Manual inspection sufficient"
+
+Q3.2.3: "These features have state consistency requirements: [list].
+        Should state assertions be:
+        - Inline in implementation (debug mode)
+        - Separate property tests
+        - Manual verification via UI inspection"
+```
+
+**Phase exit:** Features classified by testability, automation requirements specified for non-manual-testable features.
+
+---
+
 ### Phase 3.5: Divergence Tracking Setup (Research Software Only)
 
 **Objective:** Establish tracking for discovered divergences between implementation and theory.
@@ -491,7 +720,105 @@ This document records divergences discovered between implementation and canonica
 ---
 ```
 
-**Phase exit:** THEORY-DIVERGENCES.md template created, path noted for PRD.
+**Divergence Decision Tree:**
+
+When a divergence is discovered, use this decision tree to determine resolution:
+
+```
+## Divergence Resolution Decision Tree
+
+┌─────────────────────────────────────────────────────────────┐
+│ DIVERGENCE DISCOVERED: Implementation ≠ Theory              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+              ┌───────────────────────────────┐
+              │ Is the theory source correct? │
+              │ (check citation, edition,     │
+              │  transcription errors)        │
+              └───────────────────────────────┘
+                     │              │
+                    YES            NO → Fix theory reference, re-verify
+                     │
+                     ▼
+              ┌───────────────────────────────┐
+              │ Is the implementation wrong?  │
+              │ (bug, formula error, sign     │
+              │  flip, off-by-one)            │
+              └───────────────────────────────┘
+                     │              │
+                    YES            NO
+                     │              │
+                     ▼              ▼
+              ┌──────────┐  ┌───────────────────────────┐
+              │ FIX BUG  │  │ Is divergence due to      │
+              │ Status:  │  │ acceptable approximation? │
+              │ Fixed    │  │ (numerical precision,     │
+              └──────────┘  │  convergence tolerance)   │
+                            └───────────────────────────┘
+                                   │              │
+                                  YES            NO
+                                   │              │
+                                   ▼              ▼
+                            ┌──────────┐  ┌───────────────────────────┐
+                            │ DOCUMENT │  │ Is divergence due to      │
+                            │ tolerance│  │ intentional simplification│
+                            │ Status:  │  │ documented in ADR?        │
+                            │ Accepted │  └───────────────────────────┘
+                            └──────────┘         │              │
+                                                YES            NO
+                                                 │              │
+                                                 ▼              ▼
+                                          ┌──────────┐  ┌──────────────┐
+                                          │ REFERENCE│  │ ESCALATE     │
+                                          │ ADR in   │  │ Create ADR or│
+                                          │ resolution│ │ fix impl     │
+                                          │ Status:  │  │ Status:      │
+                                          │ Accepted │  │ Pending      │
+                                          └──────────┘  └──────────────┘
+
+## Resolution Categories
+
+| Status | Meaning | Required Documentation |
+|--------|---------|----------------------|
+| **Fixed** | Bug corrected, now matches theory | Root cause, fix description |
+| **Accepted (Tolerance)** | Numerical precision acceptable | Tolerance threshold, justification |
+| **Accepted (ADR)** | Intentional deviation per design decision | Reference to ADR |
+| **Pending** | Requires decision before proceeding | Escalation to user |
+
+## Tolerance Guidelines
+
+| Context | Acceptable Tolerance | Example |
+|---------|---------------------|---------|
+| Closed-form formulas | 1e-10 to 1e-6 | Nash bargaining solution |
+| Numerical optimization | 1e-6 to 1e-3 | Utility maximization |
+| Iterative algorithms | 1e-3 to 1e-2 | Convergence to equilibrium |
+| Statistical properties | Problem-dependent | Distribution comparisons |
+
+## Red Flags (Always Escalate)
+
+- Sign errors (positive should be negative or vice versa)
+- Order of magnitude errors (off by 10x or more)
+- Qualitative differences (monotonic should be non-monotonic)
+- Boundary condition failures (edge cases violate theory)
+```
+
+**Questions to ask:**
+
+```
+Q3.5.1: "What tolerance thresholds are appropriate for this project?
+        - Strict (1e-10): Mathematical identities, closed-form solutions
+        - Standard (1e-6): Numerical methods, optimization results
+        - Relaxed (1e-3): Iterative convergence, Monte Carlo
+        - Custom: [specify per-feature tolerances]"
+
+Q3.5.2: "Should divergence discovery during execution:
+        - Always stop the loop (conservative)
+        - Stop only for red-flag divergences (balanced)
+        - Document and continue, review at phase end (aggressive)"
+```
+
+**Phase exit:** THEORY-DIVERGENCES.md template created, decision tree reviewed, tolerance thresholds established, escalation behavior set.
 
 ---
 
@@ -512,6 +839,87 @@ Q4.1: "The vision encompasses [large scope]. Given [resource constraints if any]
 ```
 
 **Phase exit:** Scope confirmed, aligned with resource constraints if applicable.
+
+---
+
+### Phase 4.5: Phase Dependency Mapping
+
+**Objective:** Establish explicit dependency graph between phases to prevent silent assumption failures during execution.
+
+**Why this phase exists:**
+Multi-phase PRDs in the microecon project ran sequentially without verifying that earlier phases were sufficient for later ones. Phase 2 needed toggle infrastructure from Phase 1, but no gate verified it existed before Phase 2 began. Explicit dependency mapping prevents cascading failures.
+
+**Agent actions:**
+
+1. Review all phases defined so far
+2. For each phase, identify:
+   - What must exist before it can start (depends_on)
+   - What it enables for later phases (gates_phases)
+   - Specific verification that predecessor phases are sufficient (gate_checks)
+3. Present dependency graph for validation:
+
+```
+## Phase Dependencies
+
+### Dependency Matrix
+| Phase | Depends On | Enables | Gate Check |
+|-------|------------|---------|------------|
+| 1 | (none) | 2, 4 | - |
+| 2 | 1 | 5 | Phase 1 toggle infrastructure renders |
+| 3 | (none) | (none) | - |
+| 4 | 1, 2 | 5, 6 | Phase 1 rendering + Phase 2 data access |
+| 5 | 2, 4 | (none) | Phase 2 beliefs + Phase 4 overlays |
+
+### Critical Path
+[Longest dependency chain - determines minimum sequential work]
+Example: 1 → 2 → 4 → 5 (4 phases minimum)
+
+### Parallel Opportunities
+[Phases with no dependencies between them]
+Example: Phases 1 and 3 can run in parallel
+
+### Dependency Visualization
+
+    ┌───┐
+    │ 1 │ Infrastructure
+    └─┬─┘
+      │
+  ┌───┴───┐
+  ▼       ▼
+┌───┐   ┌───┐
+│ 2 │   │ 3 │  (parallel eligible)
+└─┬─┘   └───┘
+  │
+  ▼
+┌───┐
+│ 4 │ ← also depends on 1
+└─┬─┘
+  │
+  ▼
+┌───┐
+│ 5 │ ← depends on 2 and 4
+└───┘
+```
+
+**Questions to ask:**
+
+```
+Q4.5.1: "Phase [N] depends on infrastructure from Phase [M].
+        What specific check confirms Phase [M] is sufficient?
+        - [Suggested gate check based on features]
+        - Custom verification
+        - No explicit gate needed (exit_criteria sufficient)"
+
+Q4.5.2: "Phases [A] and [B] appear independent. Should they:
+        - Run sequentially anyway (reduces complexity)
+        - Be flagged as parallel-eligible (HOTL can parallelize)
+        - Have explicit ordering preference documented"
+```
+
+**For simple PRDs (≤3 phases, linear dependencies):**
+Skip the full DAG and just note: "Linear execution: 1 → 2 → 3, no parallel opportunities."
+
+**Phase exit:** Dependency DAG complete, gate checks specified for non-trivial dependencies, critical path identified.
 
 ---
 
@@ -594,6 +1002,30 @@ CONSTRAINTS:
 Track progress via git commits, update PRD status fields as features complete." --max-iterations [N] --completion-promise "[PROMISE]"
 ```
 
+### Completion Promise Escaping
+
+**Important:** The completion promise must be properly escaped for shell execution. Angle brackets (`<` and `>`) can trigger shell interpretation issues.
+
+**Safe patterns:**
+```bash
+# Option 1: Use quotes (recommended)
+--completion-promise "PROJECT-NAME-COMPLETE"
+
+# Option 2: Escape angle brackets if using XML-style tags
+--completion-promise "\<promise\>PROJECT-NAME-COMPLETE\</promise\>"
+
+# Option 3: Use alternative delimiters
+--completion-promise "[[PROMISE:PROJECT-NAME-COMPLETE]]"
+```
+
+**Avoid:**
+```bash
+# This may fail - unescaped angle brackets
+--completion-promise "<promise>PROJECT-NAME-COMPLETE</promise>"
+```
+
+**Recommendation:** Use simple alphanumeric completion promises without special characters (e.g., `PROJECT-NAME-COMPLETE`) unless XML-style tags are specifically required.
+
 ---
 
 ## Resume Prompt (for interrupted loops)
@@ -643,6 +1075,64 @@ Previous phase verified complete. Proceed with next phase features." --max-itera
 - [Expected documentation updates]
 
 [Repeat for each phase]
+
+---
+
+## Progress Tracking Template
+
+Create `progress.txt` with this structure for append-only progress logging:
+
+```markdown
+# Progress Log: [PRD-NAME]
+
+## Format
+Each entry follows: [timestamp] [phase] [status] [description]
+
+---
+
+## Log
+
+### Phase 1: [Phase Name]
+
+#### Completed
+- [timestamp] FEAT-001: [feature name] - [brief description of what was done]
+- [timestamp] FEAT-002: [feature name] - [brief description]
+
+#### Issues Encountered
+- [timestamp] ISSUE: [description of problem]
+  - Root cause: [what caused it]
+  - Resolution: [how it was fixed]
+  - Time impact: [minimal/moderate/significant]
+
+#### Workarounds Applied
+- [timestamp] WORKAROUND: [what was done differently than planned]
+  - Reason: [why the workaround was needed]
+  - Technical debt: [yes/no - needs revisiting?]
+
+#### Skipped/Deferred
+- [timestamp] SKIPPED: FEAT-003 - [reason for skipping]
+  - Blocker: [what blocks this]
+  - Revisit: [condition for revisiting]
+
+---
+
+### Phase 2: [Phase Name]
+[same structure]
+
+---
+
+## Summary Statistics
+| Metric | Count |
+|--------|-------|
+| Features completed | X |
+| Features skipped | X |
+| Issues encountered | X |
+| Workarounds applied | X |
+| Phases completed | X/Y |
+```
+
+**Why issues tracking matters:**
+The microecon progress.txt only recorded successes. Bugs, workarounds, and skipped features weren't documented, making it impossible to learn from problems or understand why certain features were deferred. The issues section creates institutional memory.
 ```
 
 **Phase exit:** START-RALPH-LOOP.md created and reviewed.
@@ -725,10 +1215,27 @@ Generate PRD in this JSON format:
       "name": "Phase name",
       "description": "What this phase accomplishes",
       "features": ["FEAT-001", "FEAT-002"],
+      "depends_on": [],
+      "gates_phases": [2],
       "entry_criteria": "what must be true to start",
-      "exit_criteria": "what must be true to complete"
+      "exit_criteria": "what must be true to complete",
+      "gate_verification": "specific check that this phase is sufficient for dependents"
     }
   ],
+
+  "phase_dependencies": {
+    "dag": {
+      "1": [],
+      "2": [1],
+      "3": [1, 2]
+    },
+    "critical_path": [1, 2, 3],
+    "parallel_eligible": [],
+    "gate_checks": {
+      "1→2": "Phase 1 infrastructure verified: [specific check]",
+      "2→3": "Phase 2 features verified: [specific check]"
+    }
+  },
 
   "features": [
     {
@@ -973,8 +1480,13 @@ Before concluding, verify:
 - [ ] **Learning Projects**: RETROSPECTIVE-TEMPLATE.md created
 - [ ] **Learning Projects**: Paper analysis template (if applicable)
 
-### Optional (if applicable)
-- [ ] Resource constraint analysis completed
+### Conditional Phases (if applicable)
+- [ ] Resource constraint analysis completed (Phase 1.5)
+- [ ] Operational model documented (Phase 1.7) - for multi-user/networked systems
+- [ ] Integration inventory mapped (Phase 1.8) - for multi-component/migration projects
+- [ ] Testability analysis completed (Phase 3.2) - for features needing automation
+- [ ] Divergence decision tree reviewed, tolerances set (Phase 3.5) - for research software
+- [ ] Phase dependencies mapped (Phase 4.5) - for multi-phase PRDs
 - [ ] Scope adjusted for constraints
 
 ---
@@ -1098,17 +1610,21 @@ When this file is mentioned (`@ralph/RALPH-INTERVIEW.md`):
 2. **Execute Phase 0** - Extract vision AND determine project type
 3. **Execute Phase 1** - Gap analysis against codebase
 4. **Execute Phase 1.5** - Resource constraint analysis (if applicable)
-5. **Execute Phase 2** - Clarification interview AND ADR identification
-6. **Execute Phase 2.5** - Design sketch validation (UI/visualization projects only)
-7. **Execute Phase 3** - Design verification criteria (per project type)
-8. **Execute Phase 3.5** - Divergence tracking setup (research software only)
-9. **Execute Phase 4** - Confirm scope (default: full vision)
-10. **Execute Phase 5** - Set loop parameters (including HOTL vs AFK mode)
-11. **Convergence check** - Summarize, get confirmation
-12. **Generate PRD** - Comprehensive, phased, verifiable
-13. **Execute Phase 6** - Create START-RALPH-LOOP.md
-14. **Generate additional artifacts** - Per project type (retrospective template, paper analysis)
-15. **Await approval** - User must confirm all artifacts before loop execution
+5. **Execute Phase 1.7** - Operational model (if multi-user/networked/stateful)
+6. **Execute Phase 1.8** - Integration inventory (if multi-component/migration)
+7. **Execute Phase 2** - Clarification interview AND ADR identification
+8. **Execute Phase 2.5** - Design sketch validation (UI/visualization projects only)
+9. **Execute Phase 3** - Design verification criteria (per project type)
+10. **Execute Phase 3.2** - Testability planning (if features need automation)
+11. **Execute Phase 3.5** - Divergence tracking setup with decision tree (research software only)
+12. **Execute Phase 4** - Confirm scope (default: full vision)
+13. **Execute Phase 4.5** - Phase dependency mapping (if multi-phase PRD)
+14. **Execute Phase 5** - Set loop parameters (including HOTL vs AFK mode)
+15. **Convergence check** - Summarize, get confirmation
+16. **Generate PRD** - Comprehensive, phased, verifiable, with dependency DAG
+17. **Execute Phase 6** - Create START-RALPH-LOOP.md with progress template
+18. **Generate additional artifacts** - Per project type (retrospective template, paper analysis)
+19. **Await approval** - User must confirm all artifacts before loop execution
 
 ---
 
@@ -1224,6 +1740,34 @@ Note: Clear summary of what completed, explicit options for user.
 ---
 
 ## Changelog
+
+### v5 (2026-01-08)
+
+**High-impact additions:**
+- Added Phase 1.7: Operational Model - captures usage patterns, concurrency model, state lifecycle
+- Added Phase 1.8: Integration Inventory - maps component boundaries, shared data structures, type contracts
+- Added Phase 4.5: Phase Dependency Mapping - explicit DAG, gate checks, critical path identification
+- Added `phase_dependencies` section to PRD schema with DAG, critical path, parallel eligibility
+- Added `depends_on`, `gates_phases`, `gate_verification` fields to phase schema
+
+**Medium-impact additions:**
+- Added Phase 3.2: Testability Planning - classifies features by testability, specifies automation requirements
+- Enhanced Phase 3.5 with Divergence Decision Tree - systematic fix-vs-accept criteria, tolerance guidelines, red flags
+- Added completion promise escaping guidance to Phase 6 - prevents shell interpretation issues with angle brackets
+- Added progress.txt template with issues/workarounds/skipped sections - tracks failures, not just successes
+
+**Documentation updates:**
+- Updated interview checklist with conditional phases section
+- Updated usage instructions to include new phases (now 19 steps)
+
+**Lessons incorporated from microecon/llm-testing workflow analysis:**
+- Operational model prevents architectural mismatches (frontend concurrency bugs)
+- Integration inventory catches data structure divergence (TradeEvent classes)
+- Phase dependencies prevent silent assumption failures (Phase 2 needing Phase 1 infrastructure)
+- Feature parity matrix for migration projects
+- Testability planning catches automation gaps (WebSocket race conditions, export validation)
+- Theory divergence decision tree provides clear fix-vs-accept criteria
+- Progress tracking with issues creates institutional memory
 
 ### v4 (2026-01-07)
 - Clarified iteration budget semantics (entire loop, not per-phase)

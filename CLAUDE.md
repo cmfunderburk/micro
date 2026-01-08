@@ -41,45 +41,33 @@ Infrastructure for capturing simulation state and analyzing results:
 | `analysis/timeseries.py` | Welfare/trades over time, agent trajectories |
 | `analysis/distributions.py` | Cross-run comparisons, statistical tests |
 | `analysis/tracking.py` | Agent-level outcomes, search efficiency analysis |
-| `visualization/replay.py` | `ReplayController`, `DualReplayController` for playback |
 
-### Visualization (Feature Complete)
+### Web Frontend (Primary UI)
 
-DearPyGui-based visualization in `src/microecon/visualization/`. See VISUALIZATION.md for full design vision.
+Browser-based visualization in `frontend/` (React/Vite) with `server/` (FastAPI/WebSocket):
 
-**Core Features:**
-- Grid rendering with agents colored by preference parameter (alpha)
-- Play/pause/step/reset controls with speed slider
-- Trade animations (line flash between trading agents)
-- Metrics panel (tick, trades, welfare, gains)
-- Hover tooltips showing agent details
-- Click-to-select with perception radius overlay
-- Toggleable overlays (movement trails, perception radius, surplus heatmap, trade network)
-- Time-series charts (welfare and trade count over time)
+```bash
+# Start server
+uv run uvicorn server.app:create_app --factory --port 8000
 
-**Configuration:**
-- Live configuration modal for simulation setup
-- Institutional parameter selection (Nash/Rubinstein, Opportunistic/Stable Roommates)
-- Search parameters (perception radius, discount factor)
+# Start frontend (in separate terminal)
+cd frontend && npm run dev
+```
 
-**Trade Inspection:**
-- Trade history panel with scrollable list
-- Edgeworth box popup with indifference curves, contract curve, utility breakdown
+**Features:**
+- Three-column layout: metrics/overlays | grid | charts
+- Real-time WebSocket updates
+- Responsive grid canvas (square, max 600px)
+- Live welfare and trade count charts
+- Trade history modal with Edgeworth box inspection
+- Overlay toggles (trails, perception radius, heatmap, trade connections)
+- Configuration modal for simulation parameters
+- Export (PNG/SVG/GIF/CSV/JSON)
+- Trade network panel
 
-**Agent Perspective Mode:**
-- View simulation from selected agent's perspective
-- Belief visualization for belief-enabled agents
+### Archived: DearPyGui Visualization
 
-**Export:**
-- PNG/SVG frame export
-- GIF recording
-- CSV/JSON data export
-
-**Trade Network Panel** (separate window):
-- Force-directed and circular graph layouts
-- Visual encoding of trade frequency and recency
-
-Run with: `uv run python -m microecon.visualization`
+The original desktop GUI has been archived to `.archived/visualization-dearpygui/`. See the README there for restoration instructions if needed
 
 ### Test Coverage
 
@@ -88,46 +76,35 @@ Run with: `uv run python -m microecon.visualization`
 ## Architecture
 
 ```
-src/microecon/
-├── __init__.py          # Public API exports
-├── bundle.py            # 2-good bundles
-├── preferences.py       # Utility functions (Cobb-Douglas)
-├── agent.py             # Agent, AgentPrivateState, AgentType
-├── grid.py              # Spatial grid and positions
-├── information.py       # Information environments (Full, NoisyAlpha)
-├── beliefs.py           # Agent beliefs (type beliefs, price beliefs, memory)
-├── bargaining.py        # Bargaining protocols (Nash, Rubinstein)
-├── search.py            # Target selection and movement
-├── matching.py          # Matching protocols (Opportunistic, StableRoommates)
-├── simulation.py        # Main simulation engine (four-phase tick)
-├── batch.py             # BatchRunner for parameter sweeps
-├── logging/
-│   ├── __init__.py
-│   ├── events.py        # Event dataclasses (includes BeliefSnapshot)
-│   ├── logger.py        # SimulationLogger
-│   └── formats.py       # JSON lines format
-├── analysis/
-│   ├── __init__.py
-│   ├── loader.py        # Run loading utilities
-│   ├── timeseries.py    # Time series analysis
-│   ├── distributions.py # Cross-run comparisons
-│   ├── tracking.py      # Agent-level tracking
-│   └── emergence.py     # Market emergence metrics
-├── scenarios/
-│   ├── __init__.py
-│   ├── schema.py        # YAML scenario schema
-│   ├── loader.py        # Scenario loading utilities
-│   └── market_emergence.py  # MarketEmergenceConfig
-└── visualization/
-    ├── __init__.py
-    ├── __main__.py      # Entry point for -m invocation
-    ├── app.py           # Main visualization application
-    ├── replay.py        # Replay controllers
-    ├── browser.py       # Scenario browser UI, LiveConfigModal
-    ├── timeseries.py    # Time-series charts (ImPlot)
-    ├── edgeworth.py     # Edgeworth box trade visualization
-    ├── export.py        # PNG/SVG/GIF/CSV/JSON export
-    └── network.py       # Trade network panel
+microecon/
+├── microecon/               # Core simulation library (Python)
+│   ├── __init__.py          # Public API exports
+│   ├── bundle.py            # 2-good bundles
+│   ├── preferences.py       # Utility functions (Cobb-Douglas)
+│   ├── agent.py             # Agent, AgentPrivateState, AgentType
+│   ├── grid.py              # Spatial grid and positions
+│   ├── information.py       # Information environments (Full, NoisyAlpha)
+│   ├── beliefs.py           # Agent beliefs (type beliefs, price beliefs, memory)
+│   ├── bargaining.py        # Bargaining protocols (Nash, Rubinstein)
+│   ├── search.py            # Target selection and movement
+│   ├── matching.py          # Matching protocols (Opportunistic, StableRoommates)
+│   ├── simulation.py        # Main simulation engine (four-phase tick)
+│   ├── batch.py             # BatchRunner for parameter sweeps
+│   ├── logging/             # Event logging infrastructure
+│   ├── analysis/            # Post-hoc analysis utilities
+│   └── scenarios/           # Scenario definitions and loading
+├── server/                  # FastAPI WebSocket server
+│   ├── app.py               # Application factory
+│   ├── websocket.py         # WebSocket handlers
+│   ├── simulation_manager.py # Simulation lifecycle management
+│   └── routes.py            # REST API routes
+├── frontend/                # React/Vite web UI
+│   └── src/
+│       ├── App.tsx          # Main application layout
+│       ├── components/      # UI components (Grid, Charts, etc.)
+│       ├── hooks/           # WebSocket hook
+│       └── store/           # Zustand state management
+└── tests/                   # pytest test suite
 ```
 
 ### Key Abstractions
@@ -157,11 +134,13 @@ uv run pytest
 # Run tests with coverage
 uv run pytest --cov=microecon
 
-# Run visualization
-uv run python -m microecon.visualization
+# Start web frontend (two terminals needed)
+# Terminal 1: Server
+uv run uvicorn server.app:create_app --factory --port 8000
 
-# Run visualization with custom parameters
-uv run python -c "from microecon.visualization import run_visualization; run_visualization(n_agents=20, grid_size=20, seed=42)"
+# Terminal 2: Frontend
+cd frontend && npm run dev
+# Then open http://localhost:5173
 
 # Run batch comparison (Nash vs Rubinstein)
 uv run python -c "
@@ -207,13 +186,12 @@ All behavioral rules, bargaining protocols, and institutional mechanisms must ha
 
 ## Next Development Directions
 
-See STATUS.md §5 for a detailed gap analysis vs VISION.md and VISUALIZATION.md.
+See STATUS.md §5 for a detailed gap analysis vs VISION.md.
 
-**Visualization enhancements** (see VISUALIZATION.md for full specs)
-- Trade zoom view with Edgeworth box
-- Export: PNG/SVG frames, GIF/MP4 animations
-- Overlay toggles (trails, perception radius)
-- Agent perspective mode (visualize what agents observe under noisy info)
+**Web frontend polish**
+- Keyboard shortcuts (space for play/pause)
+- Smaller viewport handling (<1280px)
+- Agent details on click (compact popover)
 
 **Institutional comparisons** (core research value per VISION.md)
 - Additional bargaining protocols (TIOLI, posted prices, double auction)

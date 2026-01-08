@@ -1,7 +1,7 @@
 # Current Project Status
 
-**Version:** 0.2.0
-**Date:** 2026-01-07
+**Version:** 0.3.0
+**Date:** 2026-01-08
 **Purpose:** Definitive reference for current capabilities
 
 This document describes what exists and works today. For the long-term vision, see VISION.md. For the full visualization design, see VISUALIZATION.md.
@@ -114,77 +114,100 @@ Post-hoc analysis of logged runs:
 | `analysis/distributions.py` | Cross-run statistical comparisons |
 | `analysis/tracking.py` | Agent-level outcome tracking |
 
-### Visualization
+### Web Frontend (Primary UI)
 
-DearPyGui-based visualization with three modes plus auxiliary windows:
+React/Vite browser-based visualization with FastAPI/WebSocket backend:
+
+```bash
+# Start both server and frontend
+./scripts/dev.sh
+
+# Or manually:
+# Terminal 1: Server
+uv run uvicorn server.app:create_app --factory --port 8000
+
+# Terminal 2: Frontend
+cd frontend && npm run dev
+# Open http://localhost:5173
+```
 
 **Live Mode**
-- Real-time simulation display
+- Real-time WebSocket updates from simulation
+- Three-column layout: metrics/overlays | grid | charts
 - Play/pause/step/reset controls with speed slider
-- **Configuration modal** for simulation setup:
-  - Basic parameters (agents, grid size, seed)
-  - Institutional selection (Nash/Rubinstein bargaining, Opportunistic/Stable Roommates matching)
-  - Search parameters (perception radius, discount factor)
-- Agent hover tooltips with detailed state
+- Configuration modal for simulation parameters:
+  - Agent count, grid size, seed
+  - Bargaining protocol (Nash/Rubinstein)
+  - Matching protocol (Opportunistic/StableRoommates)
+  - Perception radius, discount factor, use_beliefs toggle
+- Agent tooltips on hover with detailed state
 - Click-to-select with perception radius overlay
-- **Toggleable overlays**: movement trails, perception radius, surplus heatmap, trade network
-- Trade animations (connection lines between trading agents)
-- Metrics panel (tick count, trades, welfare, gains)
-- Time-series charts (welfare and trade count over time)
+- Keyboard shortcuts: Space (play/pause), Arrow keys (step), R (reset)
 
-**Replay Mode**
-- Load and playback logged runs
-- Timeline scrubbing with slider
-- Step forward/backward
+**Overlays** (toggleable)
+- Movement trails (agent path history)
+- Perception radius visualization
+- Trade connections (recent trade pairs)
+- Belief connections (agents with beliefs about each other)
+
+**Charts**
+- Welfare over time (line chart)
+- Trade count over time (bar chart)
 
 **Comparison Mode**
-- Side-by-side dual viewport for protocol comparison
-- Synchronized playback across both runs
-- Trade animations and movement trails in both viewports
-- Timeline with event markers (trades, commitments)
-- Real-time welfare/trade difference display
+- Side-by-side dual grids for protocol comparison
+- Same seed, different protocols
+- Synchronized controls (play/pause affects both)
+- Comparison welfare/trade charts with both protocols overlaid
+- Real-time difference metrics
 
-**Trade Inspection**
-- **Trade history panel**: Scrollable list of all trades with click-to-inspect
-- **Edgeworth box popup**: Shows endowments, indifference curves, contract curve, trade outcome
-- Utility breakdown with pre/post trade values and gains
+**Replay Mode**
+- Load saved runs from disk
+- Timeline slider for seeking to any tick
+- Step forward/backward through history
+- Playback controls (play/pause, speed)
+
+**Belief System Visualization**
+- Belief panel shows selected agent's beliefs
+- Price beliefs (mean, variance, n)
+- Type beliefs about other agents
+- Belief connections overlay on grid
 
 **Agent Perspective Mode**
-- Toggle to see the world as a selected agent sees it
-- Dims agents outside perception radius
-- Shows agent's beliefs about visible partners (when beliefs enabled)
+- View simulation from any agent's perspective
+- Shows what agent can see (dims others outside perception)
+- Ground truth toggle to compare believed vs actual types
+- Noisy observations visualization
+
+**Trade Inspection**
+- Trade history panel (scrollable list)
+- Click any trade to open Edgeworth box modal
+- Edgeworth box shows: endowments, indifference curves, contract curve, trade outcome
+- Pre/post utility values with gains
+
+**Trade Network Panel**
+- D3 force-directed graph visualization
+- Node color encodes alpha, edge thickness encodes frequency
+- Statistics (density, node count, edge count)
+
+**Scenario Browser**
+- Browse pre-defined YAML scenarios by complexity level
+- Star rating for complexity (1-4 stars)
+- One-click scenario loading
 
 **Export Capabilities**
-- PNG/SVG frame export (current view)
-- GIF recording (configurable duration and frame rate)
-- CSV export (agent states, trade history)
+- PNG/SVG frame export
+- GIF recording
+- CSV export (agent states, trades)
 - JSON export (full tick data)
 
-**Trade Network Panel** (separate dockable window)
-- Visualizes trade relationships as a network graph
-- Force-directed and circular layout options
-- Node color encodes preference parameter (alpha)
-- Edge thickness encodes trade frequency
-- Edge color encodes recency (recent trades brighter)
-- Click node to select agent in main view
-- Statistics display (density, clustering, degree distribution)
+### Archived: DearPyGui Visualization
 
-Run with: `uv run python -m microecon.visualization`
-
-**Comparison Entry Points:**
-```python
-# Compare bargaining protocols (Nash vs Rubinstein)
-from microecon.visualization import run_protocol_comparison
-run_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
-
-# Compare matching protocols (Opportunistic vs StableRoommates)
-from microecon.visualization import run_matching_protocol_comparison
-run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
-```
+The original desktop GUI has been archived to `.archived/visualization-dearpygui/`. See the README there for restoration instructions if needed. The web frontend now provides all equivalent functionality.
 
 ### Test Coverage
 
-669 tests covering all core modules including theory verification and belief system. Run with: `uv run pytest`
+667 tests covering all core modules including theory verification and belief system. Run with: `uv run pytest`
 
 ---
 
@@ -294,26 +317,12 @@ Pre-tick: Commitment maintenance breaks stale commitments when partners exit per
 ## 4. Entry Points
 
 ```bash
-# Run visualization (live mode, default parameters)
-uv run python -m microecon.visualization
-
-# Run visualization with custom parameters
-uv run python -c "
-from microecon.visualization import run_visualization
-run_visualization(n_agents=20, grid_size=20, seed=42)
-"
-
-# Run bargaining protocol comparison (Nash vs Rubinstein) with visualization
-uv run python -c "
-from microecon.visualization import run_protocol_comparison
-run_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
-"
-
-# Run matching protocol comparison (Opportunistic vs StableRoommates) with visualization
-uv run python -c "
-from microecon.visualization import run_matching_protocol_comparison
-run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
-"
+# Run web frontend (recommended)
+./scripts/dev.sh
+# Or manually:
+uv run uvicorn server.app:create_app --factory --port 8000  # Terminal 1
+cd frontend && npm run dev                                   # Terminal 2
+# Open http://localhost:5173
 
 # Run batch comparison (bargaining protocols)
 uv run python -c "
@@ -329,6 +338,12 @@ from microecon.batch import run_matching_comparison
 results = run_matching_comparison(n_agents=10, ticks=100, seeds=range(5))
 for r in results:
     print(f'Trades: {r.summary[\"total_trades\"]}, Welfare: {r.summary[\"final_welfare\"]:.2f}')
+"
+
+# Run market emergence analysis
+uv run python -c "
+from microecon.scenarios import run_demonstration
+run_demonstration(n_agents=30, ticks=100)
 "
 
 # Run tests
@@ -392,59 +407,82 @@ uv run pytest --cov=microecon
 ## 6. File Structure
 
 ```
-src/microecon/
+microecon/                   # Core simulation library (Python)
 ├── __init__.py
-├── bundle.py
-├── preferences.py
-├── agent.py
-├── grid.py
-├── information.py
-├── beliefs.py             # Agent memory, type/price beliefs, update rules
-├── bargaining.py
-├── search.py
-├── matching.py
-├── simulation.py
-├── batch.py
+├── bundle.py                # 2-good bundles
+├── preferences.py           # Utility functions (Cobb-Douglas)
+├── agent.py                 # Agent with private state / observable type
+├── grid.py                  # Spatial grid and positions
+├── information.py           # Information environments (Full, NoisyAlpha)
+├── beliefs.py               # Agent memory, type/price beliefs, update rules
+├── bargaining.py            # Bargaining protocols (Nash, Rubinstein)
+├── search.py                # Target evaluation and movement
+├── matching.py              # Matching protocols (Opportunistic, StableRoommates)
+├── simulation.py            # Main simulation engine (four-phase tick)
+├── batch.py                 # BatchRunner for parameter sweeps
 ├── logging/
-│   ├── __init__.py
-│   ├── events.py          # Includes BeliefSnapshot, TypeBeliefSnapshot
-│   ├── logger.py
-│   └── formats.py
+│   ├── events.py            # TickRecord, TradeEvent, SearchDecision, BeliefSnapshot
+│   ├── logger.py            # SimulationLogger captures full state
+│   └── formats.py           # JSON lines format
 ├── analysis/
-│   ├── __init__.py
-│   ├── loader.py
-│   ├── timeseries.py
-│   ├── distributions.py
-│   ├── tracking.py
-│   └── emergence.py       # Market emergence metrics
-├── scenarios/
-│   ├── __init__.py
-│   ├── schema.py          # YAML scenario schema
-│   ├── loader.py          # Scenario loading utilities
-│   └── market_emergence.py # MarketEmergenceConfig, run_market_emergence
-└── visualization/
-    ├── __init__.py
-    ├── __main__.py
-    ├── app.py             # Main visualization application
-    ├── replay.py          # Replay controllers
-    ├── browser.py         # Scenario browser UI, LiveConfigModal
-    ├── timeseries.py      # Time-series charts (ImPlot)
-    ├── edgeworth.py       # Edgeworth box trade visualization
-    ├── export.py          # PNG/SVG/GIF/CSV/JSON export
-    └── network.py         # Trade network panel
+│   ├── loader.py            # Load runs from disk
+│   ├── timeseries.py        # Welfare/trades over time
+│   ├── distributions.py     # Cross-run statistical comparisons
+│   ├── tracking.py          # Agent-level outcome tracking
+│   └── emergence.py         # Market emergence metrics
+└── scenarios/
+    ├── schema.py            # YAML scenario schema
+    ├── loader.py            # Scenario loading utilities
+    └── market_emergence.py  # MarketEmergenceConfig, run_market_emergence
+
+server/                      # FastAPI WebSocket server
+├── app.py                   # Application factory
+├── websocket.py             # WebSocket handlers
+├── simulation_manager.py    # Simulation lifecycle, multi-sim support
+└── routes.py                # REST API (scenarios, runs)
+
+frontend/                    # React/Vite web UI
+└── src/
+    ├── App.tsx              # Main application layout
+    ├── components/
+    │   ├── Grid/            # GridCanvas, AgentTooltip
+    │   ├── Charts/          # WelfareChart, TradeCountChart
+    │   ├── Controls/        # OverlayToggles, PerspectiveMode
+    │   ├── Config/          # ConfigModal, ExportMenu
+    │   ├── Beliefs/         # BeliefPanel
+    │   ├── Network/         # NetworkPanel, TradeNetwork
+    │   ├── TradeInspection/ # TradeHistoryPanel, EdgeworthBox
+    │   ├── Comparison/      # DualGridView, ComparisonControls, ComparisonChart
+    │   ├── Replay/          # ReplayLoader, TimelineSlider, ReplayView
+    │   └── Scenarios/       # ScenarioBrowser
+    ├── hooks/
+    │   ├── useSimulationSocket.ts  # WebSocket connection
+    │   └── useKeyboardShortcuts.ts # Keyboard shortcuts
+    └── store/               # Zustand state management
+        ├── index.ts         # Main simulation store
+        ├── comparisonStore.ts
+        └── replayStore.ts
+
+scenarios/                   # YAML scenario definitions
+├── two_agent_baseline.yaml
+├── hub_and_spoke.yaml
+└── trading_chain.yaml
 
 tests/
-├── theory/                # Theory verification tests (Phase 0)
+├── theory/                  # Theory verification tests
 │   ├── test_nash_bargaining.py
 │   ├── test_rubinstein_bargaining.py
 │   ├── test_preferences.py
 │   ├── test_gains_from_trade.py
 │   └── test_pareto_efficiency.py
-├── test_beliefs.py        # Belief system tests (Phase 1)
-└── ...                    # Other test modules
+├── test_beliefs.py          # Belief system tests
+└── ...                      # Other test modules
+
+.archived/                   # Archived implementations
+└── visualization-dearpygui/ # Original DearPyGui desktop app
 ```
 
 ---
 
-**Document Version:** 0.2.0
-**Last Updated:** 2026-01-07 (visualization polish complete)
+**Document Version:** 0.3.0
+**Last Updated:** 2026-01-08 (web frontend feature parity complete)

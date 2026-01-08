@@ -1,0 +1,1 @@
+export { BeliefPanel } from './BeliefPanel';

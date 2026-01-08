@@ -373,7 +373,7 @@ uv run pytest --cov=microecon
 
 | Design Element | Status |
 |----------------|--------|
-| DearPyGui standalone app | **Implemented** |
+| Web frontend (React/Vite) | **Implemented** (primary UI) |
 | Grid + agents + tooltips | **Implemented** |
 | Play/pause/speed controls | **Implemented** |
 | Movement trails | **Implemented** (toggleable) |

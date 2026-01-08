@@ -232,4 +232,4 @@ uv run pytest tests/test_simulation.py -v
 
 ## Status
 
-See [COMPLETION-CRITERIA.md](COMPLETION-CRITERIA.md) for release criteria and current progress.
+See [STATUS.md](STATUS.md) for current capabilities and known limitations.

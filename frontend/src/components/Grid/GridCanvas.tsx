@@ -43,8 +43,25 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
   const tradeConnections = useSimulationStore((state) => state.tradeConnections);
   const beliefs = useSimulationStore((state) => state.beliefs);
 
+  // Perspective mode
+  const perspectiveMode = useSimulationStore((state) => state.perspectiveMode);
+  const perspectiveAgentId = useSimulationStore((state) => state.perspectiveAgentId);
+  const showGroundTruth = useSimulationStore((state) => state.showGroundTruth);
+
   const cellSize = Math.min(width, height) / gridSize;
   const agentRadius = cellSize * 0.35;
+
+  // Helper to check if target agent is visible from perspective agent
+  const isVisibleFromPerspective = useCallback(
+    (perspectiveAgent: Agent, targetAgent: Agent): boolean => {
+      if (perspectiveAgent.id === targetAgent.id) return true;
+      const [pr, pc] = perspectiveAgent.position;
+      const [tr, tc] = targetAgent.position;
+      const distance = Math.sqrt((pr - tr) ** 2 + (pc - tc) ** 2);
+      return distance <= perspectiveAgent.perception_radius;
+    },
+    []
+  );
 
   // Get position in canvas coordinates
   const posToCanvas = useCallback(
@@ -329,6 +346,25 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
       }
     }
 
+    // Get perspective agent if in perspective mode
+    const perspectiveAgent = perspectiveMode && perspectiveAgentId
+      ? agentById.get(perspectiveAgentId) ?? null
+      : null;
+
+    // Draw perspective agent's perception radius if active
+    if (perspectiveAgent) {
+      const [px, py] = getAgentCanvasPos(perspectiveAgent, posMap);
+      const radiusPixels = perspectiveAgent.perception_radius * cellSize;
+
+      ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)'; // green-500
+      ctx.fillStyle = 'rgba(34, 197, 94, 0.05)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(px, py, radiusPixels, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
     // Draw agents
     for (const agent of agents) {
       const [x, y] = getAgentCanvasPos(agent, posMap);
@@ -339,9 +375,23 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
       const colocatedCount = posMap.get(posKey)?.length ?? 1;
       const drawRadius = colocatedCount > 1 ? agentRadius * 0.7 : agentRadius;
 
+      // Calculate visibility/opacity based on perspective mode
+      let opacity = 1.0;
+      let isPerspectiveAgent = false;
+      if (perspectiveAgent) {
+        isPerspectiveAgent = agent.id === perspectiveAgent.id;
+        if (!isPerspectiveAgent) {
+          const isVisible = isVisibleFromPerspective(perspectiveAgent, agent);
+          opacity = isVisible ? 1.0 : (showGroundTruth ? 0.15 : 0);
+        }
+      }
+
+      // Skip drawing if completely invisible
+      if (opacity === 0) continue;
+
       // Draw selection ring
       if (agent.id === selectedAgentId) {
-        ctx.strokeStyle = '#fbbf24'; // amber-400
+        ctx.strokeStyle = `rgba(251, 191, 36, ${opacity})`; // amber-400
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(x, y, drawRadius + 4, 0, Math.PI * 2);
@@ -350,21 +400,31 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
 
       // Draw hover ring
       if (agent.id === hoveredAgentId && agent.id !== selectedAgentId) {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * opacity})`;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(x, y, drawRadius + 2, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // Draw agent circle
-      ctx.fillStyle = color;
+      // Draw perspective agent highlight
+      if (isPerspectiveAgent) {
+        ctx.strokeStyle = 'rgba(34, 197, 94, 0.8)'; // green-500
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, drawRadius + 5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Draw agent circle with opacity
+      const [h, s, l] = color.match(/\d+/g)!.map(Number);
+      ctx.fillStyle = `hsla(${h}, ${s}%, ${l}%, ${opacity})`;
       ctx.beginPath();
       ctx.arc(x, y, drawRadius, 0, Math.PI * 2);
       ctx.fill();
 
       // Draw border
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 * opacity})`;
       ctx.lineWidth = 1;
       ctx.stroke();
     }
@@ -390,6 +450,10 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
     getAgentCanvasPos,
     posToCanvas,
     agentsByPosition,
+    perspectiveMode,
+    perspectiveAgentId,
+    showGroundTruth,
+    isVisibleFromPerspective,
   ]);
 
   // Start render loop

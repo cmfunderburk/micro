@@ -70,6 +70,14 @@ interface SimulationState {
   hoveredAgentId: string | null;
   setHoveredAgentId: (id: string | null) => void;
 
+  // Perspective mode - view simulation from a specific agent's perspective
+  perspectiveMode: boolean;
+  perspectiveAgentId: string | null;
+  showGroundTruth: boolean;
+  setPerspectiveMode: (enabled: boolean) => void;
+  setPerspectiveAgentId: (id: string | null) => void;
+  setShowGroundTruth: (show: boolean) => void;
+
   // Overlays (all default to off per VISUALIZATION.md)
   overlays: {
     trails: boolean;
@@ -152,6 +160,18 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   // Hovered agent
   hoveredAgentId: null,
   setHoveredAgentId: (id) => set({ hoveredAgentId: id }),
+
+  // Perspective mode
+  perspectiveMode: false,
+  perspectiveAgentId: null,
+  showGroundTruth: false,
+  setPerspectiveMode: (enabled) => set({
+    perspectiveMode: enabled,
+    // Clear agent selection when disabling
+    perspectiveAgentId: enabled ? null : null,
+  }),
+  setPerspectiveAgentId: (id) => set({ perspectiveAgentId: id }),
+  setShowGroundTruth: (show) => set({ showGroundTruth: show }),
 
   // Overlays (all default to off per VISUALIZATION.md)
   overlays: {
@@ -252,5 +272,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       recentTrades: [],
       selectedAgentId: null,
       beliefs: {},
+      perspectiveMode: false,
+      perspectiveAgentId: null,
+      showGroundTruth: false,
     }),
 }));

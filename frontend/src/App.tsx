@@ -7,7 +7,8 @@ import { WelfareChart, TradeCountChart } from '@/components/Charts';
 import { OverlayToggles } from '@/components/Controls';
 import { TradeHistoryPanel, EdgeworthModal } from '@/components/TradeInspection';
 import { NetworkPanel } from '@/components/Network';
-import { Play, Pause, SkipForward, RotateCcw, Network } from 'lucide-react';
+import { ConfigModal, ExportMenu } from '@/components/Config';
+import { Play, Pause, SkipForward, RotateCcw, Network, Settings } from 'lucide-react';
 import { useState } from 'react';
 
 function App() {
@@ -27,6 +28,9 @@ function App() {
 
   // Network panel state
   const [networkPanelOpen, setNetworkPanelOpen] = useState(false);
+
+  // Config modal state
+  const [configModalOpen, setConfigModalOpen] = useState(false);
 
   // Trade inspection state
   const tradeHistory = useSimulationStore((state) => state.tradeHistory);
@@ -97,6 +101,17 @@ function App() {
             >
               <Network className="h-4 w-4" />
             </Button>
+
+            <Button
+              onClick={() => setConfigModalOpen(true)}
+              variant="outline"
+              size="icon"
+              title="Configuration"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+
+            <ExportMenu />
 
             <div className="flex items-center gap-2 ml-4 flex-1 max-w-xs">
               <span className="text-sm text-zinc-400">Speed:</span>
@@ -222,6 +237,12 @@ function App() {
       <NetworkPanel
         open={networkPanelOpen}
         onOpenChange={setNetworkPanelOpen}
+      />
+
+      {/* Config Modal */}
+      <ConfigModal
+        open={configModalOpen}
+        onOpenChange={setConfigModalOpen}
       />
     </div>
   );

@@ -236,6 +236,10 @@ class VisualizationApp:
         seed: int | None = None,
         mode: Literal["live", "replay"] = "live",
         run_data: RunData | None = None,
+        bargaining_protocol: Literal["nash", "rubinstein"] = "nash",
+        matching_protocol: Literal["opportunistic", "stable_roommates"] = "opportunistic",
+        perception_radius: float = 7.0,
+        discount_factor: float = 0.95,
     ):
         """
         Initialize visualization app.
@@ -246,16 +250,24 @@ class VisualizationApp:
             seed: Random seed (live mode only)
             mode: "live" for new simulation, "replay" for logged run
             run_data: Logged run data (required for replay mode)
+            bargaining_protocol: Bargaining protocol to use ("nash" or "rubinstein")
+            matching_protocol: Matching protocol to use ("opportunistic" or "stable_roommates")
+            perception_radius: How far agents can see
+            discount_factor: Agent patience/time preference
         """
         self.mode = mode
+
+        # Store config for reset
+        self.bargaining_protocol = bargaining_protocol
+        self.matching_protocol = matching_protocol
+        self.perception_radius = perception_radius
+        self.discount_factor = discount_factor
 
         if mode == "live":
             self.n_agents = n_agents
             self.grid_size = grid_size
             self.seed = seed
-            self.sim: Optional[Simulation] = create_simple_economy(
-                n_agents, grid_size, seed=seed
-            )
+            self.sim: Optional[Simulation] = self._create_simulation()
             self.replay: Optional[ReplayController] = None
         else:
             if run_data is None:
@@ -976,17 +988,39 @@ class VisualizationApp:
         elif self.mode == "replay" and self.replay is not None:
             self.timeseries_panel.seek_to_tick(self.replay.current_tick + 1)
 
+    def _create_simulation(self) -> Simulation:
+        """Create a simulation with current configuration."""
+        from microecon.bargaining import NashBargainingProtocol, RubinsteinBargainingProtocol
+        from microecon.matching import OpportunisticMatchingProtocol, StableRoommatesMatchingProtocol
+
+        # Create protocol instances based on string identifiers
+        if self.bargaining_protocol == "rubinstein":
+            bargaining = RubinsteinBargainingProtocol()
+        else:
+            bargaining = NashBargainingProtocol()
+
+        if self.matching_protocol == "stable_roommates":
+            matching = StableRoommatesMatchingProtocol()
+        else:
+            matching = OpportunisticMatchingProtocol()
+
+        return create_simple_economy(
+            self.n_agents,
+            self.grid_size,
+            perception_radius=self.perception_radius,
+            discount_factor=self.discount_factor,
+            seed=self.seed,
+            bargaining_protocol=bargaining,
+            matching_protocol=matching,
+        )
+
     def reset_simulation(self) -> None:
         """Reset to initial state."""
         self.playing = False
         dpg.set_item_label(self.play_button, "Play")
 
         if self.mode == "live":
-            self.sim = create_simple_economy(
-                self.n_agents,
-                self.grid_size,
-                seed=self.seed,
-            )
+            self.sim = self._create_simulation()
             if self.timeseries_panel is not None:
                 self.timeseries_panel.reset()
         elif self.mode == "replay" and self.replay is not None:
@@ -2925,6 +2959,10 @@ def run_visualization(
     n_agents: int = 10,
     grid_size: int = 15,
     seed: int | None = None,
+    bargaining_protocol: Literal["nash", "rubinstein"] = "nash",
+    matching_protocol: Literal["opportunistic", "stable_roommates"] = "opportunistic",
+    perception_radius: float = 7.0,
+    discount_factor: float = 0.95,
 ) -> None:
     """
     Launch the visualization window in live mode.
@@ -2933,8 +2971,21 @@ def run_visualization(
         n_agents: Number of agents in the simulation
         grid_size: Size of the grid (NxN)
         seed: Random seed for reproducibility
+        bargaining_protocol: Bargaining protocol to use ("nash" or "rubinstein")
+        matching_protocol: Matching protocol to use ("opportunistic" or "stable_roommates")
+        perception_radius: How far agents can see
+        discount_factor: Agent patience/time preference
     """
-    app = VisualizationApp(n_agents=n_agents, grid_size=grid_size, seed=seed, mode="live")
+    app = VisualizationApp(
+        n_agents=n_agents,
+        grid_size=grid_size,
+        seed=seed,
+        mode="live",
+        bargaining_protocol=bargaining_protocol,
+        matching_protocol=matching_protocol,
+        perception_radius=perception_radius,
+        discount_factor=discount_factor,
+    )
     app.run()
 
 

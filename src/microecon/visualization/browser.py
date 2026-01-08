@@ -26,8 +26,251 @@ class LaunchConfig:
     n_agents: int = 10
     grid_size: int = 15
     seed: Optional[int] = None
+    # Institutional params
+    bargaining_protocol: Literal["nash", "rubinstein"] = "nash"
+    matching_protocol: Literal["opportunistic", "stable_roommates"] = "opportunistic"
+    # Search params
+    perception_radius: float = 7.0
+    discount_factor: float = 0.95
     # Scenario mode params
     scenario: Optional[Scenario] = None
+
+
+class LiveConfigModal:
+    """
+    Configuration modal for live simulation parameters.
+
+    Presents three collapsible sections:
+    - Basic Parameters: agents, grid size, seed
+    - Institutions: bargaining protocol, matching protocol
+    - Search Parameters: perception radius, discount factor
+    """
+
+    WINDOW_WIDTH = 450
+    WINDOW_HEIGHT = 480
+
+    # Friendly display names for protocols
+    BARGAINING_PROTOCOLS = {
+        "nash": "Nash Bargaining",
+        "rubinstein": "Rubinstein (Alternating Offers)",
+    }
+    MATCHING_PROTOCOLS = {
+        "opportunistic": "Opportunistic",
+        "stable_roommates": "Stable Roommates",
+    }
+
+    def __init__(
+        self,
+        n_agents: int = 10,
+        grid_size: int = 15,
+        seed: Optional[int] = None,
+    ):
+        # Basic params (pre-filled from StartupSelector)
+        self.n_agents = n_agents
+        self.grid_size = grid_size
+        self.seed = seed
+
+        # Institutional params (defaults)
+        self.bargaining_protocol: Literal["nash", "rubinstein"] = "nash"
+        self.matching_protocol: Literal["opportunistic", "stable_roommates"] = "opportunistic"
+
+        # Search params (defaults)
+        self.perception_radius = 7.0
+        self.discount_factor = 0.95
+
+        self.result: Optional[LaunchConfig] = None
+        self._closed = False
+
+    def setup(self) -> None:
+        """Set up the DearPyGui context and window."""
+        dpg.create_context()
+        dpg.create_viewport(
+            title="Configure Simulation",
+            width=self.WINDOW_WIDTH,
+            height=self.WINDOW_HEIGHT,
+            resizable=False,
+        )
+
+        with dpg.window(label="Configure Simulation", tag="main_window", no_title_bar=True):
+            dpg.add_text("Configure Simulation", color=(200, 200, 200))
+            dpg.add_separator()
+            dpg.add_spacer(height=10)
+
+            # Basic Parameters section
+            with dpg.collapsing_header(label="Basic Parameters", default_open=True):
+                dpg.add_spacer(height=5)
+
+                with dpg.group(horizontal=True):
+                    dpg.add_text("Agents:", indent=10)
+                    dpg.add_spacer(width=45)
+                    dpg.add_input_int(
+                        tag="input_agents",
+                        default_value=self.n_agents,
+                        min_value=2,
+                        max_value=50,
+                        width=120,
+                        callback=lambda s, a: setattr(self, 'n_agents', a),
+                    )
+
+                with dpg.group(horizontal=True):
+                    dpg.add_text("Grid size:", indent=10)
+                    dpg.add_spacer(width=30)
+                    dpg.add_input_int(
+                        tag="input_grid_size",
+                        default_value=self.grid_size,
+                        min_value=5,
+                        max_value=50,
+                        width=120,
+                        callback=lambda s, a: setattr(self, 'grid_size', a),
+                    )
+
+                with dpg.group(horizontal=True):
+                    dpg.add_text("Seed:", indent=10)
+                    dpg.add_spacer(width=53)
+                    dpg.add_input_int(
+                        tag="input_seed",
+                        default_value=self.seed if self.seed is not None else 0,
+                        width=120,
+                        callback=self._on_seed_change,
+                    )
+                    dpg.add_text("(0 = random)", color=(100, 100, 100))
+
+                dpg.add_spacer(height=5)
+
+            dpg.add_spacer(height=5)
+
+            # Institutions section
+            with dpg.collapsing_header(label="Institutions", default_open=True):
+                dpg.add_spacer(height=5)
+
+                dpg.add_text("Bargaining Protocol:", indent=10, color=(150, 150, 150))
+                with dpg.group(indent=20):
+                    dpg.add_radio_button(
+                        tag="radio_bargaining",
+                        items=list(self.BARGAINING_PROTOCOLS.values()),
+                        default_value=self.BARGAINING_PROTOCOLS[self.bargaining_protocol],
+                        callback=self._on_bargaining_change,
+                    )
+
+                dpg.add_spacer(height=10)
+
+                dpg.add_text("Matching Protocol:", indent=10, color=(150, 150, 150))
+                with dpg.group(indent=20):
+                    dpg.add_radio_button(
+                        tag="radio_matching",
+                        items=list(self.MATCHING_PROTOCOLS.values()),
+                        default_value=self.MATCHING_PROTOCOLS[self.matching_protocol],
+                        callback=self._on_matching_change,
+                    )
+
+                dpg.add_spacer(height=5)
+
+            dpg.add_spacer(height=5)
+
+            # Search Parameters section
+            with dpg.collapsing_header(label="Search Parameters", default_open=True):
+                dpg.add_spacer(height=5)
+
+                with dpg.group(horizontal=True):
+                    dpg.add_text("Perception radius:", indent=10)
+                    dpg.add_input_float(
+                        tag="input_perception",
+                        default_value=self.perception_radius,
+                        min_value=1.0,
+                        max_value=20.0,
+                        width=80,
+                        format="%.1f",
+                        callback=lambda s, a: setattr(self, 'perception_radius', a),
+                    )
+                dpg.add_text("(how far agents can see)", indent=10, color=(100, 100, 100))
+
+                dpg.add_spacer(height=5)
+
+                with dpg.group(horizontal=True):
+                    dpg.add_text("Discount factor:", indent=10)
+                    dpg.add_spacer(width=10)
+                    dpg.add_input_float(
+                        tag="input_discount",
+                        default_value=self.discount_factor,
+                        min_value=0.5,
+                        max_value=0.99,
+                        width=80,
+                        format="%.2f",
+                        step=0.01,
+                        callback=lambda s, a: setattr(self, 'discount_factor', a),
+                    )
+                dpg.add_text("(agent patience)", indent=10, color=(100, 100, 100))
+
+                dpg.add_spacer(height=5)
+
+            # Buttons at bottom
+            dpg.add_spacer(height=20)
+            with dpg.group(horizontal=True):
+                dpg.add_spacer(width=100)
+                dpg.add_button(
+                    label="Cancel",
+                    callback=self._on_cancel,
+                    width=120,
+                )
+                dpg.add_spacer(width=20)
+                dpg.add_button(
+                    label="Start Simulation",
+                    callback=self._on_start,
+                    width=140,
+                )
+
+        dpg.set_primary_window("main_window", True)
+        dpg.setup_dearpygui()
+        dpg.show_viewport()
+
+    def _on_seed_change(self, sender: int, app_data: int) -> None:
+        """Handle seed input change."""
+        self.seed = app_data if app_data != 0 else None
+
+    def _on_bargaining_change(self, sender: int, app_data: str) -> None:
+        """Handle bargaining protocol selection."""
+        # Reverse lookup from display name to key
+        for key, name in self.BARGAINING_PROTOCOLS.items():
+            if name == app_data:
+                self.bargaining_protocol = key
+                break
+
+    def _on_matching_change(self, sender: int, app_data: str) -> None:
+        """Handle matching protocol selection."""
+        # Reverse lookup from display name to key
+        for key, name in self.MATCHING_PROTOCOLS.items():
+            if name == app_data:
+                self.matching_protocol = key
+                break
+
+    def _on_cancel(self) -> None:
+        """Handle cancel button - return without starting."""
+        self.result = None
+        self._closed = True
+
+    def _on_start(self) -> None:
+        """Handle start button - create config and close."""
+        self.result = LaunchConfig(
+            mode="live",
+            n_agents=self.n_agents,
+            grid_size=self.grid_size,
+            seed=self.seed,
+            bargaining_protocol=self.bargaining_protocol,
+            matching_protocol=self.matching_protocol,
+            perception_radius=self.perception_radius,
+            discount_factor=self.discount_factor,
+        )
+        self._closed = True
+
+    def run(self) -> Optional[LaunchConfig]:
+        """Run the modal and return the config (or None if cancelled)."""
+        self.setup()
+
+        while dpg.is_dearpygui_running() and not self._closed:
+            dpg.render_dearpygui_frame()
+
+        dpg.destroy_context()
+        return self.result
 
 
 class StartupSelector:
@@ -105,8 +348,8 @@ class StartupSelector:
 
                 dpg.add_spacer(height=10)
                 dpg.add_button(
-                    label="Start Live Simulation",
-                    callback=self._on_live_mode,
+                    label="Configure Simulation...",
+                    callback=self._on_configure_live,
                     width=-1,
                 )
 
@@ -137,14 +380,9 @@ class StartupSelector:
         """Handle seed input change."""
         self.seed = app_data if app_data != 0 else None
 
-    def _on_live_mode(self) -> None:
-        """Handle live mode button click."""
-        self.result = LaunchConfig(
-            mode="live",
-            n_agents=self.n_agents,
-            grid_size=self.grid_size,
-            seed=self.seed,
-        )
+    def _on_configure_live(self) -> None:
+        """Handle configure simulation button click - open modal."""
+        self._pending_action = "configure"
         self._closed = True
 
     def _on_browse_scenarios(self) -> None:
@@ -165,6 +403,18 @@ class StartupSelector:
         # Handle pending action after context is destroyed
         if self._pending_action == "browse":
             return LaunchConfig(mode="browse")
+        elif self._pending_action == "configure":
+            # Open the configuration modal with current values
+            modal = LiveConfigModal(
+                n_agents=self.n_agents,
+                grid_size=self.grid_size,
+                seed=self.seed,
+            )
+            config = modal.run()
+            if config is not None:
+                return config
+            # User cancelled - return cancel to show selector again
+            return LaunchConfig(mode="cancel")
 
         return self.result
 
@@ -426,6 +676,10 @@ def run_with_startup_selector() -> None:
                 n_agents=config.n_agents,
                 grid_size=config.grid_size,
                 seed=config.seed,
+                bargaining_protocol=config.bargaining_protocol,
+                matching_protocol=config.matching_protocol,
+                perception_radius=config.perception_radius,
+                discount_factor=config.discount_factor,
             )
             break  # Exit after live mode closes
 

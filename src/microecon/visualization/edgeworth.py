@@ -193,7 +193,7 @@ class EdgeworthBoxPopup:
             dpg.delete_item("edgeworth_popup")
 
         width = self.BOX_SIZE + 2 * self.MARGIN + 100
-        height = self.BOX_SIZE + 2 * self.MARGIN + 220  # Extra space for trade details
+        height = self.BOX_SIZE + 2 * self.MARGIN + 260  # Extra space for trade details + utilities
 
         with dpg.window(
             label="Edgeworth Box",
@@ -242,6 +242,10 @@ class EdgeworthBoxPopup:
                 dpg.add_text(f"  Allocation: ({t.allocation_a[0]:.2f}, {t.allocation_a[1]:.2f})")
                 trade_str_a = f"  Trade: ({dx_a:+.2f}, {dy_a:+.2f})"
                 dpg.add_text(trade_str_a, color=(150, 255, 150) if (dx_a != 0 or dy_a != 0) else (150, 150, 150))
+                # Utility info
+                gain_a = t.utility_a_after - t.utility_a_before
+                dpg.add_text(f"  Utility: {t.utility_a_before:.3f} -> {t.utility_a_after:.3f} ({gain_a:+.3f})",
+                             color=(150, 255, 150) if gain_a > 0 else (255, 150, 150) if gain_a < 0 else (150, 150, 150))
 
                 dpg.add_spacer(height=5)
 
@@ -253,6 +257,10 @@ class EdgeworthBoxPopup:
                 dy_b = t.allocation_b[1] - t.endowment_b[1]
                 trade_str_b = f"  Trade: ({dx_b:+.2f}, {dy_b:+.2f})"
                 dpg.add_text(trade_str_b, color=(150, 255, 150) if (dx_b != 0 or dy_b != 0) else (150, 150, 150))
+                # Utility info
+                gain_b = t.utility_b_after - t.utility_b_before
+                dpg.add_text(f"  Utility: {t.utility_b_before:.3f} -> {t.utility_b_after:.3f} ({gain_b:+.3f})",
+                             color=(150, 255, 150) if gain_b > 0 else (255, 150, 150) if gain_b < 0 else (150, 150, 150))
 
         self._is_open = True
 

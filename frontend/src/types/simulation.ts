@@ -16,6 +16,8 @@ export interface Trade {
   tick: number;
   agent1_id: string;
   agent2_id: string;
+  alpha1: number;
+  alpha2: number;
   pre_endowment_1: [number, number];
   pre_endowment_2: [number, number];
   post_allocation_1: [number, number];

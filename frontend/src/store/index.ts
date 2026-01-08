@@ -52,6 +52,12 @@ interface SimulationState {
   // Trade connections for overlay
   tradeConnections: TradeConnection[];
 
+  // Trade history for inspection
+  tradeHistory: Trade[];
+  maxTradeHistory: number;
+  selectedTradeIndex: number | null;
+  setSelectedTradeIndex: (index: number | null) => void;
+
   // Selected agent
   selectedAgentId: string | null;
   setSelectedAgentId: (id: string | null) => void;
@@ -124,6 +130,12 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   // Trade connections for overlay
   tradeConnections: [],
 
+  // Trade history for inspection
+  tradeHistory: [],
+  maxTradeHistory: 100,
+  selectedTradeIndex: null,
+  setSelectedTradeIndex: (index) => set({ selectedTradeIndex: index }),
+
   // Selected agent
   selectedAgentId: null,
   setSelectedAgentId: (id) => set({ selectedAgentId: id }),
@@ -193,6 +205,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       }
     }
 
+    // Append new trades to history
+    const newTradeHistory = [...state.tradeHistory, ...data.trades].slice(-state.maxTradeHistory);
+
     set({
       tick: data.tick,
       agents: data.agents,
@@ -202,6 +217,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       history: newHistory,
       positionHistory: newPositionHistory,
       tradeConnections: newConnections,
+      tradeHistory: newTradeHistory,
       recentTrades: data.trades, // Current tick's trades for animation
     });
   },
@@ -215,6 +231,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       history: [],
       positionHistory: {},
       tradeConnections: [],
+      tradeHistory: [],
+      selectedTradeIndex: null,
       recentTrades: [],
       selectedAgentId: null,
     }),

@@ -1,8 +1,8 @@
 Microecon Web Frontend Progress
 ===============================
 
-Last Updated: 2026-01-07
-Current Phase: 5 (Overlays) - COMPLETE
+Last Updated: 2026-01-08
+Current Phase: 6 (Trade Inspection) - COMPLETE
 
 Phase 1: Infrastructure (COMPLETE)
 ----------------------------------
@@ -48,26 +48,49 @@ Phase 5: Overlays (COMPLETE)
 - [ ] FEAT-028: Surplus heatmap overlay (skipped - priority 3)
 - [x] FEAT-029: Trade connections overlay
 
-Key Files Created:
-- frontend/src/components/Controls/OverlayToggles.tsx
-- Updated frontend/src/store/index.ts with positionHistory and tradeConnections
-- Updated frontend/src/components/Grid/GridCanvas.tsx with overlay rendering
+Phase 6: Trade Inspection (COMPLETE)
+------------------------------------
+- [x] FEAT-030: Trade history tracking
+- [x] FEAT-031: Edgeworth box modal
+- [x] FEAT-032: Indifference curves rendering
+- [x] FEAT-033: Contract curve rendering
+- [x] FEAT-034: Trade details display
 
-Features Implemented:
-- Overlay toggle switches in sidebar
-- Movement trails (fading lines showing agent paths)
-- Trade connections (purple lines between agents who have traded)
-- Perception radius (already done in Phase 2)
+Key Files Created (Phase 6):
+- frontend/src/components/TradeInspection/edgeworthMath.ts
+- frontend/src/components/TradeInspection/EdgeworthBox.tsx
+- frontend/src/components/TradeInspection/EdgeworthModal.tsx
+- frontend/src/components/TradeInspection/TradeHistoryPanel.tsx
+- frontend/src/components/ui/dialog.tsx
+- Updated backend/simulation_manager.py with alpha values in trade data
 
-Phase 6: Trade Inspection (PENDING)
------------------------------------
-- [ ] FEAT-030: Trade history tracking
-- [ ] FEAT-031: Edgeworth box modal
-- [ ] FEAT-032: Indifference curves rendering
-- [ ] FEAT-033: Contract curve rendering
-- [ ] FEAT-034: Trade details display
+Features Implemented (Phase 6):
+- Trade history panel in sidebar (scrollable, clickable)
+- Edgeworth box modal on trade selection
+- Cobb-Douglas indifference curves (before/after for both agents)
+- Contract curve showing Pareto-efficient allocations
+- Trade details: endowments, allocations, utilities, gains
+
+Phase 7: Network Panel (PENDING)
+--------------------------------
+- [ ] FEAT-035: Trade network panel
+- [ ] FEAT-036: Force-directed layout
+- [ ] FEAT-037: Circular layout
+- [ ] FEAT-038: Layout toggle
+- [ ] FEAT-039: Network node coloring
+- [ ] FEAT-040: Network edge encoding
+- [ ] FEAT-041: Network statistics display
+
+Phase 8: Configuration & Export (PENDING)
+-----------------------------------------
+- [ ] FEAT-042: Configuration modal UI
+- [ ] FEAT-043: Configuration API endpoint
+- [ ] FEAT-044: Apply configuration and reset
+- [ ] FEAT-045: PNG export
+- [ ] FEAT-046: CSV export
+- [ ] FEAT-047: JSON export
 
 Notes:
 - Surplus heatmap skipped (priority 3, complex computation)
-- All 669 existing tests pass
 - Frontend builds successfully
+- Backend includes alpha values in trade serialization for Edgeworth box

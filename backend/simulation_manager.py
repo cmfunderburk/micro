@@ -152,12 +152,20 @@ class SimulationManager:
 
         # Get recent trades (this tick)
         trades = []
+        # Build agent lookup for alpha values
+        agent_by_id = {a.id: a for a in sim.agents}
         for trade in sim.trades:
             if trade.tick == sim.tick:
+                agent1 = agent_by_id.get(trade.agent1_id)
+                agent2 = agent_by_id.get(trade.agent2_id)
+                alpha1 = agent1.preferences.alpha if agent1 else 0.5
+                alpha2 = agent2.preferences.alpha if agent2 else 0.5
                 trades.append({
                     "tick": trade.tick,
                     "agent1_id": trade.agent1_id,
                     "agent2_id": trade.agent2_id,
+                    "alpha1": alpha1,
+                    "alpha2": alpha2,
                     "pre_endowment_1": list(trade.pre_endowment_1),
                     "pre_endowment_2": list(trade.pre_endowment_2),
                     "post_allocation_1": [trade.outcome.allocation_1.x, trade.outcome.allocation_1.y],

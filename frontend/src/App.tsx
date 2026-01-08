@@ -5,6 +5,7 @@ import { Slider } from '@/components/ui/slider';
 import { GridCanvas, AgentTooltip } from '@/components/Grid';
 import { WelfareChart, TradeCountChart } from '@/components/Charts';
 import { OverlayToggles } from '@/components/Controls';
+import { TradeHistoryPanel, EdgeworthModal } from '@/components/TradeInspection';
 import { Play, Pause, SkipForward, RotateCcw } from 'lucide-react';
 
 function App() {
@@ -21,6 +22,12 @@ function App() {
   const selectedAgent = selectedAgentId
     ? agents.find((a) => a.id === selectedAgentId)
     : null;
+
+  // Trade inspection state
+  const tradeHistory = useSimulationStore((state) => state.tradeHistory);
+  const selectedTradeIndex = useSimulationStore((state) => state.selectedTradeIndex);
+  const setSelectedTradeIndex = useSimulationStore((state) => state.setSelectedTradeIndex);
+  const selectedTrade = selectedTradeIndex !== null ? tradeHistory[selectedTradeIndex] : null;
 
   const handleStart = () => sendCommand({ command: 'start' });
   const handleStop = () => sendCommand({ command: 'stop' });
@@ -179,8 +186,23 @@ function App() {
             <h2 className="text-lg font-semibold mb-3">Trades</h2>
             <TradeCountChart />
           </div>
+
+          {/* Trade History */}
+          <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+            <h2 className="text-lg font-semibold mb-3">Trade History</h2>
+            <TradeHistoryPanel />
+          </div>
         </div>
       </div>
+
+      {/* Edgeworth Box Modal */}
+      <EdgeworthModal
+        trade={selectedTrade}
+        open={selectedTrade !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedTradeIndex(null);
+        }}
+      />
     </div>
   );
 }

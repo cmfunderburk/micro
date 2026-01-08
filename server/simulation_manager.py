@@ -19,6 +19,16 @@ from microecon.logging.events import TickRecord, AgentSnapshot
 
 
 @dataclass
+class AgentSpec:
+    """Specification for a single agent in a scenario."""
+
+    id: str
+    position: tuple[int, int]
+    alpha: float
+    endowment: tuple[float, float]
+
+
+@dataclass
 class SimulationConfig:
     """Configuration for creating a simulation."""
 
@@ -30,9 +40,11 @@ class SimulationConfig:
     bargaining_protocol: str = "nash"  # "nash" or "rubinstein"
     matching_protocol: str = "opportunistic"  # "opportunistic" or "stable_roommates"
     use_beliefs: bool = False
+    # Optional: specific agents for scenario mode (overrides n_agents if provided)
+    agents: list[AgentSpec] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "n_agents": self.n_agents,
             "grid_size": self.grid_size,
             "perception_radius": self.perception_radius,
@@ -42,9 +54,31 @@ class SimulationConfig:
             "matching_protocol": self.matching_protocol,
             "use_beliefs": self.use_beliefs,
         }
+        if self.agents is not None:
+            result["agents"] = [
+                {
+                    "id": a.id,
+                    "position": list(a.position),
+                    "alpha": a.alpha,
+                    "endowment": list(a.endowment),
+                }
+                for a in self.agents
+            ]
+        return result
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> SimulationConfig:
+        agents = None
+        if "agents" in d and d["agents"]:
+            agents = [
+                AgentSpec(
+                    id=a["id"],
+                    position=tuple(a["position"]),
+                    alpha=a["alpha"],
+                    endowment=tuple(a["endowment"]),
+                )
+                for a in d["agents"]
+            ]
         return cls(
             n_agents=d.get("n_agents", 10),
             grid_size=d.get("grid_size", 15),
@@ -54,6 +88,7 @@ class SimulationConfig:
             bargaining_protocol=d.get("bargaining_protocol", "nash"),
             matching_protocol=d.get("matching_protocol", "opportunistic"),
             use_beliefs=d.get("use_beliefs", False),
+            agents=agents,
         )
 
 
@@ -153,6 +188,12 @@ class SimulationInstance:
 
 def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
     """Create a Simulation from a SimulationConfig."""
+    from microecon.grid import Grid, Position
+    from microecon.agent import Agent, AgentPrivateState
+    from microecon.preferences import CobbDouglas
+    from microecon.bundle import Bundle
+    from microecon.information import FullInformation
+
     if config.bargaining_protocol == "rubinstein":
         bargaining = RubinsteinBargainingProtocol()
     else:
@@ -163,6 +204,35 @@ def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
     else:
         matching = OpportunisticMatchingProtocol()
 
+    # If agents are specified (scenario mode), use them directly
+    if config.agents is not None:
+        grid = Grid(config.grid_size)
+        sim = Simulation(
+            grid=grid,
+            info_env=FullInformation(),
+            bargaining_protocol=bargaining,
+            matching_protocol=matching,
+        )
+
+        for agent_spec in config.agents:
+            private_state = AgentPrivateState(
+                preferences=CobbDouglas(agent_spec.alpha),
+                endowment=Bundle(agent_spec.endowment[0], agent_spec.endowment[1]),
+            )
+            agent = Agent(
+                id=agent_spec.id,
+                private_state=private_state,
+                perception_radius=config.perception_radius,
+                discount_factor=config.discount_factor,
+            )
+            if config.use_beliefs:
+                agent.enable_beliefs()
+            pos = Position(agent_spec.position[0], agent_spec.position[1])
+            sim.add_agent(agent, pos)
+
+        return sim
+
+    # Otherwise use create_simple_economy for random agents
     return create_simple_economy(
         n_agents=config.n_agents,
         grid_size=config.grid_size,

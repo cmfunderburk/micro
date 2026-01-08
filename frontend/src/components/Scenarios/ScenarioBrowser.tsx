@@ -92,8 +92,13 @@ export function ScenarioBrowser({ sendCommand, disabled }: ScenarioBrowserProps)
       }
       const data = await response.json();
 
-      // Send config command with scenario config
-      sendCommand({ command: 'config', config: data.config });
+      // Send config command with scenario config AND agents array
+      // The agents array contains specific positions for scenario agents
+      const configWithAgents = {
+        ...data.config,
+        agents: data.agents,
+      };
+      sendCommand({ command: 'config', config: configWithAgents });
       setOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');

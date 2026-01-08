@@ -78,7 +78,7 @@ Phase 4 - Interaction & Integration:
 - Replay mode: use build_trade_network() from analysis/emergence.py
 - Metrics: compute from TradeNetworkStats or inline
 
-Track progress via git commits. Update PRD passes values as features complete." --max-iterations 50 --completion-promise "<promise>TRADE-NETWORK-PANEL-COMPLETE</promise>"
+Track progress via git commits. Update PRD passes values as features complete." --max-iterations 50 --completion-promise "TRADE-NETWORK-PANEL-COMPLETE"
 ```
 
 ---

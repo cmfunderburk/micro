@@ -30,6 +30,7 @@ from microecon.visualization.export import (
     GIFRecorder, GIFExportConfig, DataExportConfig,
 )
 from microecon.visualization.edgeworth import EdgeworthBoxPopup, TradeData
+from microecon.visualization.network import TradeNetworkPanel
 
 
 # ============================================================================
@@ -346,6 +347,9 @@ class VisualizationApp:
         self.perspective_comparison_toggle_id: int = 0
         self.perspective_status_text_id: int = 0
 
+        # Trade Network Panel (NET-001 to NET-011)
+        self._trade_network_panel: Optional[TradeNetworkPanel] = None
+
     def grid_to_canvas(self, pos: Position) -> tuple[float, float]:
         """Convert grid position to canvas coordinates."""
         x = self.canvas_origin[0] + (pos.col + 0.5) * self.cell_size
@@ -563,6 +567,13 @@ class VisualizationApp:
                             callback=self._on_overlay_toggle,
                             user_data="surplus_heatmap",
                         )
+                        dpg.add_separator()
+                        dpg.add_text("Windows:", color=(180, 180, 180))
+                        dpg.add_button(
+                            label="Trade Network Panel",
+                            callback=self._toggle_trade_network_panel,
+                            width=-1,
+                        )
 
                     # Perspective mode section (VIZ-015 to VIZ-017)
                     dpg.add_separator()
@@ -720,6 +731,11 @@ class VisualizationApp:
         dpg.setup_dearpygui()
         dpg.show_viewport()
 
+        # Initialize Trade Network Panel (NET-001, NET-002)
+        self._trade_network_panel = TradeNetworkPanel(self)
+        self._trade_network_panel.setup()
+        self._trade_network_panel.set_on_select_callback(self._on_network_node_select)
+
     def toggle_play(self) -> None:
         """Toggle play/pause state."""
         self.playing = not self.playing
@@ -734,11 +750,13 @@ class VisualizationApp:
             self.record_trades(trades)
             self.record_positions()
             self._update_timeseries()
+            self._update_trade_network_panel()
         elif self.mode == "replay" and self.replay is not None:
             self.replay.step()
             self._update_timeline_slider()
             self.record_positions()
             self._update_timeseries()
+            self._update_trade_network_panel()
 
     def step_back(self) -> None:
         """Step backward one tick (replay mode only)."""
@@ -746,6 +764,7 @@ class VisualizationApp:
             self.replay.step_back()
             self._update_timeline_slider()
             self._update_timeseries()
+            self._update_trade_network_panel()
             # Clear trails and animations - they would show future state otherwise
             self.position_history.clear()
             self.trade_animations.clear()
@@ -757,6 +776,30 @@ class VisualizationApp:
     def _on_overlay_toggle(self, sender: int, app_data: bool, user_data: str) -> None:
         """Handle overlay toggle checkbox change (VIZ-001)."""
         self.overlay_toggles[user_data] = app_data
+
+    # ========================================================================
+    # Trade Network Panel callbacks (NET-001 to NET-011)
+    # ========================================================================
+
+    def _toggle_trade_network_panel(self) -> None:
+        """Toggle the Trade Network Panel window visibility (NET-002)."""
+        if self._trade_network_panel:
+            self._trade_network_panel.toggle()
+
+    def _on_network_node_select(self, agent_id: str) -> None:
+        """Handle node selection in the Trade Network Panel (NET-009)."""
+        # Find and select the agent in the main view
+        agent = self.get_agent_by_id(agent_id)
+        if agent:
+            self.selected_agent = agent
+            # Update the Trade Network Panel selection highlight
+            if self._trade_network_panel:
+                self._trade_network_panel.on_selection_changed()
+
+    def _update_trade_network_panel(self) -> None:
+        """Update the Trade Network Panel with current state (NET-010)."""
+        if self._trade_network_panel and self._trade_network_panel.is_visible:
+            self._trade_network_panel.update(self.get_current_tick())
 
     # ========================================================================
     # Perspective mode callbacks (VIZ-015 to VIZ-017)
@@ -892,6 +935,7 @@ class VisualizationApp:
         if self.mode == "replay" and self.replay is not None:
             self.replay.seek(app_data)
             self._update_timeseries()
+            self._update_trade_network_panel()
             # Clear trails - scrubbing invalidates position history
             self.position_history.clear()
             self.trade_animations.clear()

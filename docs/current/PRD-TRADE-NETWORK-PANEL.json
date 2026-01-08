@@ -83,7 +83,7 @@
       "phase": 1,
       "description": "Create a separate DearPyGui window for the trade network visualization that can be positioned independently.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Window created with dpg.window() or dpg.add_window()",
@@ -102,7 +102,7 @@
       "phase": 1,
       "description": "Add a way to open the Trade Network window from the main visualization UI.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Button or menu item exists to show Trade Network window",

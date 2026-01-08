@@ -204,11 +204,12 @@ class EdgeworthBoxPopup:
             tag="edgeworth_popup",
             pos=(100, 100),  # Position it visibly on screen
         ) as self.window_id:
-            # Info text
+            # Info text - show enough of agent IDs to distinguish them
             if self.current_trade:
-                dpg.add_text(
-                    f"Trade: {self.current_trade.agent_a_id[:8]} <-> {self.current_trade.agent_b_id[:8]}"
-                )
+                # Use last 8 chars of UUID which are more unique
+                id_a = self.current_trade.agent_a_id[-8:]
+                id_b = self.current_trade.agent_b_id[-8:]
+                dpg.add_text(f"Trade: ...{id_a} <-> ...{id_b}")
             else:
                 dpg.add_text("Trade: -")
 

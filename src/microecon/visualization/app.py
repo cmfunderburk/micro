@@ -330,6 +330,7 @@ class VisualizationApp:
         # Edgeworth box popup (VIZ-012 to VIZ-014)
         self._edgeworth_popup: Optional[EdgeworthBoxPopup] = None
         self._trade_history: list[TradeData] = []  # Persistent trade history for panel
+        self._trade_history_ui_count: int = 0  # Track when UI needs updating
 
     def grid_to_canvas(self, pos: Position) -> tuple[float, float]:
         """Convert grid position to canvas coordinates."""
@@ -766,6 +767,7 @@ class VisualizationApp:
         self.trade_animations.clear()
         self.position_history.clear()
         self._trade_history.clear()
+        self._trade_history_ui_count = 0
         self.selected_agent = None
 
     def record_trades(self, trades: list[TradeEvent]) -> None:
@@ -776,33 +778,33 @@ class VisualizationApp:
             agent1 = next((a for a in self.sim.agents if a.id == trade.agent1_id), None) if self.sim else None
             agent2 = next((a for a in self.sim.agents if a.id == trade.agent2_id), None) if self.sim else None
 
-            # Extract pre-trade and post-trade allocations from outcome
-            # Note: After trade, agent.endowment == outcome.allocation
-            # Pre-trade endowments can be computed from total and allocation
-            pre_1 = post_1 = pre_2 = post_2 = None
+            # Extract pre-trade and post-trade data from TradeEvent
+            pre_1 = pre_2 = post_1 = post_2 = None
             alpha1 = alpha2 = None
 
-            if hasattr(trade, 'outcome') and trade.outcome is not None:
-                outcome = trade.outcome
-                post_1 = (outcome.allocation_1.x, outcome.allocation_1.y)
-                post_2 = (outcome.allocation_2.x, outcome.allocation_2.y)
-                # Pre-trade: total = post_1 + post_2, so we can estimate
-                # For now, use gains to estimate utility change
-                # Actually, store post allocations and use them for visualization
+            # Get pre-trade endowments directly from TradeEvent
+            if hasattr(trade, 'pre_endowments') and trade.pre_endowments:
+                pre_1 = trade.pre_endowments[0]
+                pre_2 = trade.pre_endowments[1]
 
+            # Get post-trade allocations directly from TradeEvent
+            if hasattr(trade, 'post_allocations') and trade.post_allocations:
+                post_1 = trade.post_allocations[0]
+                post_2 = trade.post_allocations[1]
+
+            # Get alpha values from agents
             if agent1:
                 alpha1 = agent1.preferences.alpha
                 if post_1 is None:
                     post_1 = (agent1.endowment.x, agent1.endowment.y)
+                if pre_1 is None:
+                    pre_1 = post_1
             if agent2:
                 alpha2 = agent2.preferences.alpha
                 if post_2 is None:
                     post_2 = (agent2.endowment.x, agent2.endowment.y)
-
-            # Estimate pre-trade endowments (before this trade)
-            # Since we don't have actual pre-trade data, use current as approximation
-            pre_1 = post_1
-            pre_2 = post_2
+                if pre_2 is None:
+                    pre_2 = post_2
 
             self.trade_animations.append(TradeAnimation(
                 agent1_id=trade.agent1_id,
@@ -817,29 +819,32 @@ class VisualizationApp:
             ))
 
             # Store TradeData for persistent history (VIZ-012)
-            if alpha1 is not None and alpha2 is not None and post_1 and post_2:
+            if alpha1 is not None and alpha2 is not None and post_1 and post_2 and pre_1 and pre_2:
                 # Calculate utilities using Cobb-Douglas formula directly
                 def cobb_douglas_u(x: float, y: float, alpha: float) -> float:
                     if x <= 0 or y <= 0:
                         return 0.0
                     return (x ** alpha) * (y ** (1 - alpha))
 
-                util1 = cobb_douglas_u(post_1[0], post_1[1], alpha1)
-                util2 = cobb_douglas_u(post_2[0], post_2[1], alpha2)
+                # Calculate before and after utilities for both agents
+                util1_before = cobb_douglas_u(pre_1[0], pre_1[1], alpha1)
+                util1_after = cobb_douglas_u(post_1[0], post_1[1], alpha1)
+                util2_before = cobb_douglas_u(pre_2[0], pre_2[1], alpha2)
+                util2_after = cobb_douglas_u(post_2[0], post_2[1], alpha2)
 
                 trade_data = TradeData(
                     agent_a_id=trade.agent1_id,
                     alpha_a=alpha1,
-                    endowment_a=pre_1 or post_1,
+                    endowment_a=pre_1,
                     allocation_a=post_1,
-                    utility_a_before=util1,  # Approximation
-                    utility_a_after=util1,
+                    utility_a_before=util1_before,
+                    utility_a_after=util1_after,
                     agent_b_id=trade.agent2_id,
                     alpha_b=alpha2,
-                    endowment_b=pre_2 or post_2,
+                    endowment_b=pre_2,
                     allocation_b=post_2,
-                    utility_b_before=util2,  # Approximation
-                    utility_b_after=util2,
+                    utility_b_before=util2_before,
+                    utility_b_after=util2_after,
                 )
                 self._trade_history.append(trade_data)
                 # Keep only last 20 trades
@@ -1093,6 +1098,13 @@ class VisualizationApp:
         if not dpg.does_item_exist("trade_list_group"):
             return
 
+        # Only update UI when trade history actually changes
+        current_count = len(self._trade_history)
+        if current_count == self._trade_history_ui_count:
+            return  # No changes, don't recreate buttons
+
+        self._trade_history_ui_count = current_count
+
         # Clear existing trade buttons
         dpg.delete_item("trade_list_group", children_only=True)
 
@@ -1105,8 +1117,10 @@ class VisualizationApp:
             return
 
         for i, trade_data in enumerate(recent_trades):
-            # Create a clickable trade item
-            label = f"{trade_data.agent_a_id[:6]}.. <-> {trade_data.agent_b_id[:6]}.."
+            # Create a clickable trade item - use last 8 chars of UUID for uniqueness
+            id_a = trade_data.agent_a_id[-8:]
+            id_b = trade_data.agent_b_id[-8:]
+            label = f"...{id_a} <-> ...{id_b}"
             dpg.add_button(
                 label=label,
                 callback=self._on_trade_history_click,

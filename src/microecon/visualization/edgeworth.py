@@ -171,19 +171,27 @@ class EdgeworthBoxPopup:
     def show(self, trade: TradeData) -> None:
         """Show the Edgeworth box popup for the given trade."""
         self.current_trade = trade
-        if not self._is_open:
-            self._create_window()
+        # Always recreate window to ensure proper display
+        if self._is_open:
+            self.hide()
+        self._create_window()
         self._render()
 
     def hide(self) -> None:
         """Hide the popup."""
-        if self._is_open and dpg.does_item_exist(self.window_id):
+        if self._is_open and self.window_id and dpg.does_item_exist(self.window_id):
             dpg.delete_item(self.window_id)
         self._is_open = False
         self.current_trade = None
+        self.window_id = 0
+        self.drawlist_id = 0
 
     def _create_window(self) -> None:
         """Create the popup window."""
+        # Clean up any existing popup with same tag
+        if dpg.does_item_exist("edgeworth_popup"):
+            dpg.delete_item("edgeworth_popup")
+
         width = self.BOX_SIZE + 2 * self.MARGIN + 100
         height = self.BOX_SIZE + 2 * self.MARGIN + 80
 
@@ -194,6 +202,7 @@ class EdgeworthBoxPopup:
             no_collapse=True,
             on_close=self.hide,
             tag="edgeworth_popup",
+            pos=(100, 100),  # Position it visibly on screen
         ) as self.window_id:
             # Info text
             if self.current_trade:

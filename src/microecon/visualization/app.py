@@ -1065,17 +1065,9 @@ class VisualizationApp:
         # Clear existing trade buttons
         dpg.delete_item("trade_list_group", children_only=True)
 
-        # Get recent trade animations (still active or recently completed)
-        current_time = time.time()
-        recent_trades = []
-
-        for anim in self.trade_animations:
-            # Show trades from the last 30 seconds
-            if current_time - anim.start_time <= 30.0:
-                recent_trades.append(anim)
-
-        # Show most recent first, limit to 5
-        recent_trades = list(reversed(recent_trades[-5:]))
+        # Show all trades (no time limit - user can pause and review)
+        # Show most recent first, limit to 10
+        recent_trades = list(reversed(self.trade_animations[-10:]))
 
         if not recent_trades:
             dpg.add_text("(no recent trades)", parent="trade_list_group", color=(150, 150, 150))

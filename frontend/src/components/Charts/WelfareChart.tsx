@@ -28,14 +28,14 @@ export function WelfareChart() {
 
   if (data.length === 0) {
     return (
-      <div className="h-32 bg-zinc-800 rounded flex items-center justify-center text-zinc-400 text-sm">
+      <div className="h-full min-h-[100px] bg-zinc-800 rounded flex items-center justify-center text-zinc-400 text-sm">
         Run simulation to see welfare chart
       </div>
     );
   }
 
   return (
-    <div className="h-32">
+    <div className="h-full min-h-[100px]">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />

@@ -21,7 +21,7 @@
         "All existing functionality preserved"
       ],
       "deliverables": [
-        "Three-column layout (grid | info | charts)",
+        "Three-column layout (info | grid | charts)",
         "Responsive square grid canvas with max size",
         "Controls relocated to header",
         "Trade History as modal/drawer",
@@ -49,9 +49,9 @@
       "id": "FEAT-001",
       "name": "Three-column grid structure",
       "phase": 1,
-      "description": "Replace grid-cols-[1fr_300px] with three-column layout: grid (flex) | info (~200px) | charts (~300px)",
+      "description": "Replace grid-cols-[1fr_300px] with three-column layout: info (~200px) | grid (1fr) | charts (~320px)",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "App.tsx uses three-column CSS grid or flexbox",
@@ -65,9 +65,9 @@
       "id": "FEAT-002",
       "name": "Responsive square grid canvas",
       "phase": 1,
-      "description": "Make GridCanvas responsive with square aspect ratio and max size (~550px)",
+      "description": "Make GridCanvas responsive with square aspect ratio and max size (~600px)",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Grid maintains square aspect ratio",
@@ -84,7 +84,7 @@
       "phase": 1,
       "description": "Move play/pause/step/reset buttons and speed slider to header row",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "All control buttons in header",
@@ -99,9 +99,9 @@
       "id": "FEAT-004",
       "name": "Compact metrics display",
       "phase": 1,
-      "description": "Reorganize metrics into compact horizontal or grid layout in middle column",
+      "description": "Reorganize metrics into compact 2x2 grid layout in left column",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Tick, Trades, Welfare, Gains all visible",
@@ -115,9 +115,9 @@
       "id": "FEAT-005",
       "name": "Charts in right column",
       "phase": 1,
-      "description": "Place Welfare and Trades charts in right column, stacked vertically with more width",
+      "description": "Place Welfare and Trades charts in right column (320px), stacked vertically with responsive height",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Both charts visible without scrolling",
@@ -131,9 +131,9 @@
       "id": "FEAT-006",
       "name": "Trade History modal",
       "phase": 1,
-      "description": "Move Trade History from sidebar to modal/drawer accessed via button",
+      "description": "Move Trade History from sidebar to modal accessed via History button in header",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Button to open Trade History modal",
@@ -150,7 +150,7 @@
       "phase": 1,
       "description": "Remove dedicated Selected Agent panel from sidebar (tooltip on hover is sufficient)",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "No Selected Agent panel in layout",

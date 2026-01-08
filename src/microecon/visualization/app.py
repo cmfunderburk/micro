@@ -535,6 +535,13 @@ class VisualizationApp:
                             user_data="belief_connections",
                         )
 
+                    # Trade history panel (VIZ-012 improvement)
+                    dpg.add_separator()
+                    with dpg.collapsing_header(label="Recent Trades", default_open=True, tag="trade_history_header"):
+                        dpg.add_text("Click a trade to view Edgeworth box:", color=(180, 180, 180))
+                        # Trade list will be populated dynamically
+                        self.trade_list_group = dpg.add_group(tag="trade_list_group")
+
                     # Export section (VIZ-008 to VIZ-011)
                     dpg.add_separator()
                     with dpg.collapsing_header(label="Export", default_open=False):
@@ -1050,6 +1057,59 @@ class VisualizationApp:
             self._edgeworth_popup = EdgeworthBoxPopup()
         self._edgeworth_popup.show(trade)
 
+    def _update_trade_history(self) -> None:
+        """Update the trade history panel with recent trades (VIZ-012)."""
+        if not dpg.does_item_exist("trade_list_group"):
+            return
+
+        # Clear existing trade buttons
+        dpg.delete_item("trade_list_group", children_only=True)
+
+        # Get recent trade animations (still active or recently completed)
+        current_time = time.time()
+        recent_trades = []
+
+        for anim in self.trade_animations:
+            # Show trades from the last 30 seconds
+            if current_time - anim.start_time <= 30.0:
+                recent_trades.append(anim)
+
+        # Show most recent first, limit to 5
+        recent_trades = list(reversed(recent_trades[-5:]))
+
+        if not recent_trades:
+            dpg.add_text("(no recent trades)", parent="trade_list_group", color=(150, 150, 150))
+            return
+
+        for i, anim in enumerate(recent_trades):
+            # Create a clickable trade item
+            label = f"{anim.agent1_id[:6]}.. <-> {anim.agent2_id[:6]}.."
+            dpg.add_button(
+                label=label,
+                callback=self._on_trade_history_click,
+                user_data=i,
+                parent="trade_list_group",
+                width=-1,
+            )
+
+        # Store for callback
+        self._recent_trade_anims = recent_trades
+
+    def _on_trade_history_click(self, sender: int, app_data: None, user_data: int) -> None:
+        """Handle click on trade history item (VIZ-012)."""
+        if not hasattr(self, '_recent_trade_anims') or user_data >= len(self._recent_trade_anims):
+            return
+
+        anim = self._recent_trade_anims[user_data]
+        agent1 = self.get_agent_by_id(anim.agent1_id)
+        agent2 = self.get_agent_by_id(anim.agent2_id)
+
+        if agent1 is None or agent2 is None:
+            return
+
+        trade_data = self._build_trade_data_from_anim(anim, agent1, agent2)
+        self._show_edgeworth_box(trade_data)
+
     def render(self) -> None:
         """Render the current simulation state."""
         # Rebuild agent proxy cache for this frame
@@ -1090,6 +1150,7 @@ class VisualizationApp:
         self.render_metrics()
         self.render_hover_info()
         self.render_belief_panel()        # Belief panel for selected agent (VIZ-005)
+        self._update_trade_history()      # Trade history panel (VIZ-012)
 
     def render_grid(self) -> None:
         """Render the grid lines."""

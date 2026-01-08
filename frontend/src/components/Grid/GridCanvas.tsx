@@ -6,7 +6,7 @@
  * - Agents as colored circles (color based on alpha: red=0, blue=1)
  * - Trade animations (lines between trading agents that fade)
  * - Selection highlight for selected agent
- * - Perception radius overlay for selected agent
+ * - Overlays: perception radius, movement trails, trade connections
  */
 
 import { useRef, useEffect, useCallback } from 'react';
@@ -32,25 +32,36 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
 
   const agents = useSimulationStore((state) => state.agents);
   const gridSize = useSimulationStore((state) => state.gridSize);
+  const tick = useSimulationStore((state) => state.tick);
   const recentTrades = useSimulationStore((state) => state.recentTrades);
   const selectedAgentId = useSimulationStore((state) => state.selectedAgentId);
   const setSelectedAgentId = useSimulationStore((state) => state.setSelectedAgentId);
   const hoveredAgentId = useSimulationStore((state) => state.hoveredAgentId);
   const setHoveredAgentId = useSimulationStore((state) => state.setHoveredAgentId);
   const overlays = useSimulationStore((state) => state.overlays);
+  const positionHistory = useSimulationStore((state) => state.positionHistory);
+  const tradeConnections = useSimulationStore((state) => state.tradeConnections);
 
   const cellSize = Math.min(width, height) / gridSize;
   const agentRadius = cellSize * 0.35;
 
-  // Get agent position in canvas coordinates
-  const getAgentCanvasPos = useCallback(
-    (agent: Agent): [number, number] => {
-      const [row, col] = agent.position;
+  // Get position in canvas coordinates
+  const posToCanvas = useCallback(
+    (row: number, col: number): [number, number] => {
       const x = (col + 0.5) * cellSize;
       const y = (row + 0.5) * cellSize;
       return [x, y];
     },
     [cellSize]
+  );
+
+  // Get agent position in canvas coordinates
+  const getAgentCanvasPos = useCallback(
+    (agent: Agent): [number, number] => {
+      const [row, col] = agent.position;
+      return posToCanvas(row, col);
+    },
+    [posToCanvas]
   );
 
   // Find agent at canvas coordinates
@@ -145,10 +156,64 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
       ctx.stroke();
     }
 
-    // Build agent lookup for trade animations
+    // Build agent lookup
     const agentById = new Map<string, Agent>();
     for (const agent of agents) {
       agentById.set(agent.id, agent);
+    }
+
+    // Draw trade connections overlay (behind everything else)
+    if (overlays.tradeConnections) {
+      for (const conn of tradeConnections) {
+        const agent1 = agentById.get(conn.agent1_id);
+        const agent2 = agentById.get(conn.agent2_id);
+        if (!agent1 || !agent2) continue;
+
+        const [x1, y1] = getAgentCanvasPos(agent1);
+        const [x2, y2] = getAgentCanvasPos(agent2);
+
+        // Fade based on recency (stronger for recent trades)
+        const ticksSinceTrade = tick - conn.lastTick;
+        const recencyAlpha = Math.max(0.1, 1 - ticksSinceTrade / 50);
+
+        // Width based on trade count
+        const lineWidth = Math.min(1 + conn.count * 0.5, 5);
+
+        ctx.strokeStyle = `rgba(168, 85, 247, ${recencyAlpha * 0.5})`; // purple-500
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+    }
+
+    // Draw movement trails overlay
+    if (overlays.trails) {
+      for (const agent of agents) {
+        const history = positionHistory[agent.id];
+        if (!history || history.length < 2) continue;
+
+        const color = alphaToColor(agent.alpha);
+
+        for (let i = 1; i < history.length; i++) {
+          const [prevRow, prevCol] = history[i - 1];
+          const [currRow, currCol] = history[i];
+
+          const [x1, y1] = posToCanvas(prevRow, prevCol);
+          const [x2, y2] = posToCanvas(currRow, currCol);
+
+          // Fade older positions
+          const alpha = (i / history.length) * 0.5;
+
+          ctx.strokeStyle = color.replace('50%)', `50%, ${alpha})`).replace('hsl', 'hsla');
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+      }
     }
 
     // Draw trade animations (before agents so they appear behind)
@@ -236,14 +301,18 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
   }, [
     agents,
     gridSize,
+    tick,
     cellSize,
     width,
     height,
     agentRadius,
     selectedAgentId,
     hoveredAgentId,
-    overlays.perceptionRadius,
+    overlays,
+    positionHistory,
+    tradeConnections,
     getAgentCanvasPos,
+    posToCanvas,
   ]);
 
   // Start render loop

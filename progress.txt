@@ -2,7 +2,7 @@ Microecon Web Frontend Progress
 ===============================
 
 Last Updated: 2026-01-07
-Current Phase: 4 (Charts) - COMPLETE
+Current Phase: 5 (Overlays) - COMPLETE
 
 Phase 1: Infrastructure (COMPLETE)
 ----------------------------------
@@ -40,26 +40,34 @@ Phase 4: Charts (COMPLETE)
 - [x] FEAT-023: Trade count time-series chart
 - [x] FEAT-024: Chart tick synchronization
 
+Phase 5: Overlays (COMPLETE)
+----------------------------
+- [x] FEAT-025: Overlay toggle UI
+- [x] FEAT-026: Movement trails overlay
+- [x] FEAT-027: Perception radius overlay
+- [ ] FEAT-028: Surplus heatmap overlay (skipped - priority 3)
+- [x] FEAT-029: Trade connections overlay
+
 Key Files Created:
-- frontend/src/components/Charts/WelfareChart.tsx
-- frontend/src/components/Charts/TradeCountChart.tsx
-- frontend/src/components/Charts/index.ts
+- frontend/src/components/Controls/OverlayToggles.tsx
+- Updated frontend/src/store/index.ts with positionHistory and tradeConnections
+- Updated frontend/src/components/Grid/GridCanvas.tsx with overlay rendering
 
 Features Implemented:
-- Real-time welfare chart (green line)
-- Real-time trade count chart (blue line)
-- Downsampling for performance (max 100 points)
-- Tooltip with tick and value info
+- Overlay toggle switches in sidebar
+- Movement trails (fading lines showing agent paths)
+- Trade connections (purple lines between agents who have traded)
+- Perception radius (already done in Phase 2)
 
-Phase 5: Overlays (PENDING)
----------------------------
-- [ ] FEAT-025: Overlay toggle UI
-- [ ] FEAT-026: Movement trails overlay
-- [ ] FEAT-027: Perception radius overlay (done in Phase 2)
-- [ ] FEAT-028: Surplus heatmap overlay
-- [ ] FEAT-029: Trade connections overlay
+Phase 6: Trade Inspection (PENDING)
+-----------------------------------
+- [ ] FEAT-030: Trade history tracking
+- [ ] FEAT-031: Edgeworth box modal
+- [ ] FEAT-032: Indifference curves rendering
+- [ ] FEAT-033: Contract curve rendering
+- [ ] FEAT-034: Trade details display
 
 Notes:
+- Surplus heatmap skipped (priority 3, complex computation)
 - All 669 existing tests pass
 - Frontend builds successfully
-- Recharts integration working well

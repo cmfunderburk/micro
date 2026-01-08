@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { GridCanvas, AgentTooltip } from '@/components/Grid';
 import { WelfareChart, TradeCountChart } from '@/components/Charts';
+import { OverlayToggles } from '@/components/Controls';
 import { Play, Pause, SkipForward, RotateCcw } from 'lucide-react';
 
 function App() {
@@ -118,6 +119,12 @@ function App() {
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Overlays */}
+          <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+            <h2 className="text-lg font-semibold mb-3">Overlays</h2>
+            <OverlayToggles />
           </div>
 
           {/* Selected Agent Details */}

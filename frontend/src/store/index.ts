@@ -5,6 +5,19 @@
 import { create } from 'zustand';
 import type { Agent, Trade, Metrics, SimulationConfig, TimeSeriesPoint } from '@/types/simulation';
 
+// Position history for movement trails
+interface PositionHistory {
+  [agentId: string]: Array<[number, number]>; // Array of [row, col]
+}
+
+// Trade history for connections overlay
+interface TradeConnection {
+  agent1_id: string;
+  agent2_id: string;
+  count: number;
+  lastTick: number;
+}
+
 interface SimulationState {
   // Connection state
   connected: boolean;
@@ -31,6 +44,13 @@ interface SimulationState {
   // Time series history
   history: TimeSeriesPoint[];
   maxHistoryLength: number;
+
+  // Position history for trails
+  positionHistory: PositionHistory;
+  maxTrailLength: number;
+
+  // Trade connections for overlay
+  tradeConnections: TradeConnection[];
 
   // Selected agent
   selectedAgentId: string | null;
@@ -97,6 +117,13 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   history: [],
   maxHistoryLength: 1000,
 
+  // Position history for trails
+  positionHistory: {},
+  maxTrailLength: 20,
+
+  // Trade connections for overlay
+  tradeConnections: [],
+
   // Selected agent
   selectedAgentId: null,
   setSelectedAgentId: (id) => set({ selectedAgentId: id }),
@@ -135,6 +162,37 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     // Keep history bounded
     const newHistory = [...state.history, newPoint].slice(-state.maxHistoryLength);
 
+    // Update position history for trails
+    const newPositionHistory: PositionHistory = { ...state.positionHistory };
+    for (const agent of data.agents) {
+      const history = newPositionHistory[agent.id] || [];
+      history.push(agent.position);
+      // Keep trail bounded
+      newPositionHistory[agent.id] = history.slice(-state.maxTrailLength);
+    }
+
+    // Update trade connections
+    const newConnections = [...state.tradeConnections];
+    for (const trade of data.trades) {
+      // Find existing connection
+      const existing = newConnections.find(
+        (c) =>
+          (c.agent1_id === trade.agent1_id && c.agent2_id === trade.agent2_id) ||
+          (c.agent1_id === trade.agent2_id && c.agent2_id === trade.agent1_id)
+      );
+      if (existing) {
+        existing.count++;
+        existing.lastTick = data.tick;
+      } else {
+        newConnections.push({
+          agent1_id: trade.agent1_id,
+          agent2_id: trade.agent2_id,
+          count: 1,
+          lastTick: data.tick,
+        });
+      }
+    }
+
     set({
       tick: data.tick,
       agents: data.agents,
@@ -142,6 +200,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       metrics: data.metrics,
       gridSize: data.config?.grid_size ?? state.gridSize,
       history: newHistory,
+      positionHistory: newPositionHistory,
+      tradeConnections: newConnections,
       recentTrades: data.trades, // Current tick's trades for animation
     });
   },
@@ -153,6 +213,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       trades: [],
       metrics: initialMetrics,
       history: [],
+      positionHistory: {},
+      tradeConnections: [],
       recentTrades: [],
       selectedAgentId: null,
     }),

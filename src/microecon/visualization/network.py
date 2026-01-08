@@ -231,7 +231,10 @@ class TradeNetworkPanel:
         # Track edges we've already added (to handle bidirectional)
         seen_pairs: set[tuple[str, str]] = set()
 
-        for (a1, a2), count in trade_network.items():
+        for (a1, a2), value in trade_network.items():
+            # Value is (trade_count, last_trade_tick) tuple
+            count, last_tick = value if isinstance(value, tuple) else (value, self._current_tick)
+
             # Normalize pair ordering
             pair = (min(a1, a2), max(a1, a2))
             if pair in seen_pairs:
@@ -244,7 +247,7 @@ class TradeNetworkPanel:
                     agent1_id=pair[0],
                     agent2_id=pair[1],
                     trade_count=count,
-                    last_trade_tick=self._current_tick,  # Approximate; could track per-edge
+                    last_trade_tick=last_tick,
                 ))
 
     # ========================================================================

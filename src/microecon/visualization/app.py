@@ -316,8 +316,9 @@ class VisualizationApp:
             "trade_network": False,       # Show trade network between agents (VIZ-018)
             "surplus_heatmap": False,     # Show surplus heatmap overlay (VIZ-019)
         }
-        # Track trade relationships for network overlay (VIZ-018)
-        self._trade_network: dict[tuple[str, str], int] = {}  # (agent1_id, agent2_id) -> trade count
+        # Track trade relationships for network overlay (VIZ-018) and Trade Network Panel
+        # Maps (agent1_id, agent2_id) -> (trade_count, last_trade_tick)
+        self._trade_network: dict[tuple[str, str], tuple[int, int]] = {}
         # UI element references for toggles
         self.overlay_toggle_ids: dict[str, int] = {}
 
@@ -1070,7 +1071,9 @@ class VisualizationApp:
             # VIZ-018: Update trade network
             # Sort IDs to ensure consistent key ordering
             pair = tuple(sorted([trade.agent1_id, trade.agent2_id]))
-            self._trade_network[pair] = self._trade_network.get(pair, 0) + 1
+            current_tick = self.get_current_tick()
+            prev_count, _ = self._trade_network.get(pair, (0, 0))
+            self._trade_network[pair] = (prev_count + 1, current_tick)
 
     def record_positions(self) -> None:
         """Record current positions for trail rendering."""
@@ -1869,9 +1872,9 @@ class VisualizationApp:
             return
 
         # Find max trade count for normalization
-        max_trades = max(self._trade_network.values()) if self._trade_network else 1
+        max_trades = max(count for count, _ in self._trade_network.values()) if self._trade_network else 1
 
-        for (agent1_id, agent2_id), trade_count in self._trade_network.items():
+        for (agent1_id, agent2_id), (trade_count, last_tick) in self._trade_network.items():
             agent1 = self.get_agent_by_id(agent1_id)
             agent2 = self.get_agent_by_id(agent2_id)
             if agent1 is None or agent2 is None:

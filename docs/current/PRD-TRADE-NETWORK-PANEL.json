@@ -121,7 +121,7 @@
       "phase": 2,
       "description": "Implement circular layout where nodes are arranged on a ring with edges through the center.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "All agent nodes positioned on a circle",
@@ -140,7 +140,7 @@
       "phase": 2,
       "description": "Implement force-directed layout where connected nodes attract and unconnected repel, creating organic clustering.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Nodes with trade relationships cluster together",
@@ -159,7 +159,7 @@
       "phase": 2,
       "description": "Add toggle or dropdown to switch between circular and force-directed layouts.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "UI control exists to switch layouts",
@@ -178,7 +178,7 @@
       "phase": 3,
       "description": "Color nodes by agent alpha parameter, matching the grid visualization color scheme.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Nodes colored using alpha_to_color() function",
@@ -196,7 +196,7 @@
       "phase": 3,
       "description": "Edge thickness encodes trade frequency (number of trades between pair).",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Edge thickness varies with trade count",
@@ -215,7 +215,7 @@
       "phase": 3,
       "description": "Edge color encodes recency (recent trades brighter, older trades faded).",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Recently active edges are brighter",
@@ -234,7 +234,7 @@
       "phase": 4,
       "description": "Clicking a node in the network selects the corresponding agent in the main grid view.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Clicking node triggers selection",
@@ -253,7 +253,7 @@
       "phase": 4,
       "description": "Network panel works in both live simulation and replay modes, using appropriate data sources.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Live mode: network updates as trades occur",
@@ -272,7 +272,7 @@
       "phase": 4,
       "description": "Display network statistics (density, clustering, degrees) below or beside the graph.",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Shows number of nodes and edges",

@@ -12,7 +12,7 @@ See VISION.md for the authoritative statement of project identity and methodolog
 
 ### Simulation Core (Complete)
 
-The core simulation infrastructure in `src/microecon/`:
+The core simulation infrastructure in `microecon/`:
 
 | Module | Purpose |
 |--------|---------|
@@ -71,7 +71,7 @@ The original desktop GUI has been archived to `.archived/visualization-dearpygui
 
 ### Test Coverage
 
-669 tests covering all core modules. Run with: `uv run pytest`
+667 tests covering all core modules. Run with: `uv run pytest`
 
 ## Architecture
 

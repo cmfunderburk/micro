@@ -329,7 +329,7 @@ class VisualizationApp:
 
         # Edgeworth box popup (VIZ-012 to VIZ-014)
         self._edgeworth_popup: Optional[EdgeworthBoxPopup] = None
-        self._recent_trades: list[TradeData] = []  # Trades from current tick for click detection
+        self._trade_history: list[TradeData] = []  # Persistent trade history for panel
 
     def grid_to_canvas(self, pos: Position) -> tuple[float, float]:
         """Convert grid position to canvas coordinates."""
@@ -765,6 +765,7 @@ class VisualizationApp:
 
         self.trade_animations.clear()
         self.position_history.clear()
+        self._trade_history.clear()
         self.selected_agent = None
 
     def record_trades(self, trades: list[TradeEvent]) -> None:
@@ -814,6 +815,32 @@ class VisualizationApp:
                 alpha_1=alpha1,
                 alpha_2=alpha2,
             ))
+
+            # Store TradeData for persistent history (VIZ-012)
+            if alpha1 is not None and alpha2 is not None and post_1 and post_2:
+                # Calculate utilities
+                from microecon.preferences import CobbDouglas
+                util1 = CobbDouglas(alpha1).utility(post_1[0], post_1[1])
+                util2 = CobbDouglas(alpha2).utility(post_2[0], post_2[1])
+
+                trade_data = TradeData(
+                    agent_a_id=trade.agent1_id,
+                    alpha_a=alpha1,
+                    endowment_a=pre_1 or post_1,
+                    allocation_a=post_1,
+                    utility_a_before=util1,  # Approximation
+                    utility_a_after=util1,
+                    agent_b_id=trade.agent2_id,
+                    alpha_b=alpha2,
+                    endowment_b=pre_2 or post_2,
+                    allocation_b=post_2,
+                    utility_b_before=util2,  # Approximation
+                    utility_b_after=util2,
+                )
+                self._trade_history.append(trade_data)
+                # Keep only last 20 trades
+                if len(self._trade_history) > 20:
+                    self._trade_history = self._trade_history[-20:]
 
     def record_positions(self) -> None:
         """Record current positions for trail rendering."""
@@ -1065,17 +1092,17 @@ class VisualizationApp:
         # Clear existing trade buttons
         dpg.delete_item("trade_list_group", children_only=True)
 
-        # Show all trades (no time limit - user can pause and review)
+        # Use persistent trade history (not animations which expire)
         # Show most recent first, limit to 10
-        recent_trades = list(reversed(self.trade_animations[-10:]))
+        recent_trades = list(reversed(self._trade_history[-10:]))
 
         if not recent_trades:
             dpg.add_text("(no recent trades)", parent="trade_list_group", color=(150, 150, 150))
             return
 
-        for i, anim in enumerate(recent_trades):
+        for i, trade_data in enumerate(recent_trades):
             # Create a clickable trade item
-            label = f"{anim.agent1_id[:6]}.. <-> {anim.agent2_id[:6]}.."
+            label = f"{trade_data.agent_a_id[:6]}.. <-> {trade_data.agent_b_id[:6]}.."
             dpg.add_button(
                 label=label,
                 callback=self._on_trade_history_click,
@@ -1084,22 +1111,14 @@ class VisualizationApp:
                 width=-1,
             )
 
-        # Store for callback
-        self._recent_trade_anims = recent_trades
-
     def _on_trade_history_click(self, sender: int, app_data: None, user_data: int) -> None:
         """Handle click on trade history item (VIZ-012)."""
-        if not hasattr(self, '_recent_trade_anims') or user_data >= len(self._recent_trade_anims):
+        # Get trade directly from history (most recent first)
+        recent_trades = list(reversed(self._trade_history[-10:]))
+        if user_data >= len(recent_trades):
             return
 
-        anim = self._recent_trade_anims[user_data]
-        agent1 = self.get_agent_by_id(anim.agent1_id)
-        agent2 = self.get_agent_by_id(anim.agent2_id)
-
-        if agent1 is None or agent2 is None:
-            return
-
-        trade_data = self._build_trade_data_from_anim(anim, agent1, agent2)
+        trade_data = recent_trades[user_data]
         self._show_edgeworth_box(trade_data)
 
     def render(self) -> None:

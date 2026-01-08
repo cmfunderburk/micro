@@ -19,7 +19,7 @@ preferences in a pure exchange economy:
    - Power source: Exogenous bargaining_power attribute
    - β = w1 / (w1 + w2)
 
-4. Take-It-Or-Leave-It (TIOLI) — O&R §2.8
+4. Take-It-Or-Leave-It (TIOLI) — O&R Ch 3
    - Proposer extracts all surplus
    - Power source: Commitment / first-mover advantage
    - Responder at indifference (utility == disagreement)
@@ -659,32 +659,20 @@ def tioli_bargaining_solution(
     u1 = prefs_1.utility(allocation_1)
     u2 = prefs_2.utility(allocation_2)
 
-    # Verify trade is individually rational for both
-    # (proposer always gains, responder exactly at disagreement)
-    if proposer == 1:
-        if u1 < d1 - 1e-9:
-            # No beneficial trade for proposer
-            return BargainingOutcome(
-                allocation_1=endowment_1,
-                allocation_2=endowment_2,
-                utility_1=d1,
-                utility_2=d2,
-                gains_1=0.0,
-                gains_2=0.0,
-                trade_occurred=False,
-            )
-    else:
-        if u2 < d2 - 1e-9:
-            # No beneficial trade for proposer
-            return BargainingOutcome(
-                allocation_1=endowment_1,
-                allocation_2=endowment_2,
-                utility_1=d1,
-                utility_2=d2,
-                gains_1=0.0,
-                gains_2=0.0,
-                trade_occurred=False,
-            )
+    # Verify trade is individually rational for BOTH agents
+    # Proposer should gain, responder should be at least at disagreement
+    # This catches edge cases where _solve_tioli returns infeasible fallback
+    if u1 < d1 - 1e-9 or u2 < d2 - 1e-9:
+        # Individual rationality violated - no beneficial trade exists
+        return BargainingOutcome(
+            allocation_1=endowment_1,
+            allocation_2=endowment_2,
+            utility_1=d1,
+            utility_2=d2,
+            gains_1=0.0,
+            gains_2=0.0,
+            trade_occurred=False,
+        )
 
     return BargainingOutcome(
         allocation_1=allocation_1,
@@ -1383,12 +1371,14 @@ class AsymmetricNashBargainingProtocol(BargainingProtocol):
         # Compute weights from bargaining_power attributes
         w1 = agent1.bargaining_power
         w2 = agent2.bargaining_power
-        total_power = w1 + w2
 
-        if total_power <= 0:
+        # Validate individual weights are positive (Nash axioms require positive weights)
+        if w1 <= 0 or w2 <= 0:
             raise ValueError(
-                f"Total bargaining power must be positive, got w1={w1}, w2={w2}"
+                f"bargaining_power must be positive for both agents, got w1={w1}, w2={w2}"
             )
+
+        total_power = w1 + w2
 
         weight_1 = w1 / total_power
         weight_2 = w2 / total_power

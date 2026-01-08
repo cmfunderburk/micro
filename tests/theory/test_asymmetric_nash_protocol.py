@@ -433,3 +433,40 @@ class TestAsymmetricNashFeasibility:
         assert outcome.allocation_1.y >= -1e-9
         assert outcome.allocation_2.x >= -1e-9
         assert outcome.allocation_2.y >= -1e-9
+
+
+class TestAsymmetricNashValidation:
+    """Test that AsymmetricNash validates bargaining_power inputs."""
+
+    def test_negative_power_raises_error(self):
+        """Negative bargaining_power should raise ValueError."""
+        a1 = create_agent(alpha=0.5, endowment_x=10, endowment_y=5,
+                          bargaining_power=-0.5, agent_id='a1')
+        a2 = create_agent(alpha=0.5, endowment_x=5, endowment_y=10,
+                          bargaining_power=2.0, agent_id='a2')
+
+        protocol = AsymmetricNashBargainingProtocol()
+        with pytest.raises(ValueError, match="bargaining_power must be positive"):
+            protocol.solve(a1, a2)
+
+    def test_zero_power_raises_error(self):
+        """Zero bargaining_power should raise ValueError."""
+        a1 = create_agent(alpha=0.5, endowment_x=10, endowment_y=5,
+                          bargaining_power=0.0, agent_id='a1')
+        a2 = create_agent(alpha=0.5, endowment_x=5, endowment_y=10,
+                          bargaining_power=1.0, agent_id='a2')
+
+        protocol = AsymmetricNashBargainingProtocol()
+        with pytest.raises(ValueError, match="bargaining_power must be positive"):
+            protocol.solve(a1, a2)
+
+    def test_both_negative_raises_error(self):
+        """Both negative bargaining_power should raise ValueError."""
+        a1 = create_agent(alpha=0.5, endowment_x=10, endowment_y=5,
+                          bargaining_power=-1.0, agent_id='a1')
+        a2 = create_agent(alpha=0.5, endowment_x=5, endowment_y=10,
+                          bargaining_power=-1.0, agent_id='a2')
+
+        protocol = AsymmetricNashBargainingProtocol()
+        with pytest.raises(ValueError, match="bargaining_power must be positive"):
+            protocol.solve(a1, a2)

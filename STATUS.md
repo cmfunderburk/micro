@@ -37,9 +37,10 @@ Two complete implementations with theoretical grounding:
 - Golden section search for numerical optimization
 
 **Rubinstein Alternating Offers** (`RubinsteinBargainingProtocol`)
-- Strategic extensive-form game solution
-- First-mover advantage based on discount factors
-- Converges to Nash as patience approaches 1
+- Uses BRW (1986) limit: patience determines bargaining power, not proposer identity
+- More patient agent (higher δ) captures larger share of surplus
+- Equal discount factors → symmetric Nash outcome
+- Future: ClassicRubinsteinProtocol with finite-round first-mover advantage
 
 ### Matching Protocols
 

@@ -419,16 +419,25 @@ class TestBargainingProtocol:
         assert outcome.gains_1 == pytest.approx(outcome.gains_2, rel=0.01)
 
     def test_rubinstein_protocol_solve(self, agents):
-        """RubinsteinBargainingProtocol should compute Rubinstein solution."""
+        """RubinsteinBargainingProtocol should compute Rubinstein solution.
+
+        With equal discount factors, BRW gives symmetric bargaining power,
+        so outcome equals symmetric Nash. Proposer identity is irrelevant.
+        """
         agent1, agent2 = agents
         protocol = RubinsteinBargainingProtocol()
 
         # Agent 1 proposes
-        outcome = protocol.solve(agent1, agent2, proposer=agent1)
+        outcome1 = protocol.solve(agent1, agent2, proposer=agent1)
+        # Agent 2 proposes
+        outcome2 = protocol.solve(agent1, agent2, proposer=agent2)
 
-        assert outcome.trade_occurred
-        # Proposer gets more
-        assert outcome.gains_1 > outcome.gains_2
+        assert outcome1.trade_occurred
+        assert outcome2.trade_occurred
+        # With equal deltas (both 0.9), BRW gives symmetric outcome
+        assert outcome1.gains_1 == pytest.approx(outcome1.gains_2, rel=0.01)
+        # Proposer identity doesn't affect outcome under BRW
+        assert outcome1.gains_1 == pytest.approx(outcome2.gains_1, rel=0.01)
 
     def test_protocol_execute_updates_endowments(self, agents):
         """Protocol.execute() should update agent endowments."""
@@ -446,27 +455,37 @@ class TestBargainingProtocol:
         assert agent1.endowment != initial_endow1
         assert agent2.endowment != initial_endow2
 
-    def test_protocols_produce_different_outcomes(self, agents):
-        """Nash and Rubinstein should produce different outcomes."""
-        agent1, agent2 = agents
+    def test_protocols_produce_different_outcomes(self):
+        """Nash and Rubinstein differ when agents have unequal patience.
+
+        Nash is always symmetric (equal bargaining power).
+        Rubinstein (BRW) gives more power to the more patient agent.
+        With equal deltas they coincide; with unequal deltas they differ.
+        """
+        # Create agents with DIFFERENT discount factors
+        state1 = AgentPrivateState(CobbDouglas(0.3), Bundle(8.0, 2.0))
+        state2 = AgentPrivateState(CobbDouglas(0.7), Bundle(2.0, 8.0))
+        agent1 = Agent(private_state=state1, id="agent_1", discount_factor=0.95)
+        agent2 = Agent(private_state=state2, id="agent_2", discount_factor=0.80)
 
         nash = NashBargainingProtocol()
         rubinstein = RubinsteinBargainingProtocol()
 
         nash_outcome = nash.solve(agent1, agent2)
 
-        # Reset endowments
+        # Reset endowments for Rubinstein
         agent1.endowment = Bundle(8.0, 2.0)
         agent2.endowment = Bundle(2.0, 8.0)
 
-        rub_outcome = rubinstein.solve(agent1, agent2, proposer=agent1)
+        rub_outcome = rubinstein.solve(agent1, agent2)
 
-        # Nash is symmetric, Rubinstein has proposer advantage
+        # Nash is symmetric regardless of patience
         nash_ratio = nash_outcome.gains_1 / nash_outcome.gains_2
-        rub_ratio = rub_outcome.gains_1 / rub_outcome.gains_2
-
         assert nash_ratio == pytest.approx(1.0, rel=0.01)
-        assert rub_ratio > 1.0  # Proposer gets more
+
+        # Rubinstein (BRW): more patient agent (agent1, δ=0.95) gets more
+        rub_ratio = rub_outcome.gains_1 / rub_outcome.gains_2
+        assert rub_ratio > 1.0  # Patient agent gets more, not proposer
 
     def test_compute_expected_surplus_nash(self, agents):
         """Nash protocol expected surplus should be symmetric."""

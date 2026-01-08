@@ -721,10 +721,15 @@ class BargainingProtocol(ABC):
 
     Different protocols implement different approaches to bilateral bargaining:
     - Nash: Axiomatic solution maximizing Nash product (symmetric)
-    - Rubinstein: Strategic alternating-offers with first-mover advantage
+    - Rubinstein (BRW): Alternating-offers SPE in the limit, where patience
+      (discount factors) determines bargaining power, not proposer identity
 
     This abstraction enables the platform's core value proposition:
     comparing outcomes under different institutional rules.
+
+    Note: The current Rubinstein implementation uses the Binmore-Rubinstein-
+    Wolinsky (1986) limit result. A future extension may add classic finite-δ
+    Rubinstein with explicit first-mover advantage.
 
     Usage:
         protocol = NashBargainingProtocol()
@@ -868,7 +873,7 @@ class NashBargainingProtocol(BargainingProtocol):
 
 class RubinsteinBargainingProtocol(BargainingProtocol):
     """
-    Rubinstein Alternating Offers - strategic approach.
+    Rubinstein Alternating Offers - strategic approach (BRW limit).
 
     For exchange economies with Cobb-Douglas preferences, Binmore, Rubinstein,
     and Wolinsky (1986) showed that the alternating-offers SPE converges to
@@ -880,10 +885,14 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
     Properties:
     - Patience = power: Higher discount factor → larger share
     - Equal δ → symmetric Nash (equal bargaining power)
-    - Proposer identity no longer affects outcome (with asymmetric Nash)
+    - Proposer identity no longer affects outcome (in the BRW limit)
 
     The proposer parameter is retained for API compatibility and logging
     but does not affect outcomes under the BRW formulation.
+
+    Future extension: A ClassicRubinsteinProtocol could implement finite-round
+    alternating offers where proposer identity confers first-mover advantage.
+    This would enable studying proposer-advantage effects distinct from patience.
 
     Reference: O&R-B Chapter 4, Section 4.4; BRW (1986) RAND Journal
     """

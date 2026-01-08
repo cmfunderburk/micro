@@ -233,7 +233,8 @@ class Simulation:
                 if pos_a is None or pos_b is None:
                     return 0.0
 
-                ticks_to_reach = pos_a.chebyshev_distance_to(pos_b)
+                # Use grid.chebyshev_distance to respect wrap setting
+                ticks_to_reach = self.grid.chebyshev_distance(pos_a, pos_b)
                 return base_surplus * (a.discount_factor ** ticks_to_reach)
 
             # Compute new matches
@@ -297,7 +298,8 @@ class Simulation:
                 # Check if they crossed paths (swapped positions or crossed through)
                 crossed = (old1 == new2 and old2 == new1)
                 # Also check if they're now adjacent but were moving toward each other
-                adjacent = new1.chebyshev_distance_to(new2) == 1
+                # Use grid.chebyshev_distance to respect wrap setting
+                adjacent = self.grid.chebyshev_distance(new1, new2) == 1
                 moving_toward = (
                     move_targets.get(agent1.id) == old2 and
                     move_targets.get(agent2.id) == old1

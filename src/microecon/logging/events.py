@@ -110,7 +110,7 @@ class TargetEvaluation:
 
     target_id: str
     target_position: tuple[int, int]
-    distance: float  # Euclidean distance
+    distance: float  # Chebyshev distance (same as ticks_to_reach, perception is square)
     ticks_to_reach: int  # Chebyshev distance (movement ticks required)
     expected_surplus: float  # Nash bargaining surplus
     discounted_value: float  # surplus * (delta ^ ticks_to_reach)

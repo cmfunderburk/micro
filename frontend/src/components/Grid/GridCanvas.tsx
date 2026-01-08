@@ -55,28 +55,66 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
     [cellSize]
   );
 
-  // Get agent position in canvas coordinates
+  // Group agents by position for co-location offset calculation
+  const agentsByPosition = useCallback(() => {
+    const posMap = new Map<string, Agent[]>();
+    for (const agent of agents) {
+      const key = `${agent.position[0]},${agent.position[1]}`;
+      const existing = posMap.get(key) || [];
+      existing.push(agent);
+      posMap.set(key, existing);
+    }
+    return posMap;
+  }, [agents]);
+
+  // Get agent position in canvas coordinates, with offset for co-located agents
   const getAgentCanvasPos = useCallback(
-    (agent: Agent): [number, number] => {
+    (agent: Agent, posMap?: Map<string, Agent[]>): [number, number] => {
       const [row, col] = agent.position;
-      return posToCanvas(row, col);
+      const [baseX, baseY] = posToCanvas(row, col);
+
+      // If no position map provided, return base position
+      if (!posMap) return [baseX, baseY];
+
+      const key = `${row},${col}`;
+      const colocated = posMap.get(key);
+
+      // If only one agent at this position, no offset needed
+      if (!colocated || colocated.length <= 1) return [baseX, baseY];
+
+      // Find this agent's index among co-located agents
+      const index = colocated.findIndex(a => a.id === agent.id);
+      const count = colocated.length;
+
+      // Offset in a circular pattern around the cell center
+      const offsetRadius = agentRadius * 0.6; // How far to offset
+      const angle = (2 * Math.PI * index) / count;
+      const offsetX = Math.cos(angle) * offsetRadius;
+      const offsetY = Math.sin(angle) * offsetRadius;
+
+      return [baseX + offsetX, baseY + offsetY];
     },
-    [posToCanvas]
+    [posToCanvas, agentRadius]
   );
 
-  // Find agent at canvas coordinates
+  // Find agent at canvas coordinates (accounts for co-location offsets)
   const findAgentAtPos = useCallback(
     (canvasX: number, canvasY: number): Agent | null => {
+      const posMap = agentsByPosition();
       for (const agent of agents) {
-        const [ax, ay] = getAgentCanvasPos(agent);
+        const [ax, ay] = getAgentCanvasPos(agent, posMap);
+        // Use smaller hit radius for co-located agents
+        const posKey = `${agent.position[0]},${agent.position[1]}`;
+        const colocatedCount = posMap.get(posKey)?.length ?? 1;
+        const hitRadius = colocatedCount > 1 ? agentRadius * 0.7 : agentRadius;
         const dist = Math.sqrt((canvasX - ax) ** 2 + (canvasY - ay) ** 2);
-        if (dist <= agentRadius) {
+        if (dist <= hitRadius) {
           return agent;
         }
       }
       return null;
     },
-    [agents, getAgentCanvasPos, agentRadius]
+    [agents, getAgentCanvasPos, agentRadius, agentsByPosition]
   );
 
   // Handle mouse events
@@ -156,11 +194,12 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
       ctx.stroke();
     }
 
-    // Build agent lookup
+    // Build agent lookup and position map for co-location
     const agentById = new Map<string, Agent>();
     for (const agent of agents) {
       agentById.set(agent.id, agent);
     }
+    const posMap = agentsByPosition();
 
     // Draw trade connections overlay (behind everything else)
     if (overlays.tradeConnections) {
@@ -169,8 +208,8 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
         const agent2 = agentById.get(conn.agent2_id);
         if (!agent1 || !agent2) continue;
 
-        const [x1, y1] = getAgentCanvasPos(agent1);
-        const [x2, y2] = getAgentCanvasPos(agent2);
+        const [x1, y1] = getAgentCanvasPos(agent1, posMap);
+        const [x2, y2] = getAgentCanvasPos(agent2, posMap);
 
         // Fade based on recency (stronger for recent trades)
         const ticksSinceTrade = tick - conn.lastTick;
@@ -228,8 +267,8 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
       const agent2 = agentById.get(trade.agent2_id);
       if (!agent1 || !agent2) continue;
 
-      const [x1, y1] = getAgentCanvasPos(agent1);
-      const [x2, y2] = getAgentCanvasPos(agent2);
+      const [x1, y1] = getAgentCanvasPos(agent1, posMap);
+      const [x2, y2] = getAgentCanvasPos(agent2, posMap);
 
       // Fade out over animation duration
       const alpha = 1 - elapsed / TRADE_ANIMATION_DURATION;
@@ -246,7 +285,7 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
     if (overlays.perceptionRadius && selectedAgentId) {
       const selectedAgent = agentById.get(selectedAgentId);
       if (selectedAgent) {
-        const [x, y] = getAgentCanvasPos(selectedAgent);
+        const [x, y] = getAgentCanvasPos(selectedAgent, posMap);
         const radiusPixels = selectedAgent.perception_radius * cellSize;
 
         ctx.strokeStyle = 'rgba(99, 102, 241, 0.3)'; // indigo-500
@@ -261,15 +300,20 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
 
     // Draw agents
     for (const agent of agents) {
-      const [x, y] = getAgentCanvasPos(agent);
+      const [x, y] = getAgentCanvasPos(agent, posMap);
       const color = alphaToColor(agent.alpha);
+
+      // Check if agent is co-located (use smaller radius like Python impl)
+      const posKey = `${agent.position[0]},${agent.position[1]}`;
+      const colocatedCount = posMap.get(posKey)?.length ?? 1;
+      const drawRadius = colocatedCount > 1 ? agentRadius * 0.7 : agentRadius;
 
       // Draw selection ring
       if (agent.id === selectedAgentId) {
         ctx.strokeStyle = '#fbbf24'; // amber-400
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(x, y, agentRadius + 4, 0, Math.PI * 2);
+        ctx.arc(x, y, drawRadius + 4, 0, Math.PI * 2);
         ctx.stroke();
       }
 
@@ -278,14 +322,14 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(x, y, agentRadius + 2, 0, Math.PI * 2);
+        ctx.arc(x, y, drawRadius + 2, 0, Math.PI * 2);
         ctx.stroke();
       }
 
       // Draw agent circle
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(x, y, agentRadius, 0, Math.PI * 2);
+      ctx.arc(x, y, drawRadius, 0, Math.PI * 2);
       ctx.fill();
 
       // Draw border
@@ -313,6 +357,7 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
     tradeConnections,
     getAgentCanvasPos,
     posToCanvas,
+    agentsByPosition,
   ]);
 
   // Start render loop

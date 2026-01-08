@@ -3,8 +3,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routes import router
-from backend.websocket import ws_router
+from server.routes import router
+from server.websocket import ws_router
 
 
 def create_app() -> FastAPI:

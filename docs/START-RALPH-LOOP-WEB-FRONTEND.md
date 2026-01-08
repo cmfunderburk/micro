@@ -21,7 +21,7 @@ Before starting:
 /ralph-loop:ralph-loop "Execute docs/PRD-WEB-FRONTEND.json systematically.
 
 This PRD builds a web frontend for the microecon simulation:
-- Phase 1: Infrastructure (backend/, frontend/, WebSocket, REST endpoints)
+- Phase 1: Infrastructure (server/, frontend/, WebSocket, REST endpoints)
 - Phase 2: Grid & Controls (canvas rendering, play/pause/step/reset, metrics)
 - Phase 3: Interaction (hover tooltips, click selection, agent details)
 - Phase 4: Charts (welfare and trade count time-series with Recharts)
@@ -34,7 +34,7 @@ CONSTRAINTS:
 - Existing 669 tests must continue to pass
 - Use Canvas 2D for grid rendering (Pixi.js only if performance issues)
 - Follow design sketches in the interview discussion
-- Backend in backend/, frontend in frontend/
+- Backend in server/, frontend in frontend/
 - Add fastapi, uvicorn, websockets as core dependencies
 
 Track progress via git commits, update PRD status fields as features complete, write progress.txt updates." --max-iterations 20 --completion-promise "<promise>WEB-FRONTEND-COMPLETE</promise>"
@@ -51,7 +51,7 @@ Check current state:
 1. Read progress.txt for last known state
 2. Check PRD for feature passes values
 3. Review recent git commits
-4. Check what files exist in backend/ and frontend/
+4. Check what files exist in server/ and frontend/
 
 Continue from where execution stopped. Complete remaining features in order." --max-iterations 20 --completion-promise "<promise>WEB-FRONTEND-COMPLETE</promise>"
 ```
@@ -118,8 +118,8 @@ Continue through remaining phases." --max-iterations 20 --completion-promise "<p
 ## Expected Outputs
 
 ### Phase 1: Infrastructure
-- `backend/__init__.py`, `backend/__main__.py`, `backend/app.py`
-- `backend/routes.py`, `backend/websocket.py`
+- `server/__init__.py`, `server/__main__.py`, `server/app.py`
+- `server/routes.py`, `server/websocket.py`
 - `frontend/` with Vite + React + TypeScript scaffold
 - `frontend/src/hooks/useSimulationSocket.ts`
 - `frontend/src/store/index.ts` (Zustand)
@@ -154,7 +154,7 @@ Continue through remaining phases." --max-iterations 20 --completion-promise "<p
 
 ### Phase 8: Configuration & Export
 - `frontend/src/components/Config/ConfigModal.tsx`
-- `backend/routes.py` config endpoints
+- `server/routes.py` config endpoints
 - Export functionality
 
 ---
@@ -163,7 +163,7 @@ Continue through remaining phases." --max-iterations 20 --completion-promise "<p
 
 ```bash
 # Backend health check
-python -m backend & sleep 2 && curl http://localhost:8000/api/health && kill %1
+python -m server & sleep 2 && curl http://localhost:8000/api/health && kill %1
 
 # Frontend builds
 cd frontend && npm run build

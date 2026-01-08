@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.simulation_manager import manager, SimulationConfig
+from server.simulation_manager import manager, SimulationConfig
 
 router = APIRouter()
 

@@ -1,15 +1,15 @@
-"""Entry point for running the backend server.
+"""Entry point for running the server.
 
 Usage:
-    python -m backend
-    python -m backend --port 8000
+    python -m server
+    python -m server --port 8000
 """
 
 import argparse
 
 import uvicorn
 
-from backend.app import create_app
+from server.app import create_app
 
 
 def main() -> None:

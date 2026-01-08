@@ -5,7 +5,6 @@ description = "Research-first agent-based microeconomics platform"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "dearpygui>=2.1.1",
     "pyyaml>=6.0.3",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
@@ -18,7 +17,7 @@ export = ["pillow>=10.0", "imageio>=2.30"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["."]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
@@ -33,4 +32,4 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/microecon"]
+packages = ["microecon"]

@@ -44,11 +44,11 @@ Infrastructure for capturing simulation state and analyzing results:
 
 ### Web Frontend (Primary UI)
 
-Browser-based visualization in `frontend/` (React/Vite) with `backend/` (FastAPI/WebSocket):
+Browser-based visualization in `frontend/` (React/Vite) with `server/` (FastAPI/WebSocket):
 
 ```bash
-# Start backend
-cd backend && uv run uvicorn backend.app:create_app --factory --port 8000
+# Start server
+uv run uvicorn server.app:create_app --factory --port 8000
 
 # Start frontend (in separate terminal)
 cd frontend && npm run dev
@@ -77,7 +77,7 @@ The original desktop GUI has been archived to `.archived/visualization-dearpygui
 
 ```
 microecon/
-├── src/microecon/           # Core simulation library (Python)
+├── microecon/               # Core simulation library (Python)
 │   ├── __init__.py          # Public API exports
 │   ├── bundle.py            # 2-good bundles
 │   ├── preferences.py       # Utility functions (Cobb-Douglas)
@@ -93,7 +93,7 @@ microecon/
 │   ├── logging/             # Event logging infrastructure
 │   ├── analysis/            # Post-hoc analysis utilities
 │   └── scenarios/           # Scenario definitions and loading
-├── backend/                 # FastAPI WebSocket server
+├── server/                  # FastAPI WebSocket server
 │   ├── app.py               # Application factory
 │   ├── websocket.py         # WebSocket handlers
 │   ├── simulation_manager.py # Simulation lifecycle management
@@ -135,8 +135,8 @@ uv run pytest
 uv run pytest --cov=microecon
 
 # Start web frontend (two terminals needed)
-# Terminal 1: Backend
-uv run uvicorn backend.app:create_app --factory --port 8000
+# Terminal 1: Server
+uv run uvicorn server.app:create_app --factory --port 8000
 
 # Terminal 2: Frontend
 cd frontend && npm run dev

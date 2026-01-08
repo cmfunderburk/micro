@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from backend.simulation_manager import manager
+from server.simulation_manager import manager
 
 ws_router = APIRouter()
 
@@ -144,7 +144,7 @@ async def simulation_websocket(websocket: WebSocket) -> None:
                 await websocket.send_json({"type": "speed", "speed": manager.speed})
 
             elif command == "config":
-                from backend.simulation_manager import SimulationConfig
+                from server.simulation_manager import SimulationConfig
                 config_data = data.get("config", {})
                 new_config = SimulationConfig.from_dict(config_data)
                 was_running = manager.running

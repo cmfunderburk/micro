@@ -6,7 +6,9 @@ import { GridCanvas, AgentTooltip } from '@/components/Grid';
 import { WelfareChart, TradeCountChart } from '@/components/Charts';
 import { OverlayToggles } from '@/components/Controls';
 import { TradeHistoryPanel, EdgeworthModal } from '@/components/TradeInspection';
-import { Play, Pause, SkipForward, RotateCcw } from 'lucide-react';
+import { NetworkPanel } from '@/components/Network';
+import { Play, Pause, SkipForward, RotateCcw, Network } from 'lucide-react';
+import { useState } from 'react';
 
 function App() {
   const { sendCommand } = useSimulationSocket();
@@ -22,6 +24,9 @@ function App() {
   const selectedAgent = selectedAgentId
     ? agents.find((a) => a.id === selectedAgentId)
     : null;
+
+  // Network panel state
+  const [networkPanelOpen, setNetworkPanelOpen] = useState(false);
 
   // Trade inspection state
   const tradeHistory = useSimulationStore((state) => state.tradeHistory);
@@ -82,6 +87,15 @@ function App() {
             </Button>
             <Button onClick={handleReset} variant="outline" size="icon">
               <RotateCcw className="h-4 w-4" />
+            </Button>
+
+            <Button
+              onClick={() => setNetworkPanelOpen(true)}
+              variant="outline"
+              size="icon"
+              title="Trade Network"
+            >
+              <Network className="h-4 w-4" />
             </Button>
 
             <div className="flex items-center gap-2 ml-4 flex-1 max-w-xs">
@@ -202,6 +216,12 @@ function App() {
         onOpenChange={(open) => {
           if (!open) setSelectedTradeIndex(null);
         }}
+      />
+
+      {/* Network Panel */}
+      <NetworkPanel
+        open={networkPanelOpen}
+        onOpenChange={setNetworkPanelOpen}
       />
     </div>
   );

@@ -818,10 +818,14 @@ class VisualizationApp:
 
             # Store TradeData for persistent history (VIZ-012)
             if alpha1 is not None and alpha2 is not None and post_1 and post_2:
-                # Calculate utilities
-                from microecon.preferences import CobbDouglas
-                util1 = CobbDouglas(alpha1).utility(post_1[0], post_1[1])
-                util2 = CobbDouglas(alpha2).utility(post_2[0], post_2[1])
+                # Calculate utilities using Cobb-Douglas formula directly
+                def cobb_douglas_u(x: float, y: float, alpha: float) -> float:
+                    if x <= 0 or y <= 0:
+                        return 0.0
+                    return (x ** alpha) * (y ** (1 - alpha))
+
+                util1 = cobb_douglas_u(post_1[0], post_1[1], alpha1)
+                util2 = cobb_douglas_u(post_2[0], post_2[1], alpha2)
 
                 trade_data = TradeData(
                     agent_a_id=trade.agent1_id,

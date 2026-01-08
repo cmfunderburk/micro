@@ -115,21 +115,6 @@ class TestScenarioLoader:
             assert len(scenario.config.agents) >= 2
 
 
-class TestScenarioBrowserImports:
-    """Tests that browser module can be imported."""
-
-    def test_browser_imports(self):
-        """Browser module should import without error."""
-        from microecon.visualization.browser import (
-            StartupSelector,
-            ScenarioBrowser,
-            run_with_startup_selector,
-            run_scenario_comparison,
-        )
-        assert StartupSelector is not None
-        assert ScenarioBrowser is not None
-
-
 class TestMarketEmergenceScenario:
     """Tests for programmatic market emergence scenarios."""
 

@@ -1,6 +1,6 @@
 # Current Project Status
 
-**Version:** 0.1.1 (belief system release)
+**Version:** 0.2.0
 **Date:** 2026-01-07
 **Purpose:** Definitive reference for current capabilities
 

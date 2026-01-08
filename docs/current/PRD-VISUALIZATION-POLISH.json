@@ -389,7 +389,7 @@
       "phase": 5,
       "description": "Add toggle to switch between omniscient view and agent perspective view.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Toggle control for perspective mode exists",
@@ -407,7 +407,7 @@
       "phase": 5,
       "description": "In perspective mode, render what the selected agent observes. Dim/hide agents outside perception radius. Show observed types (not true types) under noisy information.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Agents outside perception radius are dimmed or hidden",
@@ -428,7 +428,7 @@
       "phase": 5,
       "description": "Allow split view or toggle to compare agent's view vs ground truth. Useful for understanding information asymmetry effects.",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Can view ground truth alongside agent perspective",

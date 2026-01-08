@@ -332,6 +332,16 @@ class VisualizationApp:
         self._trade_history: list[TradeData] = []  # Persistent trade history for panel
         self._trade_history_ui_count: int = 0  # Track when UI needs updating
 
+        # Perspective mode (VIZ-015 to VIZ-017)
+        self.perspective_mode: bool = False  # True = agent perspective, False = omniscient
+        self.perspective_agent_id: Optional[str] = None  # Agent whose perspective to show
+        self.perspective_show_comparison: bool = False  # Show observed vs true comparison
+        # UI elements for perspective mode
+        self.perspective_toggle_id: int = 0
+        self.perspective_agent_combo_id: int = 0
+        self.perspective_comparison_toggle_id: int = 0
+        self.perspective_status_text_id: int = 0
+
     def grid_to_canvas(self, pos: Position) -> tuple[float, float]:
         """Convert grid position to canvas coordinates."""
         x = self.canvas_origin[0] + (pos.col + 0.5) * self.cell_size
@@ -536,6 +546,35 @@ class VisualizationApp:
                             user_data="belief_connections",
                         )
 
+                    # Perspective mode section (VIZ-015 to VIZ-017)
+                    dpg.add_separator()
+                    with dpg.collapsing_header(label="Perspective Mode", default_open=False):
+                        self.perspective_toggle_id = dpg.add_checkbox(
+                            label="Enable Agent Perspective",
+                            default_value=self.perspective_mode,
+                            callback=self._on_perspective_toggle,
+                        )
+                        dpg.add_text("View From:", color=(180, 180, 180))
+                        # Agent selector combo box (populated dynamically)
+                        self.perspective_agent_combo_id = dpg.add_combo(
+                            items=[],
+                            default_value="Select agent...",
+                            callback=self._on_perspective_agent_change,
+                            width=200,
+                            enabled=False,  # Disabled until perspective mode is enabled
+                        )
+                        dpg.add_separator()
+                        self.perspective_comparison_toggle_id = dpg.add_checkbox(
+                            label="Show Ground Truth Comparison",
+                            default_value=self.perspective_show_comparison,
+                            callback=self._on_perspective_comparison_toggle,
+                            enabled=False,
+                        )
+                        self.perspective_status_text_id = dpg.add_text(
+                            "Perspective mode: OFF",
+                            color=(150, 150, 150),
+                        )
+
                     # Trade history panel (VIZ-012 improvement)
                     dpg.add_separator()
                     with dpg.collapsing_header(label="Recent Trades", default_open=True, tag="trade_history_header"):
@@ -700,6 +739,135 @@ class VisualizationApp:
     def _on_overlay_toggle(self, sender: int, app_data: bool, user_data: str) -> None:
         """Handle overlay toggle checkbox change (VIZ-001)."""
         self.overlay_toggles[user_data] = app_data
+
+    # ========================================================================
+    # Perspective mode callbacks (VIZ-015 to VIZ-017)
+    # ========================================================================
+
+    def _on_perspective_toggle(self, sender: int, app_data: bool) -> None:
+        """Handle perspective mode toggle (VIZ-015)."""
+        self.perspective_mode = app_data
+
+        # Update UI state
+        dpg.configure_item(self.perspective_agent_combo_id, enabled=app_data)
+        dpg.configure_item(self.perspective_comparison_toggle_id, enabled=app_data)
+
+        if app_data:
+            # Populate agent combo box
+            self._update_perspective_agent_list()
+            status = "ON - Select agent"
+            color = (200, 200, 100)
+        else:
+            self.perspective_agent_id = None
+            status = "OFF"
+            color = (150, 150, 150)
+
+        dpg.set_value(self.perspective_status_text_id, f"Perspective mode: {status}")
+        dpg.configure_item(self.perspective_status_text_id, color=color)
+
+    def _update_perspective_agent_list(self) -> None:
+        """Update the agent combo box with current agents (VIZ-015)."""
+        agents = self.get_agents()
+        # Use short IDs for display (last 8 chars)
+        items = [f"...{a.id[-8:]}" for a in agents]
+        dpg.configure_item(self.perspective_agent_combo_id, items=items)
+
+        # If we have a selected agent, try to preserve selection
+        if self.perspective_agent_id:
+            for i, a in enumerate(agents):
+                if a.id == self.perspective_agent_id:
+                    dpg.set_value(self.perspective_agent_combo_id, items[i])
+                    return
+        # If no selection or previous selection not found, reset
+        if items:
+            dpg.set_value(self.perspective_agent_combo_id, "Select agent...")
+
+    def _on_perspective_agent_change(self, sender: int, app_data: str) -> None:
+        """Handle perspective agent selection (VIZ-015)."""
+        if app_data == "Select agent..." or not app_data:
+            self.perspective_agent_id = None
+            dpg.set_value(self.perspective_status_text_id, "Perspective mode: ON - Select agent")
+            dpg.configure_item(self.perspective_status_text_id, color=(200, 200, 100))
+            return
+
+        # Find the matching agent by short ID
+        short_id = app_data.replace("...", "")
+        for agent in self.get_agents():
+            if agent.id.endswith(short_id):
+                self.perspective_agent_id = agent.id
+                dpg.set_value(self.perspective_status_text_id, f"Viewing: {app_data}")
+                dpg.configure_item(self.perspective_status_text_id, color=(100, 200, 100))
+                return
+
+    def _on_perspective_comparison_toggle(self, sender: int, app_data: bool) -> None:
+        """Handle perspective comparison toggle (VIZ-017)."""
+        self.perspective_show_comparison = app_data
+
+    def _get_perspective_agent(self) -> Optional[AgentProxy]:
+        """Get the current perspective agent if perspective mode is active."""
+        if not self.perspective_mode or not self.perspective_agent_id:
+            return None
+        return self.get_agent_by_id(self.perspective_agent_id)
+
+    def _get_perspective_view(self, target: AgentProxy) -> tuple[bool, float, Optional[float]]:
+        """
+        Get perspective view information for a target agent (VIZ-016).
+
+        Returns:
+            Tuple of (is_visible, distance, observed_alpha).
+            - is_visible: True if target is within perception radius
+            - distance: Distance from perspective agent to target
+            - observed_alpha: The alpha as observed (may differ from true under noisy info),
+                             or None if not visible
+        """
+        perspective = self._get_perspective_agent()
+        if perspective is None:
+            # No perspective mode, use true values
+            return True, 0.0, target.alpha
+
+        if target.id == perspective.id:
+            # Self - always visible with true alpha
+            return True, 0.0, target.alpha
+
+        # Calculate distance
+        dr = target.position.row - perspective.position.row
+        dc = target.position.col - perspective.position.col
+        distance = (dr * dr + dc * dc) ** 0.5
+
+        # Check if within perception radius
+        if distance > perspective.perception_radius:
+            return False, distance, None
+
+        # Get observed alpha
+        observed_alpha = target.alpha  # Default: true alpha
+
+        # In live mode, check if using NoisyAlphaInformation
+        if self.mode == "live" and self.sim is not None:
+            from microecon.information import NoisyAlphaInformation
+            if isinstance(self.sim.info_env, NoisyAlphaInformation):
+                # Get a fresh noisy observation
+                # Find the actual agent objects
+                observer_agent = None
+                target_agent = None
+                for agent in self.sim.agents:
+                    if agent.id == perspective.id:
+                        observer_agent = agent
+                    if agent.id == target.id:
+                        target_agent = agent
+                if observer_agent and target_agent:
+                    observed_type = self.sim.info_env.get_observable_type(target_agent)
+                    observed_alpha = observed_type.preferences.alpha
+
+        # In replay mode, we could use belief data if available
+        elif self.mode == "replay":
+            # Check if perspective agent has a belief about target
+            belief_proxy = self.get_belief_by_id(perspective.id)
+            if belief_proxy:
+                type_belief = belief_proxy.get_belief_about(target.id)
+                if type_belief:
+                    observed_alpha = type_belief.believed_alpha
+
+        return True, distance, observed_alpha
 
     def on_timeline_change(self, sender: int, app_data: int) -> None:
         """Handle timeline slider change (replay mode)."""
@@ -1216,38 +1384,55 @@ class VisualizationApp:
                 dpg.draw_line(p1, p2, color=trail_color, thickness=2, parent=self.drawlist)
 
     def render_perception_overlay(self) -> None:
-        """Draw perception radius circles (VIZ-003).
+        """Draw perception radius circles (VIZ-003, VIZ-016).
 
-        Supports two modes controlled by toggles:
+        Supports multiple modes:
         - perception_selected: Show radius for selected agent only
         - perception_all: Show radius for all agents
+        - perspective mode: Always show perspective agent's radius (VIZ-016)
         """
         show_selected = self.overlay_toggles.get("perception_selected", True)
         show_all = self.overlay_toggles.get("perception_all", False)
 
-        if not show_selected and not show_all:
-            return  # Both toggles OFF
+        # VIZ-016: Always show perspective agent's perception in perspective mode
+        perspective_agent = self._get_perspective_agent()
+
+        if not show_selected and not show_all and not perspective_agent:
+            return  # All modes OFF
 
         agents_to_show = []
+        perspective_shown = False
 
         if show_all:
             # Show perception for all agents
             agents_to_show = self.get_agents()
+            if perspective_agent:
+                perspective_shown = any(a.id == perspective_agent.id for a in agents_to_show)
         elif show_selected and self.selected_agent is not None:
             # Only show for selected agent
             current_agent = self.get_agent_by_id(self.selected_agent.id)
             if current_agent is None:
                 self.selected_agent = None
-                return
-            agents_to_show = [current_agent]
+            else:
+                agents_to_show = [current_agent]
+                if perspective_agent and current_agent.id == perspective_agent.id:
+                    perspective_shown = True
+
+        # VIZ-016: Add perspective agent if not already in list
+        if perspective_agent and not perspective_shown:
+            agents_to_show.append(perspective_agent)
 
         for agent in agents_to_show:
             cx, cy = self.grid_to_canvas(agent.position)
             # Convert perception_radius (grid units) to canvas pixels
             radius_px = agent.perception_radius * self.cell_size
 
-            # Use different opacity when showing all agents (less prominent)
-            if show_all and len(agents_to_show) > 1:
+            # VIZ-016: Use golden color for perspective agent
+            if perspective_agent and agent.id == perspective_agent.id:
+                stroke_color = (255, 215, 0, 80)  # Gold
+                fill_color = (255, 215, 0, 25)
+            elif show_all and len(agents_to_show) > 1:
+                # Use different opacity when showing all agents (less prominent)
                 stroke_color = (100, 150, 255, 40)
                 fill_color = (100, 150, 255, 15)
             else:
@@ -1263,7 +1448,7 @@ class VisualizationApp:
             )
 
     def render_agents(self) -> None:
-        """Render all agents on the grid."""
+        """Render all agents on the grid (VIZ-016: perspective mode support)."""
         # Group agents by position for overlap handling
         agents_by_pos: dict[Position, list[AgentProxy]] = {}
         for agent in self.get_agents():
@@ -1277,76 +1462,140 @@ class VisualizationApp:
         selected_id = self.selected_agent.id if self.selected_agent else None
         hovered_id = self.hovered_agent.id if self.hovered_agent else None
 
+        # Perspective mode state (VIZ-016)
+        perspective_agent = self._get_perspective_agent()
+        perspective_id = perspective_agent.id if perspective_agent else None
+
         for pos, agents in agents_by_pos.items():
             cx, cy = self.grid_to_canvas(pos)
 
             if len(agents) == 1:
                 # Single agent: draw at center
                 agent = agents[0]
-                color = alpha_to_color(agent.alpha)
-
-                # Selection ring (thicker, more prominent)
-                if agent.id == selected_id:
-                    dpg.draw_circle(
-                        (cx, cy),
-                        agent_radius + 5,
-                        color=(255, 255, 255, 255),
-                        thickness=3,
-                        parent=self.drawlist,
-                    )
-                # Hover highlight (thinner)
-                elif agent.id == hovered_id:
-                    dpg.draw_circle(
-                        (cx, cy),
-                        agent_radius + 3,
-                        color=(255, 255, 255, 200),
-                        parent=self.drawlist,
-                    )
-
-                dpg.draw_circle(
-                    (cx, cy),
-                    agent_radius,
-                    color=color,
-                    fill=color,
-                    parent=self.drawlist,
+                self._draw_agent(
+                    agent, cx, cy, agent_radius,
+                    selected_id, hovered_id, perspective_id
                 )
             else:
                 # Multiple agents: offset in a circle
                 import math
                 n = len(agents)
                 offset = agent_radius * 0.6
+                small_radius = agent_radius * 0.7
                 for i, agent in enumerate(agents):
                     angle = 2 * math.pi * i / n
                     ax = cx + offset * math.cos(angle)
                     ay = cy + offset * math.sin(angle)
-                    color = alpha_to_color(agent.alpha)
-                    small_radius = agent_radius * 0.7
+                    self._draw_agent(
+                        agent, ax, ay, small_radius,
+                        selected_id, hovered_id, perspective_id
+                    )
 
-                    # Selection ring (thicker, more prominent)
-                    if agent.id == selected_id:
+    def _draw_agent(
+        self,
+        agent: AgentProxy,
+        cx: float,
+        cy: float,
+        radius: float,
+        selected_id: Optional[str],
+        hovered_id: Optional[str],
+        perspective_id: Optional[str],
+    ) -> None:
+        """
+        Draw a single agent circle (VIZ-016: with perspective mode support).
+
+        Args:
+            agent: The agent to draw
+            cx, cy: Canvas coordinates for center
+            radius: Circle radius
+            selected_id: ID of currently selected agent (for highlight)
+            hovered_id: ID of currently hovered agent (for highlight)
+            perspective_id: ID of perspective agent (for perspective mode)
+        """
+        # Get perspective view info
+        is_visible, distance, observed_alpha = self._get_perspective_view(agent)
+
+        # Determine color and opacity based on perspective mode
+        if perspective_id is not None:
+            # Perspective mode is active
+            if agent.id == perspective_id:
+                # Perspective agent: draw with golden highlight
+                color = alpha_to_color(agent.alpha)
+                # Add golden ring to indicate "this is you"
+                dpg.draw_circle(
+                    (cx, cy),
+                    radius + 6,
+                    color=(255, 215, 0, 255),  # Gold
+                    thickness=3,
+                    parent=self.drawlist,
+                )
+            elif not is_visible:
+                # Outside perception radius: draw dimmed/grayed
+                # Use very faded color with question mark overlay
+                gray_color = (80, 80, 80, 100)
+                dpg.draw_circle(
+                    (cx, cy),
+                    radius,
+                    color=gray_color,
+                    fill=gray_color,
+                    parent=self.drawlist,
+                )
+                # Draw question mark to indicate unknown
+                dpg.draw_text(
+                    (cx - 4, cy - 6),
+                    "?",
+                    color=(120, 120, 120, 180),
+                    size=14,
+                    parent=self.drawlist,
+                )
+                return  # Don't draw selection highlights for invisible agents
+            else:
+                # Visible: use observed alpha for color
+                color = alpha_to_color(observed_alpha if observed_alpha is not None else agent.alpha)
+
+                # VIZ-017: If comparison mode is on, show true vs observed difference
+                if self.perspective_show_comparison and observed_alpha is not None:
+                    true_alpha = agent.alpha
+                    if abs(true_alpha - observed_alpha) > 0.05:
+                        # Significant difference - draw dashed ring in true color
+                        true_color = alpha_to_color(true_alpha)
                         dpg.draw_circle(
-                            (ax, ay),
-                            small_radius + 4,
-                            color=(255, 255, 255, 255),
+                            (cx, cy),
+                            radius + 4,
+                            color=true_color,
                             thickness=2,
                             parent=self.drawlist,
                         )
-                    # Hover highlight (thinner)
-                    elif agent.id == hovered_id:
-                        dpg.draw_circle(
-                            (ax, ay),
-                            small_radius + 3,
-                            color=(255, 255, 255, 200),
-                            parent=self.drawlist,
-                        )
+        else:
+            # No perspective mode: use true alpha
+            color = alpha_to_color(agent.alpha)
 
-                    dpg.draw_circle(
-                        (ax, ay),
-                        small_radius,
-                        color=color,
-                        fill=color,
-                        parent=self.drawlist,
-                    )
+        # Selection ring (thicker, more prominent)
+        if agent.id == selected_id:
+            dpg.draw_circle(
+                (cx, cy),
+                radius + 5,
+                color=(255, 255, 255, 255),
+                thickness=3,
+                parent=self.drawlist,
+            )
+        # Hover highlight (thinner)
+        elif agent.id == hovered_id:
+            dpg.draw_circle(
+                (cx, cy),
+                radius + 3,
+                color=(255, 255, 255, 200),
+                parent=self.drawlist,
+            )
+
+        # Draw the agent circle
+        dpg.draw_circle(
+            (cx, cy),
+            radius,
+            color=color,
+            fill=color,
+            parent=self.drawlist,
+        )
 
     def render_trade_animations(self) -> None:
         """Render active trade animations."""
@@ -1399,11 +1648,35 @@ class VisualizationApp:
         dpg.set_value(self.gains_text, f"Gains: {self.get_welfare_gains():.1f}")
 
     def render_hover_info(self) -> None:
-        """Update hover information panel (VIZ-004)."""
+        """Update hover information panel (VIZ-004, VIZ-016)."""
         if self.hovered_agent is not None:
             agent = self.hovered_agent
             dpg.set_value(self.hover_id_text, f"ID: {agent.id[:8]}...")
-            dpg.set_value(self.hover_alpha_text, f"Alpha: {agent.alpha:.3f}")
+
+            # VIZ-016: In perspective mode, show observed alpha
+            is_visible, distance, observed_alpha = self._get_perspective_view(agent)
+            perspective_agent = self._get_perspective_agent()
+
+            if perspective_agent and agent.id != perspective_agent.id:
+                if not is_visible:
+                    # Outside perception radius
+                    dpg.set_value(self.hover_alpha_text, "Alpha: ? (outside perception)")
+                    dpg.set_value(self.hover_endow_text, "Endowment: ?")
+                    dpg.set_value(self.hover_utility_text, "Utility: ?")
+                    dpg.set_value(self.hover_beliefs_text, "Beliefs: ?")
+                    return
+                elif observed_alpha is not None and abs(observed_alpha - agent.alpha) > 0.01:
+                    # Show observed with true in parentheses if comparison mode
+                    if self.perspective_show_comparison:
+                        dpg.set_value(self.hover_alpha_text,
+                            f"Alpha: {observed_alpha:.3f} (true: {agent.alpha:.3f})")
+                    else:
+                        dpg.set_value(self.hover_alpha_text, f"Alpha: {observed_alpha:.3f} (observed)")
+                else:
+                    dpg.set_value(self.hover_alpha_text, f"Alpha: {agent.alpha:.3f}")
+            else:
+                dpg.set_value(self.hover_alpha_text, f"Alpha: {agent.alpha:.3f}")
+
             dpg.set_value(
                 self.hover_endow_text,
                 f"Endowment: ({agent.endowment_x:.1f}, {agent.endowment_y:.1f})"

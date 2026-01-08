@@ -28,10 +28,24 @@ Each entry: [timestamp] [phase] [status] [description]
 ---
 
 ### Phase 2: Theory Tests
-[starting]
+
+#### Completed
+- [2026-01-08 16:45] FEAT-006: TIOLI proposer extracts full surplus - Grid search verification
+- [2026-01-08 16:45] FEAT-007: TIOLI responder at indifference - 1e-6 tolerance tests
+- [2026-01-08 16:45] FEAT-008: TIOLI proposer identity matters - Surplus swap verification
+- [2026-01-08 16:50] FEAT-009: Asymmetric Nash properties - Equal power, monotonicity, weighted product
+- [2026-01-08 16:55] Phase 2 Gate - 53 theory tests pass (27 TIOLI + 26 AsymNash)
+
+#### Issues Encountered
+- None
+
+#### Skipped/Deferred
+- None
+
+---
 
 ### Phase 3: Server & UI Integration
-[not started]
+[starting]
 
 ### Phase 4: Documentation
 [not started]
@@ -41,7 +55,7 @@ Each entry: [timestamp] [phase] [status] [description]
 ## Summary Statistics
 | Metric | Count |
 |--------|-------|
-| Features completed | 5/17 |
+| Features completed | 9/17 |
 | Features skipped | 0 |
 | Issues encountered | 1 |
-| Phases completed | 1/4 |
+| Phases completed | 2/4 |

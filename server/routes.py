@@ -47,11 +47,13 @@ async def health_check() -> HealthResponse:
     return HealthResponse(status="ok", version="0.1.0")
 
 
-@router.get("/state", response_model=StateResponse)
-async def get_state() -> StateResponse:
-    """Get current simulation state."""
-    state = manager.get_state()
-    return StateResponse(**state)
+@router.get("/state")
+async def get_state() -> dict[str, Any]:
+    """Get current simulation state.
+
+    Note: Returns raw dict to support both normal and comparison mode shapes.
+    """
+    return manager.get_state()
 
 
 @router.post("/simulation/start")
@@ -178,7 +180,19 @@ async def load_run(run_name: str) -> dict[str, Any]:
     Returns the full run data including all ticks.
     Client-side seeking per ADR-002.
     """
+    # Validate run_name to prevent path traversal attacks
+    if "/" in run_name or "\\" in run_name or run_name == ".." or run_name.startswith("."):
+        raise HTTPException(status_code=400, detail="Invalid run name")
+
     run_dir = RUNS_DIR / run_name
+
+    # Additional safety: ensure resolved path stays under RUNS_DIR
+    try:
+        if not run_dir.resolve().is_relative_to(RUNS_DIR.resolve()):
+            raise HTTPException(status_code=400, detail="Invalid run path")
+    except ValueError:
+        # is_relative_to can raise ValueError in some edge cases
+        raise HTTPException(status_code=400, detail="Invalid run path")
 
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail=f"Run not found: {run_name}")

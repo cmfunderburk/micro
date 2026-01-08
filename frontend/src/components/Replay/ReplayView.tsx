@@ -24,13 +24,13 @@ interface ReplayCanvasProps {
 function ReplayCanvas({ width, height }: ReplayCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const getCurrentTickData = useReplayStore((state) => state.getCurrentTickData);
+  const loadedRun = useReplayStore((state) => state.loadedRun);
   const currentTick = useReplayStore((state) => state.currentTick);
 
   const tickData = getCurrentTickData();
 
-  const gridSize = tickData?.agents[0]
-    ? Math.max(...tickData.agents.map(a => Math.max(a.position[0], a.position[1]))) + 1
-    : 15;
+  // Use config grid_size from loaded run, fallback to 15
+  const gridSize = (loadedRun?.config?.grid_size as number) ?? 15;
 
   const cellSize = Math.min(width, height) / gridSize;
   const agentRadius = cellSize * 0.35;

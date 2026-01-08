@@ -376,6 +376,7 @@ function App() {
       <ConfigModal
         open={configModalOpen}
         onOpenChange={setConfigModalOpen}
+        sendCommand={sendCommand}
       />
     </div>
   );

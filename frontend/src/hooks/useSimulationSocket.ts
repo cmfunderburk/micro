@@ -24,6 +24,7 @@ export type Command =
 export function useSimulationSocket() {
   const ws = useRef<WebSocket | null>(null);
   const reconnectTimeout = useRef<number | null>(null);
+  const shouldReconnect = useRef(true);
 
   const setConnected = useSimulationStore((state) => state.setConnected);
   const setRunning = useSimulationStore((state) => state.setRunning);
@@ -37,6 +38,9 @@ export function useSimulationSocket() {
   const updateComparisonTick = useComparisonStore((state) => state.updateComparisonTick);
 
   const connect = useCallback(() => {
+    // Re-enable reconnection on explicit connect
+    shouldReconnect.current = true;
+
     // Use relative URL - Vite proxy will handle it
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/simulation`;
@@ -53,11 +57,13 @@ export function useSimulationSocket() {
       setConnected(false);
       setRunning(false);
 
-      // Attempt to reconnect after 2 seconds
-      reconnectTimeout.current = window.setTimeout(() => {
-        console.log('Attempting to reconnect...');
-        connect();
-      }, 2000);
+      // Only attempt to reconnect if not intentionally disconnecting
+      if (shouldReconnect.current) {
+        reconnectTimeout.current = window.setTimeout(() => {
+          console.log('Attempting to reconnect...');
+          connect();
+        }, 2000);
+      }
     };
 
     ws.current.onerror = (error) => {
@@ -79,7 +85,8 @@ export function useSimulationSocket() {
               config: data.config ? { grid_size: data.config.grid_size } : undefined,
               beliefs: data.beliefs,
             });
-            if (data.config) {
+            // Only set full config on init (tick only sends grid_size fragment)
+            if (data.type === 'init' && data.config) {
               setConfig(data.config);
             }
             // Sync running state from init message
@@ -189,6 +196,8 @@ export function useSimulationSocket() {
   }, [setConnected, setRunning, setSpeed, setConfig, updateTickData, setComparisonMode, initComparison, updateComparisonTick]);
 
   const disconnect = useCallback(() => {
+    // Prevent reconnection when intentionally disconnecting
+    shouldReconnect.current = false;
     if (reconnectTimeout.current) {
       clearTimeout(reconnectTimeout.current);
       reconnectTimeout.current = null;

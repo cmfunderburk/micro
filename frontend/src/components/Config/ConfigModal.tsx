@@ -7,10 +7,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { useSimulationStore } from '@/store';
+import type { Command } from '@/hooks/useSimulationSocket';
 
 interface ConfigModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  sendCommand: (cmd: Command) => void;
 }
 
 interface FormConfig {
@@ -24,10 +26,8 @@ interface FormConfig {
   use_beliefs: boolean;
 }
 
-export function ConfigModal({ open, onOpenChange }: ConfigModalProps) {
+export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProps) {
   const config = useSimulationStore((state) => state.config);
-  const setConfig = useSimulationStore((state) => state.setConfig);
-  const reset = useSimulationStore((state) => state.reset);
 
   const [formConfig, setFormConfig] = useState<FormConfig>({
     n_agents: 10,
@@ -39,8 +39,6 @@ export function ConfigModal({ open, onOpenChange }: ConfigModalProps) {
     matching_protocol: 'opportunistic',
     use_beliefs: false,
   });
-
-  const [loading, setLoading] = useState(false);
 
   // Sync form with current config when modal opens
   useEffect(() => {
@@ -58,26 +56,10 @@ export function ConfigModal({ open, onOpenChange }: ConfigModalProps) {
     }
   }, [open, config]);
 
-  const handleApply = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formConfig),
-      });
-
-      if (response.ok) {
-        const newConfig = await response.json();
-        setConfig(newConfig);
-        reset();
-        onOpenChange(false);
-      }
-    } catch (error) {
-      console.error('Failed to apply config:', error);
-    } finally {
-      setLoading(false);
-    }
+  const handleApply = () => {
+    // Use WebSocket command for proper broadcast to all clients
+    sendCommand({ command: 'config', config: formConfig });
+    onOpenChange(false);
   };
 
   return (
@@ -234,8 +216,8 @@ export function ConfigModal({ open, onOpenChange }: ConfigModalProps) {
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleApply} disabled={loading}>
-            {loading ? 'Applying...' : 'Apply & Reset'}
+          <Button onClick={handleApply}>
+            Apply & Reset
           </Button>
         </DialogFooter>
       </DialogContent>

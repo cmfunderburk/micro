@@ -50,6 +50,8 @@ class TradeEvent:
     agent1_id: str
     agent2_id: str
     outcome: BargainingOutcome
+    pre_endowment_1: tuple[float, float]  # Agent 1's endowment before trade
+    pre_endowment_2: tuple[float, float]  # Agent 2's endowment before trade
 
 
 @dataclass
@@ -371,6 +373,8 @@ class Simulation:
                             agent1_id=agent.id,
                             agent2_id=other.id,
                             outcome=outcome,
+                            pre_endowment_1=pre_endowment1,
+                            pre_endowment_2=pre_endowment2,
                         )
                         tick_trades.append(event)
                         self.trades.append(event)

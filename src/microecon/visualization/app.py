@@ -779,32 +779,17 @@ class VisualizationApp:
             agent2 = next((a for a in self.sim.agents if a.id == trade.agent2_id), None) if self.sim else None
 
             # Extract pre-trade and post-trade data from TradeEvent
-            pre_1 = pre_2 = post_1 = post_2 = None
-            alpha1 = alpha2 = None
+            # Pre-trade endowments are now stored directly in TradeEvent
+            pre_1 = trade.pre_endowment_1
+            pre_2 = trade.pre_endowment_2
 
-            # Get pre-trade endowments directly from TradeEvent
-            if hasattr(trade, 'pre_endowments') and trade.pre_endowments:
-                pre_1 = trade.pre_endowments[0]
-                pre_2 = trade.pre_endowments[1]
-
-            # Get post-trade allocations directly from TradeEvent
-            if hasattr(trade, 'post_allocations') and trade.post_allocations:
-                post_1 = trade.post_allocations[0]
-                post_2 = trade.post_allocations[1]
+            # Post-trade allocations come from the BargainingOutcome
+            post_1 = (trade.outcome.allocation_1.x, trade.outcome.allocation_1.y)
+            post_2 = (trade.outcome.allocation_2.x, trade.outcome.allocation_2.y)
 
             # Get alpha values from agents
-            if agent1:
-                alpha1 = agent1.preferences.alpha
-                if post_1 is None:
-                    post_1 = (agent1.endowment.x, agent1.endowment.y)
-                if pre_1 is None:
-                    pre_1 = post_1
-            if agent2:
-                alpha2 = agent2.preferences.alpha
-                if post_2 is None:
-                    post_2 = (agent2.endowment.x, agent2.endowment.y)
-                if pre_2 is None:
-                    pre_2 = post_2
+            alpha1 = agent1.preferences.alpha if agent1 else None
+            alpha2 = agent2.preferences.alpha if agent2 else None
 
             self.trade_animations.append(TradeAnimation(
                 agent1_id=trade.agent1_id,

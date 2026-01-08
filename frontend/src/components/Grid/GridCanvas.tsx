@@ -41,6 +41,7 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
   const overlays = useSimulationStore((state) => state.overlays);
   const positionHistory = useSimulationStore((state) => state.positionHistory);
   const tradeConnections = useSimulationStore((state) => state.tradeConnections);
+  const beliefs = useSimulationStore((state) => state.beliefs);
 
   const cellSize = Math.min(width, height) / gridSize;
   const agentRadius = cellSize * 0.35;
@@ -227,6 +228,36 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
       }
     }
 
+    // Draw belief connections overlay (lines between agents with beliefs about each other)
+    if (overlays.beliefConnections) {
+      // Draw all type beliefs as directional lines
+      for (const [agentId, agentBeliefs] of Object.entries(beliefs)) {
+        const sourceAgent = agentById.get(agentId);
+        if (!sourceAgent) continue;
+
+        const [x1, y1] = getAgentCanvasPos(sourceAgent, posMap);
+
+        for (const typeBelief of agentBeliefs.type_beliefs) {
+          const targetAgent = agentById.get(typeBelief.target_id);
+          if (!targetAgent) continue;
+
+          const [x2, y2] = getAgentCanvasPos(targetAgent, posMap);
+
+          // Opacity based on confidence
+          const opacity = 0.2 + typeBelief.confidence * 0.5;
+          // Width based on number of interactions
+          const lineWidth = Math.min(1 + typeBelief.n_interactions * 0.3, 3);
+
+          ctx.strokeStyle = `rgba(59, 130, 246, ${opacity})`; // blue-500
+          ctx.lineWidth = lineWidth;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+      }
+    }
+
     // Draw movement trails overlay
     if (overlays.trails) {
       for (const agent of agents) {
@@ -355,6 +386,7 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
     overlays,
     positionHistory,
     tradeConnections,
+    beliefs,
     getAgentCanvasPos,
     posToCanvas,
     agentsByPosition,

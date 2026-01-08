@@ -68,6 +68,7 @@ export function useSimulationSocket() {
               trades: data.trades,
               metrics: data.metrics,
               config: data.config ? { grid_size: data.config.grid_size } : undefined,
+              beliefs: data.beliefs,
             });
             if (data.config) {
               setConfig(data.config);
@@ -88,6 +89,7 @@ export function useSimulationSocket() {
               trades: data.trades,
               metrics: data.metrics,
               config: data.config ? { grid_size: data.config.grid_size } : undefined,
+              beliefs: data.beliefs,
             });
             if (data.config) {
               setConfig(data.config);

@@ -3,7 +3,7 @@
  */
 
 import { create } from 'zustand';
-import type { Agent, Trade, Metrics, SimulationConfig, TimeSeriesPoint } from '@/types/simulation';
+import type { Agent, Trade, Metrics, SimulationConfig, TimeSeriesPoint, BeliefMap } from '@/types/simulation';
 
 // Position history for movement trails
 interface PositionHistory {
@@ -41,6 +41,9 @@ interface SimulationState {
   config: SimulationConfig | null;
   setConfig: (config: SimulationConfig) => void;
 
+  // Beliefs
+  beliefs: BeliefMap;
+
   // Time series history
   history: TimeSeriesPoint[];
   maxHistoryLength: number;
@@ -72,6 +75,7 @@ interface SimulationState {
     trails: boolean;
     perceptionRadius: boolean;
     tradeConnections: boolean;
+    beliefConnections: boolean;
   };
   toggleOverlay: (overlay: keyof SimulationState['overlays']) => void;
 
@@ -85,6 +89,7 @@ interface SimulationState {
     trades: Trade[];
     metrics: Metrics;
     config?: { grid_size: number };
+    beliefs?: BeliefMap;
   }) => void;
 
   reset: () => void;
@@ -119,6 +124,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   config: null,
   setConfig: (config) => set({ config }),
 
+  // Beliefs
+  beliefs: {},
+
   // Time series history
   history: [],
   maxHistoryLength: 1000,
@@ -150,6 +158,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     trails: false,
     perceptionRadius: false,
     tradeConnections: false,
+    beliefConnections: false,
   },
   toggleOverlay: (overlay) =>
     set((state) => ({
@@ -225,6 +234,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       tradeConnections: newConnections,
       tradeHistory: newTradeHistory,
       recentTrades: data.trades, // Current tick's trades for animation
+      beliefs: data.beliefs ?? state.beliefs,
     });
   },
 
@@ -241,5 +251,6 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       selectedTradeIndex: null,
       recentTrades: [],
       selectedAgentId: null,
+      beliefs: {},
     }),
 }));

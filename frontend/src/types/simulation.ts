@@ -10,7 +10,30 @@ export interface Agent {
   utility: number;
   perception_radius: number;
   discount_factor: number;
+  has_beliefs?: boolean;
 }
+
+// Belief system types
+export interface TypeBelief {
+  target_id: string;
+  believed_alpha: number;
+  confidence: number;
+  n_interactions: number;
+}
+
+export interface PriceBelief {
+  mean: number;
+  variance: number;
+  n_observations: number;
+}
+
+export interface AgentBeliefs {
+  type_beliefs: TypeBelief[];
+  price_belief: PriceBelief | null;
+  n_trades_in_memory: number;
+}
+
+export type BeliefMap = Record<string, AgentBeliefs>;
 
 export interface Trade {
   tick: number;
@@ -50,6 +73,7 @@ export interface TickData {
   config?: {
     grid_size: number;
   };
+  beliefs?: BeliefMap;
 }
 
 export interface WebSocketMessage {

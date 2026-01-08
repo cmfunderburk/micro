@@ -208,6 +208,26 @@ export function ConfigModal({ open, onOpenChange }: ConfigModalProps) {
               className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100"
             />
           </div>
+
+          {/* Use Beliefs */}
+          <div>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={formConfig.use_beliefs}
+                  onChange={(e) => setFormConfig({ ...formConfig, use_beliefs: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-zinc-700 rounded-full peer-checked:bg-green-600 transition-colors" />
+                <div className="absolute left-0.5 top-0.5 w-3 h-3 bg-zinc-300 rounded-full transition-transform peer-checked:translate-x-4 peer-checked:bg-white" />
+              </div>
+              <div>
+                <span className="text-sm text-zinc-400">Enable Belief System</span>
+                <p className="text-xs text-zinc-500">Agents learn about others through observation</p>
+              </div>
+            </label>
+          </div>
         </div>
 
         <DialogFooter className="gap-2">

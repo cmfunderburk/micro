@@ -12,6 +12,7 @@ export function OverlayToggles() {
     { key: 'trails' as const, label: 'Trails', description: 'Show movement history' },
     { key: 'perceptionRadius' as const, label: 'Perception', description: 'Show view range' },
     { key: 'tradeConnections' as const, label: 'Connections', description: 'Show trade links' },
+    { key: 'beliefConnections' as const, label: 'Beliefs', description: 'Show belief links' },
   ];
 
   return (

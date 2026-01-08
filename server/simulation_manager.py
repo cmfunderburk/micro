@@ -133,14 +133,16 @@ class SimulationManager:
     def get_tick_data(self) -> dict[str, Any]:
         """Get current tick data for WebSocket streaming."""
         if self.simulation is None:
-            return {"tick": 0, "agents": [], "trades": [], "metrics": {}}
+            return {"tick": 0, "agents": [], "trades": [], "metrics": {}, "beliefs": {}}
 
         sim = self.simulation
         agents = []
+        beliefs: dict[str, Any] = {}  # agent_id -> belief data
+
         for agent in sim.agents:
             pos = sim.grid.get_position(agent)
             if pos is not None:
-                agents.append({
+                agent_data = {
                     "id": agent.id,
                     "position": [pos.row, pos.col],
                     "endowment": [agent.endowment.x, agent.endowment.y],
@@ -148,7 +150,34 @@ class SimulationManager:
                     "utility": agent.utility(),
                     "perception_radius": agent.perception_radius,
                     "discount_factor": agent.discount_factor,
-                })
+                    "has_beliefs": agent.has_beliefs,
+                }
+                agents.append(agent_data)
+
+                # Include belief data if agent has beliefs
+                if agent.has_beliefs and agent.type_beliefs is not None:
+                    type_beliefs = []
+                    for target_id, tb in agent.type_beliefs.items():
+                        type_beliefs.append({
+                            "target_id": target_id,
+                            "believed_alpha": tb.believed_alpha,
+                            "confidence": tb.confidence,
+                            "n_interactions": tb.n_interactions,
+                        })
+
+                    price_belief = None
+                    if agent.price_belief is not None:
+                        price_belief = {
+                            "mean": agent.price_belief.mean,
+                            "variance": agent.price_belief.variance,
+                            "n_observations": agent.price_belief.n_observations,
+                        }
+
+                    beliefs[agent.id] = {
+                        "type_beliefs": type_beliefs,
+                        "price_belief": price_belief,
+                        "n_trades_in_memory": agent.memory.n_trades() if agent.memory else 0,
+                    }
 
         # Get recent trades (this tick)
         trades = []
@@ -185,6 +214,7 @@ class SimulationManager:
             "config": {
                 "grid_size": sim.grid.size,
             },
+            "beliefs": beliefs,
         }
 
     def get_state(self) -> dict[str, Any]:

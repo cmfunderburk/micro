@@ -5,6 +5,7 @@ import { Slider } from '@/components/ui/slider';
 import { GridCanvas, AgentTooltip } from '@/components/Grid';
 import { WelfareChart, TradeCountChart } from '@/components/Charts';
 import { OverlayToggles } from '@/components/Controls';
+import { BeliefPanel } from '@/components/Beliefs';
 import { TradeHistoryPanel, EdgeworthModal } from '@/components/TradeInspection';
 import { NetworkPanel } from '@/components/Network';
 import { ConfigModal, ExportMenu } from '@/components/Config';
@@ -198,6 +199,12 @@ function App() {
           <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0">
             <h2 className="text-sm font-semibold mb-2 text-zinc-400">Overlays</h2>
             <OverlayToggles />
+          </div>
+
+          {/* Beliefs */}
+          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0 overflow-hidden">
+            <h2 className="text-sm font-semibold mb-2 text-zinc-400">Beliefs</h2>
+            <BeliefPanel />
           </div>
 
           {/* Spacer to push content up */}

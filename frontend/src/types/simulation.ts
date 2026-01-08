@@ -10,6 +10,7 @@ export interface Agent {
   utility: number;
   perception_radius: number;
   discount_factor: number;
+  bargaining_power: number;
   has_beliefs?: boolean;
 }
 
@@ -60,8 +61,9 @@ export interface SimulationConfig {
   perception_radius: number;
   discount_factor: number;
   seed: number | null;
-  bargaining_protocol: "nash" | "rubinstein";
+  bargaining_protocol: "nash" | "rubinstein" | "tioli" | "asymmetric_nash";
   matching_protocol: "opportunistic" | "stable_roommates";
+  bargaining_power_distribution?: "uniform" | "gaussian" | "bimodal";
   use_beliefs: boolean;
 }
 

@@ -12,7 +12,12 @@ from typing import Any, Callable
 import uuid
 
 from microecon.simulation import Simulation, create_simple_economy, TradeEvent
-from microecon.bargaining import NashBargainingProtocol, RubinsteinBargainingProtocol
+from microecon.bargaining import (
+    NashBargainingProtocol,
+    RubinsteinBargainingProtocol,
+    TIOLIBargainingProtocol,
+    AsymmetricNashBargainingProtocol,
+)
 from microecon.matching import OpportunisticMatchingProtocol, StableRoommatesMatchingProtocol
 from microecon.logging import SimulationLogger
 from microecon.logging.events import TickRecord, AgentSnapshot
@@ -37,9 +42,12 @@ class SimulationConfig:
     perception_radius: float = 7.0
     discount_factor: float = 0.95
     seed: int | None = None
-    bargaining_protocol: str = "nash"  # "nash" or "rubinstein"
+    bargaining_protocol: str = "nash"  # "nash", "rubinstein", "tioli", "asymmetric_nash"
     matching_protocol: str = "opportunistic"  # "opportunistic" or "stable_roommates"
     use_beliefs: bool = False
+    # Bargaining power distribution (only used with asymmetric_nash)
+    # Options: "uniform", "gaussian", "bimodal"
+    bargaining_power_distribution: str = "uniform"
     # Optional: specific agents for scenario mode (overrides n_agents if provided)
     agents: list[AgentSpec] | None = None
 
@@ -53,6 +61,7 @@ class SimulationConfig:
             "bargaining_protocol": self.bargaining_protocol,
             "matching_protocol": self.matching_protocol,
             "use_beliefs": self.use_beliefs,
+            "bargaining_power_distribution": self.bargaining_power_distribution,
         }
         if self.agents is not None:
             result["agents"] = [
@@ -88,6 +97,7 @@ class SimulationConfig:
             bargaining_protocol=d.get("bargaining_protocol", "nash"),
             matching_protocol=d.get("matching_protocol", "opportunistic"),
             use_beliefs=d.get("use_beliefs", False),
+            bargaining_power_distribution=d.get("bargaining_power_distribution", "uniform"),
             agents=agents,
         )
 
@@ -119,6 +129,7 @@ class SimulationInstance:
                     "utility": agent.utility(),
                     "perception_radius": agent.perception_radius,
                     "discount_factor": agent.discount_factor,
+                    "bargaining_power": agent.bargaining_power,
                     "has_beliefs": agent.has_beliefs,
                 }
                 agents.append(agent_data)
@@ -186,6 +197,39 @@ class SimulationInstance:
         }
 
 
+def _generate_bargaining_powers(
+    n_agents: int,
+    distribution: str,
+    seed: int | None = None,
+) -> list[float]:
+    """Generate bargaining power values according to distribution.
+
+    Args:
+        n_agents: Number of agents
+        distribution: One of "uniform", "gaussian", "bimodal"
+        seed: Random seed for reproducibility
+
+    Returns:
+        List of bargaining power values (all positive)
+    """
+    import random
+
+    rng = random.Random(seed)
+
+    if distribution == "gaussian":
+        # Gaussian: μ=1, σ=0.3, clipped to positive
+        powers = [max(0.1, min(3.0, rng.gauss(1.0, 0.3))) for _ in range(n_agents)]
+    elif distribution == "bimodal":
+        # Bimodal: half at 0.5, half at 1.5
+        powers = [0.5 if i < n_agents // 2 else 1.5 for i in range(n_agents)]
+        rng.shuffle(powers)
+    else:  # uniform (default)
+        # Uniform: [0.5, 1.5]
+        powers = [rng.uniform(0.5, 1.5) for _ in range(n_agents)]
+
+    return powers
+
+
 def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
     """Create a Simulation from a SimulationConfig."""
     from microecon.grid import Grid, Position
@@ -194,15 +238,29 @@ def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
     from microecon.bundle import Bundle
     from microecon.information import FullInformation
 
+    # Select bargaining protocol
     if config.bargaining_protocol == "rubinstein":
         bargaining = RubinsteinBargainingProtocol()
-    else:
+    elif config.bargaining_protocol == "tioli":
+        bargaining = TIOLIBargainingProtocol()
+    elif config.bargaining_protocol == "asymmetric_nash":
+        bargaining = AsymmetricNashBargainingProtocol()
+    else:  # "nash" or default
         bargaining = NashBargainingProtocol()
 
     if config.matching_protocol == "stable_roommates":
         matching = StableRoommatesMatchingProtocol()
     else:
         matching = OpportunisticMatchingProtocol()
+
+    # Generate bargaining powers if using asymmetric_nash
+    bargaining_powers = None
+    if config.bargaining_protocol == "asymmetric_nash":
+        bargaining_powers = _generate_bargaining_powers(
+            config.n_agents,
+            config.bargaining_power_distribution,
+            config.seed,
+        )
 
     # If agents are specified (scenario mode), use them directly
     if config.agents is not None:
@@ -214,16 +272,19 @@ def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
             matching_protocol=matching,
         )
 
-        for agent_spec in config.agents:
+        for i, agent_spec in enumerate(config.agents):
             private_state = AgentPrivateState(
                 preferences=CobbDouglas(agent_spec.alpha),
                 endowment=Bundle(agent_spec.endowment[0], agent_spec.endowment[1]),
             )
+            # Assign bargaining power if available
+            bp = bargaining_powers[i] if bargaining_powers and i < len(bargaining_powers) else 1.0
             agent = Agent(
                 id=agent_spec.id,
                 private_state=private_state,
                 perception_radius=config.perception_radius,
                 discount_factor=config.discount_factor,
+                bargaining_power=bp,
             )
             if config.use_beliefs:
                 agent.enable_beliefs()
@@ -233,7 +294,7 @@ def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
         return sim
 
     # Otherwise use create_simple_economy for random agents
-    return create_simple_economy(
+    sim = create_simple_economy(
         n_agents=config.n_agents,
         grid_size=config.grid_size,
         perception_radius=config.perception_radius,
@@ -243,6 +304,14 @@ def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
         matching_protocol=matching,
         use_beliefs=config.use_beliefs,
     )
+
+    # Assign bargaining powers if using asymmetric_nash
+    if bargaining_powers:
+        for i, agent in enumerate(sim.agents):
+            if i < len(bargaining_powers):
+                agent.bargaining_power = bargaining_powers[i]
+
+    return sim
 
 
 @dataclass
@@ -381,6 +450,7 @@ class SimulationManager:
                     "utility": agent.utility(),
                     "perception_radius": agent.perception_radius,
                     "discount_factor": agent.discount_factor,
+                    "bargaining_power": agent.bargaining_power,
                     "has_beliefs": agent.has_beliefs,
                 }
                 agents.append(agent_data)

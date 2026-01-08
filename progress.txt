@@ -45,17 +45,34 @@ Each entry: [timestamp] [phase] [status] [description]
 ---
 
 ### Phase 3: Server & UI Integration
-[starting]
+
+#### Completed
+- [2026-01-08 17:00] FEAT-010: Server protocol routing - Added tioli/asymmetric_nash to _create_simulation_from_config
+- [2026-01-08 17:05] FEAT-014: Server bargaining_power distribution - Generates powers for asymmetric_nash
+- [2026-01-08 17:10] FEAT-011: UI protocol selector - 4 protocols in 2x2 grid
+- [2026-01-08 17:10] FEAT-012: UI tooltips - Display below selector with title attributes
+- [2026-01-08 17:10] FEAT-013: UI power distribution config - Shows when asymmetric_nash selected
+- [2026-01-08 17:15] Phase 3 Gate - Frontend builds, 720 tests pass
+
+#### Issues Encountered
+- [2026-01-08 17:02] ISSUE: numpy not available in server
+  - Root cause: Server environment doesn't have numpy
+  - Resolution: Rewrote _generate_bargaining_powers using stdlib random module
+
+#### Skipped/Deferred
+- None
+
+---
 
 ### Phase 4: Documentation
-[not started]
+[starting]
 
 ---
 
 ## Summary Statistics
 | Metric | Count |
 |--------|-------|
-| Features completed | 9/17 |
+| Features completed | 14/17 |
 | Features skipped | 0 |
-| Issues encountered | 1 |
-| Phases completed | 2/4 |
+| Issues encountered | 2 |
+| Phases completed | 3/4 |

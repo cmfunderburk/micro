@@ -21,10 +21,41 @@ interface FormConfig {
   perception_radius: number;
   discount_factor: number;
   seed: number | null;
-  bargaining_protocol: 'nash' | 'rubinstein';
+  bargaining_protocol: 'nash' | 'rubinstein' | 'tioli' | 'asymmetric_nash';
   matching_protocol: 'opportunistic' | 'stable_roommates';
+  bargaining_power_distribution: 'uniform' | 'gaussian' | 'bimodal';
   use_beliefs: boolean;
 }
+
+// Protocol display configuration with labels and tooltips
+const BARGAINING_PROTOCOLS = [
+  {
+    value: 'nash' as const,
+    label: 'Nash (Symmetric)',
+    tooltip: 'Equal split of gains. Neither agent has bargaining advantage.',
+  },
+  {
+    value: 'rubinstein' as const,
+    label: 'Nash (Patience)',
+    tooltip: 'Patient agents (high discount factor) get larger share. Based on Rubinstein/BRW.',
+  },
+  {
+    value: 'asymmetric_nash' as const,
+    label: 'Nash (Power)',
+    tooltip: 'Agents with higher bargaining_power attribute get larger share.',
+  },
+  {
+    value: 'tioli' as const,
+    label: 'Take-It-Or-Leave-It',
+    tooltip: 'Proposer extracts all gains. Responder gets exactly their outside option.',
+  },
+] as const;
+
+const POWER_DISTRIBUTIONS = [
+  { value: 'uniform' as const, label: 'Uniform [0.5, 1.5]' },
+  { value: 'gaussian' as const, label: 'Gaussian (mean=1, std=0.3)' },
+  { value: 'bimodal' as const, label: 'Bimodal (0.5 and 1.5)' },
+] as const;
 
 export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProps) {
   const config = useSimulationStore((state) => state.config);
@@ -37,6 +68,7 @@ export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProp
     seed: null,
     bargaining_protocol: 'nash',
     matching_protocol: 'opportunistic',
+    bargaining_power_distribution: 'uniform',
     use_beliefs: false,
   });
 
@@ -49,8 +81,9 @@ export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProp
         perception_radius: config.perception_radius,
         discount_factor: config.discount_factor,
         seed: config.seed,
-        bargaining_protocol: config.bargaining_protocol as 'nash' | 'rubinstein',
+        bargaining_protocol: config.bargaining_protocol as FormConfig['bargaining_protocol'],
         matching_protocol: config.matching_protocol as 'opportunistic' | 'stable_roommates',
+        bargaining_power_distribution: (config.bargaining_power_distribution || 'uniform') as FormConfig['bargaining_power_distribution'],
         use_beliefs: config.use_beliefs,
       });
     }
@@ -129,25 +162,47 @@ export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProp
           {/* Bargaining Protocol */}
           <div>
             <label className="text-sm text-zinc-400 block mb-2">Bargaining Protocol</label>
-            <div className="flex gap-2">
-              <Button
-                variant={formConfig.bargaining_protocol === 'nash' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFormConfig({ ...formConfig, bargaining_protocol: 'nash' })}
-                className="flex-1"
-              >
-                Nash
-              </Button>
-              <Button
-                variant={formConfig.bargaining_protocol === 'rubinstein' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFormConfig({ ...formConfig, bargaining_protocol: 'rubinstein' })}
-                className="flex-1"
-              >
-                Rubinstein
-              </Button>
+            <div className="grid grid-cols-2 gap-2">
+              {BARGAINING_PROTOCOLS.map((protocol) => (
+                <Button
+                  key={protocol.value}
+                  variant={formConfig.bargaining_protocol === protocol.value ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFormConfig({ ...formConfig, bargaining_protocol: protocol.value })}
+                  className="text-xs"
+                  title={protocol.tooltip}
+                >
+                  {protocol.label}
+                </Button>
+              ))}
             </div>
+            <p className="text-xs text-zinc-500 mt-1">
+              {BARGAINING_PROTOCOLS.find(p => p.value === formConfig.bargaining_protocol)?.tooltip}
+            </p>
           </div>
+
+          {/* Bargaining Power Distribution (only for asymmetric_nash) */}
+          {formConfig.bargaining_protocol === 'asymmetric_nash' && (
+            <div>
+              <label className="text-sm text-zinc-400 block mb-2">Bargaining Power Distribution</label>
+              <div className="flex gap-2">
+                {POWER_DISTRIBUTIONS.map((dist) => (
+                  <Button
+                    key={dist.value}
+                    variant={formConfig.bargaining_power_distribution === dist.value ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setFormConfig({ ...formConfig, bargaining_power_distribution: dist.value })}
+                    className="flex-1 text-xs"
+                  >
+                    {dist.label.split(' ')[0]}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">
+                How bargaining power is distributed across agents
+              </p>
+            </div>
+          )}
 
           {/* Matching Protocol */}
           <div>

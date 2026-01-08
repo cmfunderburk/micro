@@ -193,7 +193,7 @@ class EdgeworthBoxPopup:
             dpg.delete_item("edgeworth_popup")
 
         width = self.BOX_SIZE + 2 * self.MARGIN + 100
-        height = self.BOX_SIZE + 2 * self.MARGIN + 80
+        height = self.BOX_SIZE + 2 * self.MARGIN + 220  # Extra space for trade details
 
         with dpg.window(
             label="Edgeworth Box",
@@ -226,6 +226,33 @@ class EdgeworthBoxPopup:
                 dpg.add_text("Allocation", color=(100, 255, 100))
                 dpg.add_text("  ")
                 dpg.add_text("Contract curve", color=(255, 100, 255))
+
+            # Trade details summary
+            if self.current_trade:
+                dpg.add_separator()
+                t = self.current_trade
+
+                # Calculate trade quantities
+                dx_a = t.allocation_a[0] - t.endowment_a[0]
+                dy_a = t.allocation_a[1] - t.endowment_a[1]
+
+                # Agent A details
+                dpg.add_text(f"Agent A (alpha={t.alpha_a:.2f}):", color=(100, 150, 255))
+                dpg.add_text(f"  Endowment: ({t.endowment_a[0]:.2f}, {t.endowment_a[1]:.2f})")
+                dpg.add_text(f"  Allocation: ({t.allocation_a[0]:.2f}, {t.allocation_a[1]:.2f})")
+                trade_str_a = f"  Trade: ({dx_a:+.2f}, {dy_a:+.2f})"
+                dpg.add_text(trade_str_a, color=(150, 255, 150) if (dx_a != 0 or dy_a != 0) else (150, 150, 150))
+
+                dpg.add_spacer(height=5)
+
+                # Agent B details
+                dpg.add_text(f"Agent B (alpha={t.alpha_b:.2f}):", color=(255, 150, 100))
+                dpg.add_text(f"  Endowment: ({t.endowment_b[0]:.2f}, {t.endowment_b[1]:.2f})")
+                dpg.add_text(f"  Allocation: ({t.allocation_b[0]:.2f}, {t.allocation_b[1]:.2f})")
+                dx_b = t.allocation_b[0] - t.endowment_b[0]
+                dy_b = t.allocation_b[1] - t.endowment_b[1]
+                trade_str_b = f"  Trade: ({dx_b:+.2f}, {dy_b:+.2f})"
+                dpg.add_text(trade_str_b, color=(150, 255, 150) if (dx_b != 0 or dy_b != 0) else (150, 150, 150))
 
         self._is_open = True
 

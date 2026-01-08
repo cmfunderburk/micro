@@ -115,34 +115,58 @@ Post-hoc analysis of logged runs:
 
 ### Visualization
 
-DearPyGui-based visualization with three modes:
+DearPyGui-based visualization with three modes plus auxiliary windows:
 
 **Live Mode**
 - Real-time simulation display
-- Play/pause/step/reset controls
-- Speed slider (ticks per second)
-- Agent hover tooltips
+- Play/pause/step/reset controls with speed slider
+- **Configuration modal** for simulation setup:
+  - Basic parameters (agents, grid size, seed)
+  - Institutional selection (Nash/Rubinstein bargaining, Opportunistic/Stable Roommates matching)
+  - Search parameters (perception radius, discount factor)
+- Agent hover tooltips with detailed state
 - Click-to-select with perception radius overlay
-- Movement trails
-- Trade animations (connection lines)
+- **Toggleable overlays**: movement trails, perception radius, surplus heatmap, trade network
+- Trade animations (connection lines between trading agents)
 - Metrics panel (tick count, trades, welfare, gains)
+- Time-series charts (welfare and trade count over time)
 
 **Replay Mode**
 - Load and playback logged runs
 - Timeline scrubbing with slider
 - Step forward/backward
 
-**Comparison Mode** (Phase 1 Dashboard - NEW)
+**Comparison Mode**
 - Side-by-side dual viewport for protocol comparison
 - Synchronized playback across both runs
 - Trade animations and movement trails in both viewports
-- Timeline with event markers:
-  - Yellow circles for trades
-  - Green diamonds for commitments
-  - White playhead showing current position
-  - Dual track (one per run)
+- Timeline with event markers (trades, commitments)
 - Real-time welfare/trade difference display
-- Entry points for both bargaining and matching protocol comparisons
+
+**Trade Inspection**
+- **Trade history panel**: Scrollable list of all trades with click-to-inspect
+- **Edgeworth box popup**: Shows endowments, indifference curves, contract curve, trade outcome
+- Utility breakdown with pre/post trade values and gains
+
+**Agent Perspective Mode**
+- Toggle to see the world as a selected agent sees it
+- Dims agents outside perception radius
+- Shows agent's beliefs about visible partners (when beliefs enabled)
+
+**Export Capabilities**
+- PNG/SVG frame export (current view)
+- GIF recording (configurable duration and frame rate)
+- CSV export (agent states, trade history)
+- JSON export (full tick data)
+
+**Trade Network Panel** (separate dockable window)
+- Visualizes trade relationships as a network graph
+- Force-directed and circular layout options
+- Node color encodes preference parameter (alpha)
+- Edge thickness encodes trade frequency
+- Edge color encodes recency (recent trades brighter)
+- Click node to select agent in main view
+- Statistics display (density, clustering, degree distribution)
 
 Run with: `uv run python -m microecon.visualization`
 
@@ -159,7 +183,7 @@ run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
 
 ### Test Coverage
 
-650+ tests covering all core modules including theory verification and belief system. Run with: `uv run pytest`
+669 tests covering all core modules including theory verification and belief system. Run with: `uv run pytest`
 
 ---
 
@@ -210,24 +234,17 @@ run_matching_protocol_comparison(n_agents=10, grid_size=15, ticks=50, seed=42)
 
 ### Visualization
 
-**No export capabilities**
-- Cannot export PNG/SVG frames
-- Cannot export GIF/MP4 animations
-- No CSV/JSON data export from UI
+**No scenario editor GUI**
+- YAML scenario files can be loaded but not created/edited in UI
+- Must edit YAML files manually for custom scenarios
 
-**No GUI parameter editing**
-- YAML scenario files exist (`scenarios/*.yaml`) but no GUI editor
-- Parameters can be set via code or YAML scenarios
+**No MP4/video export**
+- GIF export available but no MP4/video format
+- For video, must screen-record or convert GIF externally
 
-**Overlays always on**
-- Movement trails cannot be toggled
-- Perception radius shown on selection (not toggleable)
-- No heatmaps or trade network overlays
-
-**No trade zoom view**
-- Cannot inspect individual trades in detail
-- No Edgeworth box visualization
-- No bargaining sequence replay
+**No bargaining sequence replay**
+- Edgeworth box shows final trade outcome only
+- Cannot step through offer/counter-offer sequence (Rubinstein)
 
 ---
 
@@ -343,20 +360,22 @@ uv run pytest --cov=microecon
 | DearPyGui standalone app | **Implemented** |
 | Grid + agents + tooltips | **Implemented** |
 | Play/pause/speed controls | **Implemented** |
-| Movement trails | **Implemented** (always on) |
+| Movement trails | **Implemented** (toggleable) |
 | Trade animations | **Implemented** |
 | Replay mode | **Implemented** |
 | Dual viewport comparison | **Implemented** |
 | Timeline event markers | **Implemented** (trades, commitments) |
 | Comparison mode entry points | **Implemented** (bargaining + matching) |
 | Time-series charts | **Implemented** (welfare, trades over time) |
-| Setup/Run/Analyze modes | Not implemented |
-| Overlay toggles | Not implemented |
-| Trade zoom (Edgeworth box) | Not implemented |
-| Agent perspective mode | Not implemented |
-| Export (PNG/GIF/MP4) | Not implemented |
-| Config files (YAML/JSON) | Not implemented |
+| Setup/Run/Analyze modes | Partial (config modal for setup) |
+| Overlay toggles | **Implemented** (trails, perception, heatmap, network) |
+| Trade zoom (Edgeworth box) | **Implemented** |
+| Agent perspective mode | **Implemented** |
+| Export (PNG/GIF/CSV/JSON) | **Implemented** (no MP4) |
+| Config files (YAML/JSON) | **Implemented** (YAML scenarios) |
 | Scenario browser | **Implemented** (YAML loading) |
+| Trade Network Panel | **Implemented** (separate window) |
+| Live config modal | **Implemented** (institutional params) |
 
 ### vs DESIGN_dashboard_integration.md
 
@@ -365,7 +384,7 @@ uv run pytest --cov=microecon
 | Phase 1: Comparison View MVP | **Complete** |
 | Phase 2: Scenario Pipeline | **Complete** (YAML scenarios, run_market_emergence) |
 | Phase 3: Timeline & Charts | **Complete** (time-series panels) |
-| Phase 4: Polish & Export | Not started |
+| Phase 4: Polish & Export | **Complete** (export capabilities, Edgeworth box, overlays) |
 
 ---
 
@@ -405,10 +424,13 @@ src/microecon/
 └── visualization/
     ├── __init__.py
     ├── __main__.py
-    ├── app.py
-    ├── replay.py
-    ├── browser.py         # Scenario browser UI
-    └── timeseries.py      # Time-series charts (ImPlot)
+    ├── app.py             # Main visualization application
+    ├── replay.py          # Replay controllers
+    ├── browser.py         # Scenario browser UI, LiveConfigModal
+    ├── timeseries.py      # Time-series charts (ImPlot)
+    ├── edgeworth.py       # Edgeworth box trade visualization
+    ├── export.py          # PNG/SVG/GIF/CSV/JSON export
+    └── network.py         # Trade network panel
 
 tests/
 ├── theory/                # Theory verification tests (Phase 0)
@@ -423,5 +445,5 @@ tests/
 
 ---
 
-**Document Version:** 0.1.1
-**Last Updated:** 2026-01-07
+**Document Version:** 0.2.0
+**Last Updated:** 2026-01-07 (visualization polish complete)

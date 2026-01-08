@@ -21,8 +21,9 @@ The core simulation infrastructure in `src/microecon/`:
 | `agent.py` | Agent with private state / observable type separation |
 | `grid.py` | `Grid(size)`, `Position`, movement, spatial queries |
 | `information.py` | `InformationEnvironment` abstraction (`FullInformation`, `NoisyAlphaInformation`) |
+| `beliefs.py` | Agent beliefs (type beliefs, price beliefs, memory, update rules) |
 | `bargaining.py` | Bargaining solutions (Nash, Rubinstein), protocol abstraction |
-| `search.py` | Target evaluation (discounted Nash surplus), movement decisions |
+| `search.py` | Target evaluation (discounted surplus), movement decisions, belief integration |
 | `matching.py` | Matching protocols (Opportunistic, StableRoommates), commitment state |
 | `simulation.py` | `Simulation` engine with four-phase tick loop, `create_simple_economy()` factory |
 | `batch.py` | `BatchRunner` for parameter sweeps and systematic comparisons |
@@ -42,29 +43,47 @@ Infrastructure for capturing simulation state and analyzing results:
 | `analysis/tracking.py` | Agent-level outcomes, search efficiency analysis |
 | `visualization/replay.py` | `ReplayController`, `DualReplayController` for playback |
 
-### Visualization (MVP Complete)
+### Visualization (Feature Complete)
 
 DearPyGui-based visualization in `src/microecon/visualization/`. See VISUALIZATION.md for full design vision.
 
-**Implemented:**
+**Core Features:**
 - Grid rendering with agents colored by preference parameter (alpha)
 - Play/pause/step/reset controls with speed slider
 - Trade animations (line flash between trading agents)
 - Metrics panel (tick, trades, welfare, gains)
 - Hover tooltips showing agent details
 - Click-to-select with perception radius overlay
-- Movement trails
+- Toggleable overlays (movement trails, perception radius, surplus heatmap, trade network)
+- Time-series charts (welfare and trade count over time)
 
-**From VISUALIZATION.md, not yet implemented:**
-- Trade zoom view / Edgeworth box
-- Agent perspective mode (for information asymmetry)
-- Export capabilities (PNG, GIF, CSV, SVG)
+**Configuration:**
+- Live configuration modal for simulation setup
+- Institutional parameter selection (Nash/Rubinstein, Opportunistic/Stable Roommates)
+- Search parameters (perception radius, discount factor)
+
+**Trade Inspection:**
+- Trade history panel with scrollable list
+- Edgeworth box popup with indifference curves, contract curve, utility breakdown
+
+**Agent Perspective Mode:**
+- View simulation from selected agent's perspective
+- Belief visualization for belief-enabled agents
+
+**Export:**
+- PNG/SVG frame export
+- GIF recording
+- CSV/JSON data export
+
+**Trade Network Panel** (separate window):
+- Force-directed and circular graph layouts
+- Visual encoding of trade frequency and recency
 
 Run with: `uv run python -m microecon.visualization`
 
 ### Test Coverage
 
-450+ tests covering all core modules. Run with: `uv run pytest`
+669 tests covering all core modules. Run with: `uv run pytest`
 
 ## Architecture
 
@@ -76,6 +95,7 @@ src/microecon/
 ├── agent.py             # Agent, AgentPrivateState, AgentType
 ├── grid.py              # Spatial grid and positions
 ├── information.py       # Information environments (Full, NoisyAlpha)
+├── beliefs.py           # Agent beliefs (type beliefs, price beliefs, memory)
 ├── bargaining.py        # Bargaining protocols (Nash, Rubinstein)
 ├── search.py            # Target selection and movement
 ├── matching.py          # Matching protocols (Opportunistic, StableRoommates)
@@ -83,7 +103,7 @@ src/microecon/
 ├── batch.py             # BatchRunner for parameter sweeps
 ├── logging/
 │   ├── __init__.py
-│   ├── events.py        # Event dataclasses
+│   ├── events.py        # Event dataclasses (includes BeliefSnapshot)
 │   ├── logger.py        # SimulationLogger
 │   └── formats.py       # JSON lines format
 ├── analysis/
@@ -101,10 +121,13 @@ src/microecon/
 └── visualization/
     ├── __init__.py
     ├── __main__.py      # Entry point for -m invocation
-    ├── app.py           # DearPyGui visualization
+    ├── app.py           # Main visualization application
     ├── replay.py        # Replay controllers
-    ├── browser.py       # Scenario browser UI
-    └── timeseries.py    # Time-series charts (ImPlot)
+    ├── browser.py       # Scenario browser UI, LiveConfigModal
+    ├── timeseries.py    # Time-series charts (ImPlot)
+    ├── edgeworth.py     # Edgeworth box trade visualization
+    ├── export.py        # PNG/SVG/GIF/CSV/JSON export
+    └── network.py       # Trade network panel
 ```
 
 ### Key Abstractions

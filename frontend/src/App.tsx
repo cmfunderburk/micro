@@ -2,6 +2,7 @@ import { useSimulationSocket } from '@/hooks/useSimulationSocket';
 import { useSimulationStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
+import { GridCanvas, AgentTooltip } from '@/components/Grid';
 import { Play, Pause, SkipForward, RotateCcw } from 'lucide-react';
 
 function App() {
@@ -12,8 +13,12 @@ function App() {
   const tick = useSimulationStore((state) => state.tick);
   const metrics = useSimulationStore((state) => state.metrics);
   const speed = useSimulationStore((state) => state.speed);
+  const selectedAgentId = useSimulationStore((state) => state.selectedAgentId);
   const agents = useSimulationStore((state) => state.agents);
-  const gridSize = useSimulationStore((state) => state.gridSize);
+
+  const selectedAgent = selectedAgentId
+    ? agents.find((a) => a.id === selectedAgentId)
+    : null;
 
   const handleStart = () => sendCommand({ command: 'start' });
   const handleStop = () => sendCommand({ command: 'stop' });
@@ -42,17 +47,9 @@ function App() {
       <div className="grid grid-cols-[1fr_300px] gap-4">
         {/* Main grid area */}
         <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-          <div
-            className="bg-slate-900 rounded-lg flex items-center justify-center"
-            style={{ height: '500px' }}
-          >
-            <div className="text-center text-zinc-400">
-              <p className="text-lg mb-2">Grid View</p>
-              <p className="text-sm">
-                {agents.length} agents on {gridSize}x{gridSize} grid
-              </p>
-              <p className="text-sm">Tick: {tick}</p>
-            </div>
+          <div className="relative">
+            <GridCanvas width={600} height={600} />
+            <AgentTooltip />
           </div>
 
           {/* Controls */}
@@ -121,6 +118,47 @@ function App() {
               </div>
             </div>
           </div>
+
+          {/* Selected Agent Details */}
+          {selectedAgent && (
+            <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+              <h2 className="text-lg font-semibold mb-3">Selected Agent</h2>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">ID</span>
+                  <span className="font-mono">{selectedAgent.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Alpha</span>
+                  <span className="font-mono">{selectedAgent.alpha.toFixed(3)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Utility</span>
+                  <span className="font-mono">{selectedAgent.utility.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Endowment</span>
+                  <span className="font-mono">
+                    ({selectedAgent.endowment[0].toFixed(1)}, {selectedAgent.endowment[1].toFixed(1)})
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Position</span>
+                  <span className="font-mono">
+                    ({selectedAgent.position[0]}, {selectedAgent.position[1]})
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Perception</span>
+                  <span className="font-mono">{selectedAgent.perception_radius}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Discount</span>
+                  <span className="font-mono">{selectedAgent.discount_factor.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Charts placeholder */}
           <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">

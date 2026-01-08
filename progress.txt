@@ -2,7 +2,7 @@ Microecon Web Frontend Progress
 ===============================
 
 Last Updated: 2026-01-07
-Current Phase: 1 (Infrastructure) - COMPLETE
+Current Phase: 3 (Interaction) - COMPLETE
 
 Phase 1: Infrastructure (COMPLETE)
 ----------------------------------
@@ -15,35 +15,45 @@ Phase 1: Infrastructure (COMPLETE)
 - [x] FEAT-007: Convenience script
 - [x] FEAT-008: Add web dependencies to pyproject.toml
 
+Phase 2: Grid & Controls (COMPLETE)
+-----------------------------------
+- [x] FEAT-009: Canvas grid rendering
+- [x] FEAT-010: Agent rendering (alpha -> color)
+- [x] FEAT-011: Play button
+- [x] FEAT-012: Pause button
+- [x] FEAT-013: Step button
+- [x] FEAT-014: Reset button
+- [x] FEAT-015: Speed slider
+- [x] FEAT-016: Metrics panel
+- [x] FEAT-017: Trade flash animations
+
+Phase 3: Interaction (COMPLETE)
+-------------------------------
+- [x] FEAT-018: Hover tooltips
+- [x] FEAT-019: Click to select agent
+- [x] FEAT-020: Selected agent details panel
+- [x] FEAT-021: Connection status indicator
+
 Key Files Created:
-- backend/__init__.py, __main__.py, app.py
-- backend/routes.py (REST endpoints)
-- backend/websocket.py (WebSocket streaming)
-- backend/simulation_manager.py (Simulation state management)
-- frontend/ (Vite + React + TypeScript + Tailwind)
-- frontend/src/store/index.ts (Zustand store)
-- frontend/src/hooks/useSimulationSocket.ts (WebSocket hook)
-- frontend/src/components/ui/ (Button, Slider components)
-- scripts/dev.sh (Convenience script)
+- frontend/src/components/Grid/GridCanvas.tsx (Canvas rendering)
+- frontend/src/components/Grid/AgentTooltip.tsx (Hover tooltips)
 
-Verification:
-- Backend: uv run python -m backend (health check at /api/health returns 200)
-- Frontend: cd frontend && npm run build (builds successfully)
-- Both: ./scripts/dev.sh (starts both servers)
+Features Implemented:
+- Canvas 2D grid with grid lines
+- Agents rendered as colored circles (alpha 0=red, 1=blue via HSL)
+- Trade animations (green lines that fade over 2 seconds)
+- Perception radius overlay for selected agent
+- Click to select, hover for tooltip
+- Selection ring (amber) and hover ring (white)
+- Agent details panel in sidebar
 
-Phase 2: Grid & Controls (PENDING)
-----------------------------------
-- [ ] FEAT-009: Canvas grid rendering
-- [ ] FEAT-010: Agent rendering
-- [ ] FEAT-011: Play button
-- [ ] FEAT-012: Pause button
-- [ ] FEAT-013: Step button
-- [ ] FEAT-014: Reset button
-- [ ] FEAT-015: Speed slider
-- [ ] FEAT-016: Metrics panel
-- [ ] FEAT-017: Trade flash animations
+Phase 4: Charts (PENDING)
+-------------------------
+- [ ] FEAT-022: Welfare time-series chart
+- [ ] FEAT-023: Trade count time-series chart
+- [ ] FEAT-024: Chart tick synchronization
 
 Notes:
-- Phase 1 establishes WebSocket connection and basic UI shell
-- Controls (play/pause/step/reset/speed) already wired up in App.tsx
-- Grid visualization placeholder in place, needs Canvas implementation
+- All 669 existing tests pass
+- Frontend builds successfully
+- Controls and metrics already working from Phase 1

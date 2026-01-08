@@ -107,7 +107,7 @@ def compute_contract_curve(
         (α_A / (1-α_A)) * (y_A / x_A) = (α_B / (1-α_B)) * ((Y - y_A) / (X - x_A))
 
     Solving for y_A in terms of x_A:
-        y_A = (α_A * (1-α_B) * Y * x_A) / (α_B * (1-α_A) * X + (α_A * (1-α_B) - α_B * (1-α_A)) * x_A)
+        y_A = (α_B * (1-α_A) * Y * x_A) / (α_A * (1-α_B) * X + (α_B * (1-α_A) - α_A * (1-α_B)) * x_A)
 
     Args:
         alpha_a: Agent A's preference parameter
@@ -133,13 +133,13 @@ def compute_contract_curve(
         # x_A from 0 to X (excluding endpoints to avoid division by zero)
         x_a = 0.01 * X + (0.98 * X) * (i / (n_points - 1)) if n_points > 1 else 0.5 * X
 
-        # Compute denominator
-        denom = a2 * X + (a1 - a2) * x_a
+        # Compute denominator (note: a1 and a2 are swapped from naive reading of MRS equation)
+        denom = a1 * X + (a2 - a1) * x_a
 
         if abs(denom) < 1e-10:
             continue
 
-        y_a = (a1 * Y * x_a) / denom
+        y_a = (a2 * Y * x_a) / denom
 
         # Check bounds
         if 0 < y_a < Y:

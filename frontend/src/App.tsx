@@ -3,6 +3,7 @@ import { useSimulationStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { GridCanvas, AgentTooltip } from '@/components/Grid';
+import { WelfareChart, TradeCountChart } from '@/components/Charts';
 import { Play, Pause, SkipForward, RotateCcw } from 'lucide-react';
 
 function App() {
@@ -160,12 +161,16 @@ function App() {
             </div>
           )}
 
-          {/* Charts placeholder */}
+          {/* Welfare Chart */}
           <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-            <h2 className="text-lg font-semibold mb-3">Charts</h2>
-            <div className="h-32 bg-slate-900 rounded flex items-center justify-center text-zinc-400 text-sm">
-              Charts coming in Phase 4
-            </div>
+            <h2 className="text-lg font-semibold mb-3">Welfare</h2>
+            <WelfareChart />
+          </div>
+
+          {/* Trade Count Chart */}
+          <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+            <h2 className="text-lg font-semibold mb-3">Trades</h2>
+            <TradeCountChart />
           </div>
         </div>
       </div>

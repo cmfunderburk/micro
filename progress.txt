@@ -2,7 +2,7 @@ Microecon Web Frontend Progress
 ===============================
 
 Last Updated: 2026-01-07
-Current Phase: 3 (Interaction) - COMPLETE
+Current Phase: 4 (Charts) - COMPLETE
 
 Phase 1: Infrastructure (COMPLETE)
 ----------------------------------
@@ -34,26 +34,32 @@ Phase 3: Interaction (COMPLETE)
 - [x] FEAT-020: Selected agent details panel
 - [x] FEAT-021: Connection status indicator
 
+Phase 4: Charts (COMPLETE)
+--------------------------
+- [x] FEAT-022: Welfare time-series chart
+- [x] FEAT-023: Trade count time-series chart
+- [x] FEAT-024: Chart tick synchronization
+
 Key Files Created:
-- frontend/src/components/Grid/GridCanvas.tsx (Canvas rendering)
-- frontend/src/components/Grid/AgentTooltip.tsx (Hover tooltips)
+- frontend/src/components/Charts/WelfareChart.tsx
+- frontend/src/components/Charts/TradeCountChart.tsx
+- frontend/src/components/Charts/index.ts
 
 Features Implemented:
-- Canvas 2D grid with grid lines
-- Agents rendered as colored circles (alpha 0=red, 1=blue via HSL)
-- Trade animations (green lines that fade over 2 seconds)
-- Perception radius overlay for selected agent
-- Click to select, hover for tooltip
-- Selection ring (amber) and hover ring (white)
-- Agent details panel in sidebar
+- Real-time welfare chart (green line)
+- Real-time trade count chart (blue line)
+- Downsampling for performance (max 100 points)
+- Tooltip with tick and value info
 
-Phase 4: Charts (PENDING)
--------------------------
-- [ ] FEAT-022: Welfare time-series chart
-- [ ] FEAT-023: Trade count time-series chart
-- [ ] FEAT-024: Chart tick synchronization
+Phase 5: Overlays (PENDING)
+---------------------------
+- [ ] FEAT-025: Overlay toggle UI
+- [ ] FEAT-026: Movement trails overlay
+- [ ] FEAT-027: Perception radius overlay (done in Phase 2)
+- [ ] FEAT-028: Surplus heatmap overlay
+- [ ] FEAT-029: Trade connections overlay
 
 Notes:
 - All 669 existing tests pass
 - Frontend builds successfully
-- Controls and metrics already working from Phase 1
+- Recharts integration working well

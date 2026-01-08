@@ -365,9 +365,10 @@ class Simulation:
                     pre_endowment1 = (agent.endowment.x, agent.endowment.y)
                     pre_endowment2 = (other.endowment.x, other.endowment.y)
 
-                    # Random proposer assignment eliminates arbitrary bias
-                    # (With BRW Rubinstein, proposer identity doesn't affect outcomes anyway)
-                    proposer = self._rng.choice([agent, other])
+                    # Let protocol select proposer (ensures consistency with search evaluation)
+                    # - Symmetric protocols (Nash, Rubinstein, AsymNash): random selection
+                    # - TIOLI: lexicographic (smaller ID proposes)
+                    proposer = self.bargaining_protocol.select_proposer(agent, other, self._rng)
                     outcome = self.bargaining_protocol.execute(agent, other, proposer=proposer)
                     if outcome.trade_occurred:
                         event = TradeEvent(

@@ -35,6 +35,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional, TYPE_CHECKING
 import math
+import random
 
 from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
@@ -1060,6 +1061,37 @@ class BargainingProtocol(ABC):
 
         return outcome
 
+    def select_proposer(
+        self,
+        agent1: Agent,
+        agent2: Agent,
+        rng: random.Random | None = None,
+    ) -> Agent:
+        """
+        Select which agent should propose in this bargaining interaction.
+
+        This method allows protocols to define their own proposer selection
+        semantics. The simulation should call this method to determine the
+        proposer, ensuring consistency between search evaluation and execution.
+
+        Default implementation: Random selection (appropriate for symmetric
+        protocols where proposer identity doesn't affect outcomes).
+
+        Protocols where proposer identity matters (e.g., TIOLI) should override
+        this method to provide deterministic selection.
+
+        Args:
+            agent1: First agent
+            agent2: Second agent
+            rng: Random number generator (uses module-level random if None)
+
+        Returns:
+            The agent who should propose
+        """
+        if rng is None:
+            return random.choice([agent1, agent2])
+        return rng.choice([agent1, agent2])
+
 
 class NashBargainingProtocol(BargainingProtocol):
     """
@@ -1305,6 +1337,32 @@ class TIOLIBargainingProtocol(BargainingProtocol):
         """
         outcome = self.solve(agent1, agent2, proposer, effective_type_1, effective_type_2)
         return outcome.gains_1
+
+    def select_proposer(
+        self,
+        agent1: Agent,
+        agent2: Agent,
+        rng: random.Random | None = None,
+    ) -> Agent:
+        """
+        Select proposer using lexicographic ID comparison.
+
+        For TIOLI, proposer identity determines who captures all surplus,
+        so deterministic selection is essential for consistency between
+        search evaluation and execution.
+
+        The agent with the lexicographically smaller ID proposes.
+        The rng parameter is ignored (deterministic selection).
+
+        Args:
+            agent1: First agent
+            agent2: Second agent
+            rng: Ignored (deterministic selection)
+
+        Returns:
+            The agent with the smaller ID
+        """
+        return agent1 if agent1.id < agent2.id else agent2
 
 
 class AsymmetricNashBargainingProtocol(BargainingProtocol):

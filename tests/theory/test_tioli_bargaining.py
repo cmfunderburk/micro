@@ -446,3 +446,81 @@ class TestTIOLIFeasibility:
             assert outcome.allocation_1.y >= -1e-9, "Allocation 1.y negative"
             assert outcome.allocation_2.x >= -1e-9, "Allocation 2.x negative"
             assert outcome.allocation_2.y >= -1e-9, "Allocation 2.y negative"
+
+
+class TestTIOLIProposerSelection:
+    """
+    Test that TIOLI proposer selection is consistent between
+    select_proposer() and solve()/compute_expected_surplus().
+
+    This ensures search evaluation and execution use the same proposer.
+    """
+
+    def test_select_proposer_returns_lexicographic_smaller(self):
+        """select_proposer should return agent with smaller ID."""
+        a1 = create_agent(alpha=0.5, endowment_x=10, endowment_y=5, agent_id='aaa')
+        a2 = create_agent(alpha=0.5, endowment_x=5, endowment_y=10, agent_id='bbb')
+
+        protocol = TIOLIBargainingProtocol()
+
+        # a1.id ('aaa') < a2.id ('bbb'), so a1 should propose
+        assert protocol.select_proposer(a1, a2) is a1
+        assert protocol.select_proposer(a2, a1) is a1  # Order shouldn't matter
+
+    def test_select_proposer_ignores_rng(self):
+        """TIOLI select_proposer should be deterministic (ignore rng)."""
+        import random
+        a1 = create_agent(alpha=0.5, endowment_x=10, endowment_y=5, agent_id='xyz')
+        a2 = create_agent(alpha=0.5, endowment_x=5, endowment_y=10, agent_id='abc')
+
+        protocol = TIOLIBargainingProtocol()
+        rng = random.Random(12345)
+
+        # a2.id ('abc') < a1.id ('xyz'), so a2 should always propose
+        for _ in range(10):
+            assert protocol.select_proposer(a1, a2, rng) is a2
+
+    def test_select_proposer_consistent_with_solve(self):
+        """select_proposer and solve should use same proposer logic."""
+        a1 = create_agent(alpha=0.3, endowment_x=10, endowment_y=5, agent_id='first')
+        a2 = create_agent(alpha=0.7, endowment_x=5, endowment_y=10, agent_id='second')
+
+        protocol = TIOLIBargainingProtocol()
+
+        # Get the expected proposer
+        expected_proposer = protocol.select_proposer(a1, a2)
+        assert expected_proposer is a1  # 'first' < 'second'
+
+        # Solve without explicit proposer (should use same logic)
+        outcome_default = protocol.solve(a1, a2)
+
+        # Solve with explicit proposer = a1
+        outcome_explicit = protocol.solve(a1, a2, proposer=a1)
+
+        # Should be identical since default proposer is a1
+        assert abs(outcome_default.gains_1 - outcome_explicit.gains_1) < 1e-9
+        assert abs(outcome_default.gains_2 - outcome_explicit.gains_2) < 1e-9
+
+    def test_select_proposer_consistent_with_expected_surplus(self):
+        """select_proposer and compute_expected_surplus should agree."""
+        a1 = create_agent(alpha=0.3, endowment_x=10, endowment_y=5, agent_id='alpha')
+        a2 = create_agent(alpha=0.7, endowment_x=5, endowment_y=10, agent_id='beta')
+
+        protocol = TIOLIBargainingProtocol()
+
+        # a1 ('alpha') < a2 ('beta'), so a1 proposes and gets all surplus
+        expected_proposer = protocol.select_proposer(a1, a2)
+        assert expected_proposer is a1
+
+        # Expected surplus for a1 (proposer) should equal all gains
+        surplus_a1 = protocol.compute_expected_surplus(a1, a2)
+        outcome = protocol.solve(a1, a2)
+
+        # a1 is proposer, so a1's surplus should equal total surplus
+        assert abs(surplus_a1 - outcome.total_gains) < 1e-6, (
+            f"Proposer surplus {surplus_a1} != total gains {outcome.total_gains}"
+        )
+
+        # a2's surplus should be ~0 (responder at indifference)
+        surplus_a2 = protocol.compute_expected_surplus(a2, a1)
+        assert abs(surplus_a2) < 1e-6, f"Responder surplus {surplus_a2} should be ~0"

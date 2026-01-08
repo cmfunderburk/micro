@@ -19,6 +19,8 @@ import {
   ComparisonMetrics,
 } from '@/components/Comparison';
 import { ReplayLoader, ReplayView } from '@/components/Replay';
+import { ScenarioBrowser } from '@/components/Scenarios';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import {
   Dialog,
   DialogContent,
@@ -42,6 +44,13 @@ function App() {
 
   // Replay mode state
   const replayMode = useReplayStore((state) => state.replayMode);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    sendCommand,
+    running,
+    enabled: !comparisonMode, // Disable in comparison mode (controls both sims)
+  });
 
   // Network panel state
   const [networkPanelOpen, setNetworkPanelOpen] = useState(false);
@@ -139,6 +148,7 @@ function App() {
 
         {/* Utility buttons */}
         <div className="flex items-center gap-1">
+          <ScenarioBrowser sendCommand={sendCommand} disabled={comparisonMode || replayMode} />
           <ComparisonControls sendCommand={sendCommand} />
           <ReplayLoader />
           <Button

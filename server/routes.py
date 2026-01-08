@@ -247,3 +247,79 @@ async def load_run(run_name: str) -> dict[str, Any]:
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load run: {str(e)}")
+
+
+# Scenario endpoints
+
+class ScenarioInfo(BaseModel):
+    """Info about a scenario."""
+    name: str
+    title: str
+    complexity: int
+    description: str
+    n_agents: int
+    grid_size: int
+
+
+@router.get("/scenarios")
+async def list_scenarios() -> list[ScenarioInfo]:
+    """List available scenarios grouped by complexity."""
+    try:
+        from microecon.scenarios import load_all_scenarios
+
+        scenarios = load_all_scenarios()
+        return [
+            ScenarioInfo(
+                name=Path(s.path).stem,
+                title=s.title,
+                complexity=s.complexity,
+                description=s.description or "",
+                n_agents=len(s.config.agents),
+                grid_size=s.config.grid_size,
+            )
+            for s in scenarios
+        ]
+    except Exception:
+        return []
+
+
+@router.get("/scenarios/{scenario_name}")
+async def load_scenario(scenario_name: str) -> dict[str, Any]:
+    """Load a specific scenario and return its config."""
+    try:
+        from microecon.scenarios import load_all_scenarios
+
+        scenarios = load_all_scenarios()
+        for s in scenarios:
+            if Path(s.path).stem == scenario_name:
+                return {
+                    "name": scenario_name,
+                    "title": s.title,
+                    "complexity": s.complexity,
+                    "description": s.description or "",
+                    "config": {
+                        "n_agents": len(s.config.agents),
+                        "grid_size": s.config.grid_size,
+                        "perception_radius": s.config.perception_radius,
+                        "discount_factor": s.config.discount_factor,
+                        "seed": None,  # Scenarios use fixed agent positions
+                        "bargaining_protocol": "nash",
+                        "matching_protocol": "opportunistic",
+                        "use_beliefs": False,
+                    },
+                    "agents": [
+                        {
+                            "id": agent.id,
+                            "position": agent.position,
+                            "alpha": agent.alpha,
+                            "endowment": agent.endowment,
+                        }
+                        for agent in s.config.agents
+                    ],
+                }
+
+        raise HTTPException(status_code=404, detail=f"Scenario not found: {scenario_name}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load scenario: {str(e)}")

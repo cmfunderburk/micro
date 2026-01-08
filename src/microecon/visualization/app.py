@@ -29,6 +29,7 @@ from microecon.visualization.export import (
     export_tick_json, export_agents_csv, export_trades_csv,
     GIFRecorder, GIFExportConfig, DataExportConfig,
 )
+from microecon.visualization.edgeworth import EdgeworthBoxPopup, TradeData
 
 
 # ============================================================================
@@ -318,6 +319,10 @@ class VisualizationApp:
         self._gif_recorder: Optional[GIFRecorder] = None
         self._gif_recording = False
         self.export_status_text: int = 0  # UI element reference
+
+        # Edgeworth box popup (VIZ-012 to VIZ-014)
+        self._edgeworth_popup: Optional[EdgeworthBoxPopup] = None
+        self._recent_trades: list[TradeData] = []  # Trades from current tick for click detection
 
     def grid_to_canvas(self, pos: Position) -> tuple[float, float]:
         """Convert grid position to canvas coordinates."""
@@ -818,7 +823,7 @@ class VisualizationApp:
         self.hovered_agent = self.find_agent_at_canvas(local_x, local_y)
 
     def update_selection(self) -> None:
-        """Handle click on canvas for agent selection."""
+        """Handle click on canvas for agent selection (VIZ-012)."""
         # Only process on mouse click
         if not dpg.is_mouse_button_clicked(dpg.mvMouseButton_Left):
             return
@@ -831,6 +836,12 @@ class VisualizationApp:
         local_x = mouse_pos[0] - dl_pos[0]
         local_y = mouse_pos[1] - dl_pos[1]
 
+        # First check for trade animation clicks (VIZ-012)
+        clicked_trade = self._find_trade_at_canvas(local_x, local_y)
+        if clicked_trade is not None:
+            self._show_edgeworth_box(clicked_trade)
+            return
+
         clicked_agent = self.find_agent_at_canvas(local_x, local_y)
 
         if clicked_agent is None:
@@ -842,6 +853,124 @@ class VisualizationApp:
         else:
             # Clicked new agent - select it
             self.selected_agent = clicked_agent
+
+    def _find_trade_at_canvas(self, x: float, y: float) -> Optional[TradeData]:
+        """Find trade animation near canvas coordinates (VIZ-012)."""
+        current_time = time.time()
+
+        for anim in self.trade_animations:
+            if current_time - anim.start_time > anim.duration:
+                continue
+
+            # Check if click is near the trade line
+            agent1 = self.get_agent_by_id(anim.agent1_id)
+            agent2 = self.get_agent_by_id(anim.agent2_id)
+            if agent1 is None or agent2 is None:
+                continue
+
+            p1 = self.grid_to_canvas(agent1.position)
+            p2 = self.grid_to_canvas(agent2.position)
+
+            # Check if point is close to line segment
+            if self._point_near_line(x, y, p1[0], p1[1], p2[0], p2[1], threshold=15):
+                # Build TradeData for this animation
+                return self._build_trade_data(anim.agent1_id, anim.agent2_id)
+
+        return None
+
+    def _point_near_line(
+        self, px: float, py: float,
+        x1: float, y1: float, x2: float, y2: float,
+        threshold: float = 10,
+    ) -> bool:
+        """Check if point (px, py) is within threshold of line segment (x1, y1)-(x2, y2)."""
+        # Vector from p1 to p2
+        dx, dy = x2 - x1, y2 - y1
+        length_sq = dx * dx + dy * dy
+
+        if length_sq < 1e-6:
+            # Line is a point
+            return (px - x1) ** 2 + (py - y1) ** 2 <= threshold ** 2
+
+        # Project point onto line, clamp to segment
+        t = max(0, min(1, ((px - x1) * dx + (py - y1) * dy) / length_sq))
+
+        # Closest point on segment
+        closest_x = x1 + t * dx
+        closest_y = y1 + t * dy
+
+        # Distance from point to closest point on segment
+        dist_sq = (px - closest_x) ** 2 + (py - closest_y) ** 2
+        return dist_sq <= threshold ** 2
+
+    def _build_trade_data(self, agent1_id: str, agent2_id: str) -> Optional[TradeData]:
+        """Build TradeData for displaying in Edgeworth box."""
+        agent1 = self.get_agent_by_id(agent1_id)
+        agent2 = self.get_agent_by_id(agent2_id)
+        if agent1 is None or agent2 is None:
+            return None
+
+        # For live mode, we have current state but not pre-trade state
+        # For replay mode, we can get trade details from the tick record
+        tick_record = self._get_current_tick_record()
+        if tick_record is not None:
+            # Find the trade in the tick record
+            for trade in tick_record.trades:
+                if (trade.agent1_id == agent1_id and trade.agent2_id == agent2_id) or \
+                   (trade.agent1_id == agent2_id and trade.agent2_id == agent1_id):
+                    # Found the trade - use its data
+                    if trade.agent1_id == agent1_id:
+                        return TradeData(
+                            agent_a_id=trade.agent1_id,
+                            alpha_a=agent1.alpha,
+                            endowment_a=trade.pre_endowments[0],
+                            allocation_a=trade.post_allocations[0],
+                            utility_a_before=trade.pre_endowments[0][0] ** agent1.alpha * trade.pre_endowments[0][1] ** (1 - agent1.alpha),
+                            utility_a_after=trade.utilities[0],
+                            agent_b_id=trade.agent2_id,
+                            alpha_b=agent2.alpha,
+                            endowment_b=trade.pre_endowments[1],
+                            allocation_b=trade.post_allocations[1],
+                            utility_b_before=trade.pre_endowments[1][0] ** agent2.alpha * trade.pre_endowments[1][1] ** (1 - agent2.alpha),
+                            utility_b_after=trade.utilities[1],
+                        )
+                    else:
+                        return TradeData(
+                            agent_a_id=trade.agent2_id,
+                            alpha_a=agent2.alpha,
+                            endowment_a=trade.pre_endowments[1],
+                            allocation_a=trade.post_allocations[1],
+                            utility_a_before=trade.pre_endowments[1][0] ** agent2.alpha * trade.pre_endowments[1][1] ** (1 - agent2.alpha),
+                            utility_a_after=trade.utilities[1],
+                            agent_b_id=trade.agent1_id,
+                            alpha_b=agent1.alpha,
+                            endowment_b=trade.pre_endowments[0],
+                            allocation_b=trade.post_allocations[0],
+                            utility_b_before=trade.pre_endowments[0][0] ** agent1.alpha * trade.pre_endowments[0][1] ** (1 - agent1.alpha),
+                            utility_b_after=trade.utilities[0],
+                        )
+
+        # Fallback for live mode: use current state as allocation
+        return TradeData(
+            agent_a_id=agent1_id,
+            alpha_a=agent1.alpha,
+            endowment_a=(agent1.endowment_x, agent1.endowment_y),
+            allocation_a=(agent1.endowment_x, agent1.endowment_y),
+            utility_a_before=agent1.utility,
+            utility_a_after=agent1.utility,
+            agent_b_id=agent2_id,
+            alpha_b=agent2.alpha,
+            endowment_b=(agent2.endowment_x, agent2.endowment_y),
+            allocation_b=(agent2.endowment_x, agent2.endowment_y),
+            utility_b_before=agent2.utility,
+            utility_b_after=agent2.utility,
+        )
+
+    def _show_edgeworth_box(self, trade: TradeData) -> None:
+        """Show Edgeworth box popup for a trade (VIZ-013)."""
+        if self._edgeworth_popup is None:
+            self._edgeworth_popup = EdgeworthBoxPopup()
+        self._edgeworth_popup.show(trade)
 
     def render(self) -> None:
         """Render the current simulation state."""

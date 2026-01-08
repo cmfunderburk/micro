@@ -324,7 +324,7 @@
       "phase": 4,
       "description": "Detect clicks on trade animations or trade events in timeline. Open trade detail view on click.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Clicking on active trade animation opens detail view",
@@ -342,7 +342,7 @@
       "phase": 4,
       "description": "Render Edgeworth box diagram showing 2-agent, 2-good allocation space with correct axes and orientation.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Edgeworth box renders in trade detail view",
@@ -363,7 +363,7 @@
       "phase": 4,
       "description": "Draw trade-relevant content in Edgeworth box: initial endowment, final allocation, indifference curves, contract curve.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Initial endowment point marked",

@@ -56,20 +56,16 @@ Four complete implementations with theoretical grounding (O&R = Osborne & Rubins
 
 ### Matching Protocols
 
-Two complete implementations enabling institutional comparison:
-
 **Opportunistic Matching** (`OpportunisticMatchingProtocol`)
 - Default behavior: any co-located pair can trade
 - No commitment phase required
 - Simple, myopic matching
 
-**Stable Roommates Matching** (`StableRoommatesMatchingProtocol`)
+**Stable Roommates Matching** (`StableRoommatesMatchingProtocol`) — *DEPRECATED*
 - Irving's algorithm (1985) for stable matching
 - Agents form committed pairs before trading
 - Only committed + co-located pairs can trade
-- Produces stable matching (no blocking pairs)
-
-**Empirical finding**: In trading chain scenario (4 agents), committed matching achieves 2.2% higher welfare than opportunistic matching. Matching protocols affect outcomes, not just paths.
+- **Deprecated**: The current implementation treats matching as something "done to agents" (centralized algorithm) rather than "rules agents operate within" (agent-autonomous decisions). This conflicts with the action-budget tick model being developed. Will be redesigned once the new architecture is finalized. See `docs/current/stablematching-roadmap-thinking.md`.
 
 ### Agent Belief System (Phase 1)
 
@@ -151,7 +147,8 @@ cd frontend && npm run dev
   - Agent count, grid size, seed
   - Bargaining protocol (Nash/Rubinstein/Asymmetric Nash/TIOLI) with tooltips
   - Bargaining power distribution (Uniform/Gaussian/Bimodal) for Asymmetric Nash
-  - Matching protocol (Opportunistic/StableRoommates)
+  - Matching protocol (Opportunistic/StableRoommates†)
+  - †StableRoommates is deprecated pending redesign
   - Perception radius, discount factor, use_beliefs toggle
 - Agent tooltips on hover with detailed state
 - Click-to-select with perception radius overlay
@@ -377,7 +374,7 @@ uv run pytest --cov=microecon
 | Institutional visibility (swap protocols) | **Implemented** for bargaining and matching |
 | Equilibrium benchmarks | Bargaining only; no Walrasian/GE |
 | Information regimes | **Implemented** (FullInformation, NoisyAlphaInformation) |
-| Search/matching mechanisms | **Implemented** (Opportunistic, StableRoommates) |
+| Search/matching mechanisms | **Partial** (Opportunistic implemented; StableRoommates deprecated) |
 | Agent sophistication levels | **Implemented** (belief-enabled vs simple agents, Bayesian vs heuristic updates) |
 | Agent beliefs and learning | **Implemented** (type beliefs, memory, belief updates during trade) |
 | Market emergence metrics | **Implemented** (trade networks, welfare efficiency, spatial clustering) |

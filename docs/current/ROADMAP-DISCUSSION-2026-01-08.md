@@ -602,7 +602,47 @@ With production/gathering, agents must also decide:
 
 ---
 
-## 10. References
+## 10. Architectural Decision: StableRoommates Deprecation
+
+**Date:** 2026-01-08
+**Decision:** Deprecate `StableRoommatesMatchingProtocol` pending architectural redesign
+
+### Problem Statement
+
+The current `StableRoommatesMatchingProtocol` implementation conflicts with the action-budget tick model (§6). Specifically:
+
+1. **Centralized vs agent-autonomous**: StableRoommates runs Irving's algorithm centrally to compute optimal pairings, then tells agents where to go and who to trade with. This treats matching as something "done to agents" rather than "rules agents operate within."
+
+2. **Commitment overrides action budget**: Once matched, committed agents automatically move toward partners and trade upon co-location. This bypasses the consent mechanisms (mutual selection, proposal acceptance) and action exclusivity (one action per tick) that the new model requires.
+
+3. **Paradigm mismatch**: The roadmap's tick model is designed for studying emergent coordination through decentralized agent decisions. StableRoommates is a mechanism design tool that computes and imposes optimal outcomes.
+
+### Resolution
+
+- Mark `StableRoommatesMatchingProtocol` as **deprecated** in code and documentation
+- Retain the code for reference but issue `DeprecationWarning` on instantiation
+- Remove from recommended usage paths in documentation
+- Revisit the stable roommates concept after the new tick architecture is implemented
+
+### Future Direction
+
+A properly integrated stable matching mechanism would likely:
+- Have agents *propose* commitments as an action (not computed centrally)
+- Make proposals visible within some information environment
+- Define acceptance rules that agents follow autonomously
+- Let stability emerge from repeated proposal/acceptance decisions
+- Use Irving's algorithm as a theoretical benchmark, not a runtime mechanism
+
+This aligns with the "institutions as rules agents operate within" paradigm.
+
+### References
+
+- `docs/current/stablematching-roadmap-thinking.md` — analysis of the architectural conflict
+- `microecon/matching.py` — deprecation notice in code
+
+---
+
+## 11. References
 
 ### Canonical Sources
 
@@ -632,7 +672,7 @@ With production/gathering, agents must also decide:
 
 ---
 
-## 11. Next Steps
+## 12. Next Steps
 
 1. ~~**Review this document** - Consider open questions, note preferences~~ ✓
 2. ~~**Session 2** - Resolve key decisions~~ ✓ (18 questions resolved)

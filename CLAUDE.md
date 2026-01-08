@@ -24,7 +24,7 @@ The core simulation infrastructure in `microecon/`:
 | `beliefs.py` | Agent beliefs (type beliefs, price beliefs, memory, update rules) |
 | `bargaining.py` | Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI) |
 | `search.py` | Target evaluation (discounted surplus), movement decisions, belief integration |
-| `matching.py` | Matching protocols (Opportunistic, StableRoommates), commitment state |
+| `matching.py` | Matching protocols (Opportunistic; StableRoommates deprecated), commitment state |
 | `simulation.py` | `Simulation` engine with four-phase tick loop, `create_simple_economy()` factory |
 | `batch.py` | `BatchRunner` for parameter sweeps and systematic comparisons |
 
@@ -87,7 +87,7 @@ microecon/
 │   ├── beliefs.py           # Agent beliefs (type beliefs, price beliefs, memory)
 │   ├── bargaining.py        # Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI)
 │   ├── search.py            # Target selection and movement
-│   ├── matching.py          # Matching protocols (Opportunistic, StableRoommates)
+│   ├── matching.py          # Matching protocols (Opportunistic; StableRoommates deprecated)
 │   ├── simulation.py        # Main simulation engine (four-phase tick)
 │   ├── batch.py             # BatchRunner for parameter sweeps
 │   ├── logging/             # Event logging infrastructure
@@ -119,11 +119,11 @@ microecon/
 - `AsymmetricNashBargainingProtocol`: Weighted Nash product using `agent.bargaining_power`. O&R Ch 2.6.
 - `TIOLIBargainingProtocol`: Take-it-or-leave-it (proposer extracts all surplus). O&R §2.8.
 
-**Matching protocol**: `MatchingProtocol` ABC determines how agents form trading pairs. Two implementations:
+**Matching protocol**: `MatchingProtocol` ABC determines how agents form trading pairs:
 - `OpportunisticMatchingProtocol`: Any co-located pair can trade (default, myopic)
-- `StableRoommatesMatchingProtocol`: Irving's algorithm forms committed pairs (stable, globally optimal)
+- `StableRoommatesMatchingProtocol`: *Deprecated* — centralized Irving's algorithm conflicts with agent-autonomous action-budget model. See `docs/current/stablematching-roadmap-thinking.md`.
 
-Both abstractions enable the core research question: "What difference does the institution make?"
+The abstraction enables the core research question: "What difference does the institution make?"
 
 **Search with discounted surplus**: Agents evaluate visible others by computing Nash bargaining surplus, discounted by distance. This couples search meaningfully to exchange - agents pursue opportunities that maximize expected gains from trade.
 

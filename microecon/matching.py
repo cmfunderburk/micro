@@ -9,10 +9,11 @@ trading pairs. Different protocols create different emergent dynamics:
    - Any co-located agents can trade
    - Current behavior preserved
 
-2. Stable Roommates Matching (Irving's algorithm)
+2. Stable Roommates Matching (Irving's algorithm) [DEPRECATED]
    - Agents form committed pairs before trading
    - Only mutually committed + co-located pairs can trade
    - Produces stable matching (no blocking pairs) when solution exists
+   - DEPRECATED: See deprecation note on StableRoommatesMatchingProtocol
 
 The matching protocol abstraction enables comparing outcomes under different
 institutional rules - a core value proposition per VISION.md.
@@ -21,6 +22,7 @@ Reference: DESIGN_matching_protocol.md, Irving (1985)
 """
 
 from __future__ import annotations
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Set, Tuple
@@ -189,6 +191,22 @@ class StableRoommatesMatchingProtocol(MatchingProtocol):
     """
     Stable Roommates matching using Irving's algorithm.
 
+    .. deprecated::
+        This implementation is deprecated pending architectural redesign.
+        The current implementation treats matching as something "done to agents"
+        (centralized algorithm computes pairings, agents follow instructions)
+        rather than "rules agents operate within" (agents make autonomous
+        decisions within institutional constraints).
+
+        This conflicts with the action-budget tick model being developed,
+        which requires explicit agent consent and action exclusivity. The
+        stable roommates concept will be reimplemented once the new architecture
+        is finalized, likely as an emergent outcome of agent proposal/acceptance
+        decisions rather than a centralized Irving algorithm.
+
+        See: docs/current/stablematching-roadmap-thinking.md
+        See: docs/current/ROADMAP-DISCUSSION-2026-01-08.md §6 (Tick Model)
+
     Forms committed pairs with the stability property: no two agents
     would both prefer to be matched with each other over their current
     partners (when a stable matching exists).
@@ -206,6 +224,15 @@ class StableRoommatesMatchingProtocol(MatchingProtocol):
     Reference: Irving, R.W. (1985). "An efficient algorithm for the
     stable roommates problem." Journal of Algorithms 6(4): 577-595.
     """
+
+    def __init__(self) -> None:
+        warnings.warn(
+            "StableRoommatesMatchingProtocol is deprecated. "
+            "It will be redesigned to fit the action-budget tick model. "
+            "See docs/current/stablematching-roadmap-thinking.md for details.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     @property
     def requires_commitment(self) -> bool:

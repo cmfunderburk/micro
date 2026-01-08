@@ -11,12 +11,14 @@ By making institutions visible, we can ask: *What difference does the institutio
 ## Quick Start
 
 ```bash
-# 1. Install dependencies (requires Python 3.12+)
+# 1. Install dependencies (requires Python 3.12+, Node.js 18+)
 pip install uv
 uv sync
+cd frontend && npm install && cd ..
 
-# 2. Run the visualization
-uv run python -m microecon.visualization
+# 2. Run the web visualization
+./scripts/dev.sh
+# Open http://localhost:5173
 
 # 3. Run a market emergence analysis
 uv run python -c "
@@ -27,7 +29,7 @@ run_demonstration(n_agents=30, ticks=100)
 
 ## Installation
 
-This project uses [uv](https://github.com/astral-sh/uv) for dependency management.
+This project uses [uv](https://github.com/astral-sh/uv) for Python dependency management and npm for the frontend.
 
 ```bash
 # Clone the repository
@@ -37,8 +39,11 @@ cd microecon
 # Install uv if you don't have it
 pip install uv
 
-# Install dependencies
+# Install Python dependencies
 uv sync
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
 
 # Run tests to verify installation
 uv run pytest
@@ -133,50 +138,67 @@ for name, result in results.items():
     print(f"  Network density: {a.network.density:.3f}")
 ```
 
-## Running the Visualization
+## Running the Web Visualization
 
-The visualization provides:
+The web frontend provides a full-featured visualization:
+
+**Core Features:**
 - Real-time grid view of agents colored by preference (alpha)
 - Play/pause/step controls with speed adjustment
-- Trade animations
+- Trade animations and movement trails
 - Metrics panel (welfare, trades, gains)
 - Time-series charts (welfare and trades over time)
+- Keyboard shortcuts (Space: play/pause, Arrow keys: step)
+
+**Advanced Features:**
+- **Comparison Mode**: Side-by-side protocol comparison (same seed, different rules)
+- **Replay Mode**: Load and seek through saved simulation runs
+- **Perspective Mode**: View simulation from any agent's perspective
+- **Belief Panel**: Visualize agent beliefs about others
+- **Trade Inspection**: Edgeworth box analysis of any trade
+- **Scenario Browser**: Load pre-defined scenarios by complexity
 
 ```bash
-# Basic visualization
-uv run python -m microecon.visualization
+# Start the web frontend (recommended)
+./scripts/dev.sh
+# Open http://localhost:5173
 
-# With custom parameters
-uv run python -c "
-from microecon.visualization import run_visualization
-run_visualization(n_agents=20, grid_size=20, seed=42)
-"
-
-# Scenario browser (select from predefined scenarios)
-uv run python -c "
-from microecon.visualization.browser import run_with_startup_selector
-run_with_startup_selector()
-"
+# Or start server and frontend separately:
+uv run uvicorn server.app:create_app --factory --port 8000  # Terminal 1
+cd frontend && npm run dev                                   # Terminal 2
 ```
 
 ## Project Structure
 
 ```
-src/microecon/
-    bundle.py          # 2-good bundles
-    preferences.py     # Utility functions (Cobb-Douglas)
-    agent.py           # Agent with private state / observable type
-    grid.py            # Spatial grid and positions
-    information.py     # Information environment abstraction
-    bargaining.py      # Bargaining protocols (Nash, Rubinstein)
-    search.py          # Target evaluation and movement
-    matching.py        # Matching protocols
-    simulation.py      # Main simulation engine
-    batch.py           # Parameter sweeps
-    logging/           # Run capture and replay
-    analysis/          # Time series, distributions, emergence
-    scenarios/         # YAML scenarios and market emergence
-    visualization/     # DearPyGui-based visualization
+microecon/               # Core simulation library (Python)
+    bundle.py            # 2-good bundles
+    preferences.py       # Utility functions (Cobb-Douglas)
+    agent.py             # Agent with private state / observable type
+    grid.py              # Spatial grid and positions
+    information.py       # Information environment abstraction
+    beliefs.py           # Agent beliefs and learning
+    bargaining.py        # Bargaining protocols (Nash, Rubinstein)
+    search.py            # Target evaluation and movement
+    matching.py          # Matching protocols
+    simulation.py        # Main simulation engine
+    batch.py             # Parameter sweeps
+    logging/             # Run capture and replay
+    analysis/            # Time series, distributions, emergence
+    scenarios/           # YAML scenarios and market emergence
+
+server/                  # FastAPI WebSocket server
+    app.py               # Application factory
+    websocket.py         # WebSocket handlers
+    simulation_manager.py # Simulation lifecycle
+    routes.py            # REST API endpoints
+
+frontend/                # React/Vite web UI
+    src/components/      # UI components (Grid, Charts, Controls, etc.)
+    src/hooks/           # WebSocket, keyboard shortcuts
+    src/store/           # Zustand state management
+
+scenarios/               # YAML scenario definitions
 ```
 
 ## Running Tests

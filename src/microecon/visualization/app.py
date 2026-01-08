@@ -306,13 +306,17 @@ class VisualizationApp:
         self._agent_proxies: list[AgentProxy] = []
         self._agents_by_id: dict[str, AgentProxy] = {}
 
-        # Overlay toggle state (VIZ-001, VIZ-002, VIZ-003, VIZ-006)
+        # Overlay toggle state (VIZ-001 to VIZ-003, VIZ-006, VIZ-018, VIZ-019)
         self.overlay_toggles: dict[str, bool] = {
             "trails": True,              # Default ON for backward compatibility
             "perception_selected": True,  # Show perception for selected agent
             "perception_all": False,      # Show perception for all agents
             "belief_connections": False,  # Show belief connections between agents (VIZ-006)
+            "trade_network": False,       # Show trade network between agents (VIZ-018)
+            "surplus_heatmap": False,     # Show surplus heatmap overlay (VIZ-019)
         }
+        # Track trade relationships for network overlay (VIZ-018)
+        self._trade_network: dict[tuple[str, str], int] = {}  # (agent1_id, agent2_id) -> trade count
         # UI element references for toggles
         self.overlay_toggle_ids: dict[str, int] = {}
 
@@ -544,6 +548,20 @@ class VisualizationApp:
                             default_value=self.overlay_toggles["belief_connections"],
                             callback=self._on_overlay_toggle,
                             user_data="belief_connections",
+                        )
+                        dpg.add_separator()
+                        dpg.add_text("Advanced Overlays:", color=(180, 180, 180))
+                        self.overlay_toggle_ids["trade_network"] = dpg.add_checkbox(
+                            label="Trade Network",
+                            default_value=self.overlay_toggles["trade_network"],
+                            callback=self._on_overlay_toggle,
+                            user_data="trade_network",
+                        )
+                        self.overlay_toggle_ids["surplus_heatmap"] = dpg.add_checkbox(
+                            label="Surplus Heatmap",
+                            default_value=self.overlay_toggles["surplus_heatmap"],
+                            callback=self._on_overlay_toggle,
+                            user_data="surplus_heatmap",
                         )
 
                     # Perspective mode section (VIZ-015 to VIZ-017)
@@ -936,6 +954,7 @@ class VisualizationApp:
         self.position_history.clear()
         self._trade_history.clear()
         self._trade_history_ui_count = 0
+        self._trade_network.clear()  # VIZ-018: Clear trade network
         self.selected_agent = None
 
     def record_trades(self, trades: list[TradeEvent]) -> None:
@@ -1003,6 +1022,11 @@ class VisualizationApp:
                 # Keep only last 20 trades
                 if len(self._trade_history) > 20:
                     self._trade_history = self._trade_history[-20:]
+
+            # VIZ-018: Update trade network
+            # Sort IDs to ensure consistent key ordering
+            pair = tuple(sorted([trade.agent1_id, trade.agent2_id]))
+            self._trade_network[pair] = self._trade_network.get(pair, 0) + 1
 
     def record_positions(self) -> None:
         """Record current positions for trail rendering."""
@@ -1324,9 +1348,11 @@ class VisualizationApp:
         dpg.delete_item(self.drawlist, children_only=True)
 
         self.render_grid()
+        self.render_surplus_heatmap()     # Surplus heatmap (VIZ-019) - background
         self.render_trails()              # Trails behind agents
         self.render_perception_overlay()  # Radius behind agents
         self.render_belief_connections()  # Belief lines behind agents (VIZ-006)
+        self.render_trade_network()       # Trade network lines (VIZ-018)
         self.render_trade_animations()
         self.render_agents()
         self.render_metrics()
@@ -1785,6 +1811,112 @@ class VisualizationApp:
                     thickness=thickness,
                     parent=self.drawlist,
                 )
+
+    def render_trade_network(self) -> None:
+        """Draw trade network edges between agents (VIZ-018).
+
+        Lines connect agents who have traded with each other.
+        Line thickness encodes trade frequency.
+        """
+        if not self.overlay_toggles.get("trade_network", False):
+            return
+
+        if not self._trade_network:
+            return
+
+        # Find max trade count for normalization
+        max_trades = max(self._trade_network.values()) if self._trade_network else 1
+
+        for (agent1_id, agent2_id), trade_count in self._trade_network.items():
+            agent1 = self.get_agent_by_id(agent1_id)
+            agent2 = self.get_agent_by_id(agent2_id)
+            if agent1 is None or agent2 is None:
+                continue
+
+            # Normalize trade count for visual properties
+            intensity = trade_count / max_trades
+
+            # Color: green with intensity-based opacity
+            opacity = int(60 + intensity * 150)  # 60-210
+            color = (100, 255, 100, opacity)
+
+            p1 = self.grid_to_canvas(agent1.position)
+            p2 = self.grid_to_canvas(agent2.position)
+
+            # Line thickness based on trade count
+            thickness = 1 + intensity * 3  # 1-4
+
+            dpg.draw_line(
+                p1, p2,
+                color=color,
+                thickness=thickness,
+                parent=self.drawlist,
+            )
+
+    def render_surplus_heatmap(self) -> None:
+        """Draw surplus heatmap overlay (VIZ-019).
+
+        Shows potential gains from trade across the grid.
+        Computed from agent pairwise surplus at each cell.
+        """
+        if not self.overlay_toggles.get("surplus_heatmap", False):
+            return
+
+        # Get all agents
+        agents = self.get_agents()
+        if len(agents) < 2:
+            return
+
+        # Compute surplus for each cell based on nearby agent pairs
+        surplus_map: dict[Position, float] = {}
+
+        # For each agent, compute potential surplus with nearby agents
+        for agent in agents:
+            for other in agents:
+                if agent.id >= other.id:  # Avoid duplicates and self-pairs
+                    continue
+
+                # Compute simple surplus estimate based on alpha difference
+                # Higher difference = more potential gains from trade
+                alpha_diff = abs(agent.alpha - other.alpha)
+                surplus = alpha_diff * 0.5  # Scale factor
+
+                # Add to both positions
+                for pos in [agent.position, other.position]:
+                    if pos not in surplus_map:
+                        surplus_map[pos] = 0.0
+                    surplus_map[pos] += surplus
+
+        if not surplus_map:
+            return
+
+        # Normalize surplus values
+        max_surplus = max(surplus_map.values()) if surplus_map else 1.0
+        if max_surplus == 0:
+            return
+
+        # Draw heatmap cells
+        for pos, surplus in surplus_map.items():
+            intensity = surplus / max_surplus
+            if intensity < 0.1:
+                continue  # Skip very low intensity
+
+            # Color: red-yellow gradient based on surplus
+            r = int(200 + intensity * 55)
+            g = int(100 + intensity * 100)
+            b = 50
+            opacity = int(30 + intensity * 70)
+
+            x = self.canvas_origin[0] + pos.col * self.cell_size
+            y = self.canvas_origin[1] + pos.row * self.cell_size
+
+            dpg.draw_rectangle(
+                (x + 2, y + 2),
+                (x + self.cell_size - 2, y + self.cell_size - 2),
+                color=(r, g, b, opacity),
+                fill=(r, g, b, opacity // 2),
+                parent=self.drawlist,
+            )
 
     # ========================================================================
     # Export methods (VIZ-008 to VIZ-011)

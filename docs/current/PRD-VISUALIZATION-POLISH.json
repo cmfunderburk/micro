@@ -445,7 +445,7 @@
       "phase": 6,
       "description": "Overlay showing trade relationships: edges between agents who have traded, edge thickness or color encoding trade frequency or recency.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Toggle control for trade network exists",
@@ -465,7 +465,7 @@
       "phase": 6,
       "description": "Heatmap overlay showing potential gains from trade across the grid. Highlights areas of high opportunity.",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "criteria": {
         "functional": [
           "Toggle control for surplus heatmap exists",

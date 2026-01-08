@@ -1,0 +1,924 @@
+{
+  "task": {
+    "name": "Web Frontend for Microecon Simulation",
+    "description": "Replace DearPyGui visualization with a browser-based React/TypeScript frontend communicating with a FastAPI backend. Achieve feature parity with DearPyGui for live simulation mode, with improved styling flexibility and faster design iteration.",
+    "created": "2026-01-07",
+    "vision_source": "docs/WEB-FRONTEND-EXPLORATION.md",
+    "project_type": "implementation",
+    "completion_promise": "<promise>WEB-FRONTEND-COMPLETE</promise>"
+  },
+
+  "context": {
+    "codebase_state": "active",
+    "primary_language": "Python + TypeScript",
+    "frameworks": ["FastAPI", "React", "Vite", "Tailwind CSS", "shadcn/ui", "Zustand", "Recharts", "D3"],
+    "vision_extraction": {
+      "primary_goal": "Replace DearPyGui with browser-based TypeScript frontend while keeping Python simulation core",
+      "success_criteria": [
+        "Identical simulation results (Python remains source of truth)",
+        "Modern, polished UI achievable via CSS/component libraries",
+        "Hot reload for faster design iteration",
+        "<100ms latency from Python tick to rendered frame",
+        "UI remains responsive during fast simulation"
+      ],
+      "deliverables": [
+        "FastAPI backend (microecon server)",
+        "React/TypeScript frontend",
+        "Grid visualization with agents",
+        "Simulation controls",
+        "Time-series charts",
+        "Overlays (trails, perception, heatmap, connections)",
+        "Trade network panel",
+        "Edgeworth box trade inspection",
+        "Configuration modal",
+        "Export functionality"
+      ]
+    },
+    "gap_analysis_summary": "Complete serialization layer exists (all dataclasses have to_dict/from_dict). No web infrastructure exists - FastAPI backend and React frontend must be built from scratch. DearPyGui visualization code provides reference for features but cannot be directly reused.",
+    "resource_constraints": {
+      "compute": null,
+      "time_budget": null,
+      "other": null
+    },
+    "canonical_sources": []
+  },
+
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Infrastructure",
+      "description": "Backend skeleton, frontend scaffold, WebSocket connection, convenience script",
+      "features": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004", "FEAT-005", "FEAT-006", "FEAT-007", "FEAT-008"],
+      "entry_criteria": "Clean git state, existing tests pass",
+      "exit_criteria": "Frontend connects to backend via WebSocket, receives tick data, displays connection status"
+    },
+    {
+      "phase": 2,
+      "name": "Grid & Controls",
+      "description": "Canvas rendering of agents, simulation controls, metrics display",
+      "features": ["FEAT-009", "FEAT-010", "FEAT-011", "FEAT-012", "FEAT-013", "FEAT-014", "FEAT-015", "FEAT-016"],
+      "entry_criteria": "Phase 1 complete, WebSocket streaming works",
+      "exit_criteria": "Agents render on grid with correct colors, controls work, trade animations visible"
+    },
+    {
+      "phase": 3,
+      "name": "Interaction",
+      "description": "Hover tooltips, click selection, agent details",
+      "features": ["FEAT-017", "FEAT-018", "FEAT-019", "FEAT-020"],
+      "entry_criteria": "Phase 2 complete, grid renders correctly",
+      "exit_criteria": "Can hover for tooltips, click to select agents, see details in panel"
+    },
+    {
+      "phase": 4,
+      "name": "Charts",
+      "description": "Time-series charts for welfare and trade count",
+      "features": ["FEAT-021", "FEAT-022", "FEAT-023"],
+      "entry_criteria": "Phase 3 complete",
+      "exit_criteria": "Charts update in real-time as simulation runs"
+    },
+    {
+      "phase": 5,
+      "name": "Overlays",
+      "description": "Toggleable visual overlays on the grid",
+      "features": ["FEAT-024", "FEAT-025", "FEAT-026", "FEAT-027", "FEAT-028"],
+      "entry_criteria": "Phase 4 complete",
+      "exit_criteria": "All overlay toggles work, overlays render correctly"
+    },
+    {
+      "phase": 6,
+      "name": "Trade Inspection",
+      "description": "Edgeworth box modal for trade analysis",
+      "features": ["FEAT-029", "FEAT-030", "FEAT-031", "FEAT-032", "FEAT-033"],
+      "entry_criteria": "Phase 5 complete",
+      "exit_criteria": "Can click trade to open Edgeworth box, see indifference curves and trade details"
+    },
+    {
+      "phase": 7,
+      "name": "Network Panel",
+      "description": "Trade network visualization with graph layouts",
+      "features": ["FEAT-034", "FEAT-035", "FEAT-036", "FEAT-037", "FEAT-038", "FEAT-039", "FEAT-040"],
+      "entry_criteria": "Phase 6 complete",
+      "exit_criteria": "Network panel opens, both layouts work, visual encoding correct"
+    },
+    {
+      "phase": 8,
+      "name": "Configuration & Export",
+      "description": "Configuration modal and export functionality",
+      "features": ["FEAT-041", "FEAT-042", "FEAT-043", "FEAT-044", "FEAT-045", "FEAT-046"],
+      "entry_criteria": "Phase 7 complete",
+      "exit_criteria": "Can configure simulation, export PNG/CSV/JSON"
+    }
+  ],
+
+  "features": [
+    {
+      "id": "FEAT-001",
+      "name": "FastAPI backend skeleton",
+      "phase": 1,
+      "description": "Create backend/ directory with FastAPI app structure, __main__.py entry point",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "backend/ directory exists with proper structure",
+          "python -m backend starts server on localhost:8000",
+          "GET /api/health returns 200"
+        ]
+      },
+      "verification_commands": ["python -m backend & sleep 2 && curl http://localhost:8000/api/health"]
+    },
+    {
+      "id": "FEAT-002",
+      "name": "Vite + React + TypeScript frontend scaffold",
+      "phase": 1,
+      "description": "Create frontend/ directory with Vite, React, TypeScript, Tailwind, shadcn/ui",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "frontend/ directory exists with proper structure",
+          "npm run dev starts Vite on localhost:5173",
+          "Basic React app renders"
+        ]
+      },
+      "verification_commands": ["cd frontend && npm run build"]
+    },
+    {
+      "id": "FEAT-003",
+      "name": "WebSocket endpoint for simulation ticks",
+      "phase": 1,
+      "description": "Implement /ws/simulation endpoint that streams TickRecord data as JSON",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "WebSocket endpoint accepts connections",
+          "Sends tick data when simulation running",
+          "Handles client disconnect gracefully"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-004",
+      "name": "REST endpoints for simulation control",
+      "phase": 1,
+      "description": "Implement POST /api/simulation/start, /stop, /step, /reset endpoints",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "POST /api/simulation/start begins simulation",
+          "POST /api/simulation/stop pauses simulation",
+          "POST /api/simulation/step executes one tick",
+          "POST /api/simulation/reset resets to initial state"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-005",
+      "name": "WebSocket connection hook",
+      "phase": 1,
+      "description": "React hook useSimulationSocket for WebSocket connection and message handling",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Hook establishes WebSocket connection",
+          "Receives and parses tick messages",
+          "Exposes sendCommand function for controls"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-006",
+      "name": "Zustand store setup",
+      "phase": 1,
+      "description": "Create Zustand store for simulation state (agents, ticks, config, UI state)",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Store holds simulation state",
+          "Actions for updating state from WebSocket",
+          "Selectors for components to access state"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-007",
+      "name": "Convenience script",
+      "phase": 1,
+      "description": "Script to start both backend and frontend with single command",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "scripts/dev.sh or similar starts both processes",
+          "Ctrl+C kills both processes cleanly"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-008",
+      "name": "Add web dependencies to pyproject.toml",
+      "phase": 1,
+      "description": "Add fastapi, uvicorn, websockets to core dependencies",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Dependencies added to pyproject.toml",
+          "uv sync installs them successfully"
+        ]
+      },
+      "verification_commands": ["uv sync"]
+    },
+    {
+      "id": "FEAT-009",
+      "name": "Canvas grid rendering",
+      "phase": 2,
+      "description": "Render grid background with lines on HTML canvas",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Canvas element sized appropriately",
+          "Grid lines visible",
+          "Background color matches design"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-010",
+      "name": "Agent rendering",
+      "phase": 2,
+      "description": "Render agents as colored circles, color based on alpha (red→blue)",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Agents appear at correct grid positions",
+          "Color correctly maps alpha to hue (0=red, 1=blue)",
+          "Agents update position each tick"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-011",
+      "name": "Play button",
+      "phase": 2,
+      "description": "Button to start continuous simulation",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Click starts simulation",
+          "Button state reflects running status"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-012",
+      "name": "Pause button",
+      "phase": 2,
+      "description": "Button to pause simulation",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Click pauses simulation",
+          "Can resume with Play"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-013",
+      "name": "Step button",
+      "phase": 2,
+      "description": "Button to execute single tick",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Click advances simulation by one tick",
+          "Works when paused"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-014",
+      "name": "Reset button",
+      "phase": 2,
+      "description": "Button to reset simulation to initial state",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Click resets to tick 0",
+          "Agents return to initial positions",
+          "Metrics reset"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-015",
+      "name": "Speed slider",
+      "phase": 2,
+      "description": "Slider to control simulation speed (ticks per second)",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Slider adjusts tick rate",
+          "Display shows current speed",
+          "Range approximately 0.5x to 10x"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-016",
+      "name": "Metrics panel",
+      "phase": 2,
+      "description": "Panel showing tick count, trade count, welfare, gains",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Displays current tick number",
+          "Displays cumulative trade count",
+          "Displays total welfare",
+          "Displays welfare gains from initial"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-017",
+      "name": "Trade flash animations",
+      "phase": 2,
+      "description": "Animated line between agents when trade occurs, fades over 2 seconds",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Line appears between trading agents",
+          "Line fades out over ~2 seconds",
+          "Multiple simultaneous trades render correctly"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-018",
+      "name": "Hover tooltips",
+      "phase": 3,
+      "description": "Tooltip appears when hovering over agent showing ID, alpha, utility, endowment",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Tooltip appears on hover",
+          "Shows agent ID, alpha, utility",
+          "Shows endowment (x, y)",
+          "Disappears when mouse leaves"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-019",
+      "name": "Click to select agent",
+      "phase": 3,
+      "description": "Clicking agent selects it, visual indicator shown",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Click selects agent",
+          "Selected agent has visual highlight",
+          "Click elsewhere deselects"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-020",
+      "name": "Selected agent details panel",
+      "phase": 3,
+      "description": "Panel showing detailed info for selected agent",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Panel shows when agent selected",
+          "Displays all agent properties",
+          "Updates as agent state changes"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-021",
+      "name": "Connection status indicator",
+      "phase": 3,
+      "description": "Visual indicator showing WebSocket connection status",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Shows connected/disconnected state",
+          "Updates on connection change"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-022",
+      "name": "Welfare time-series chart",
+      "phase": 4,
+      "description": "Line chart showing total welfare over time using Recharts",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Chart renders welfare history",
+          "Updates each tick",
+          "Axes scale appropriately"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-023",
+      "name": "Trade count time-series chart",
+      "phase": 4,
+      "description": "Line chart showing cumulative trade count over time",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Chart renders trade count history",
+          "Updates each tick",
+          "Axes scale appropriately"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-024",
+      "name": "Chart tick synchronization",
+      "phase": 4,
+      "description": "Charts sync with simulation, possible throttling at high speeds",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Charts update as simulation progresses",
+          "No performance issues at high tick rates",
+          "Vertical line indicator at current tick (optional)"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-025",
+      "name": "Overlay toggle UI",
+      "phase": 5,
+      "description": "Checkbox/toggle controls for enabling overlays",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Toggle controls for each overlay type",
+          "State persists during session",
+          "Clear visual indication of enabled overlays"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-026",
+      "name": "Movement trails overlay",
+      "phase": 5,
+      "description": "Fading path lines showing recent agent movement",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Trail shows last N positions",
+          "Trail fades with age",
+          "Toggle enables/disables"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-027",
+      "name": "Perception radius overlay",
+      "phase": 5,
+      "description": "Circle showing selected agent's perception radius",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Circle drawn around selected agent",
+          "Radius matches perception_radius config",
+          "Toggle enables/disables"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-028",
+      "name": "Surplus heatmap overlay",
+      "phase": 5,
+      "description": "Background color gradient showing trade surplus potential",
+      "priority": 3,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Grid cells colored by surplus metric",
+          "Color scale is intuitive",
+          "Toggle enables/disables"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-029",
+      "name": "Trade connections overlay",
+      "phase": 5,
+      "description": "Lines between agents who have traded recently",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Lines connect trading pairs",
+          "Line intensity reflects recency",
+          "Toggle enables/disables"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-030",
+      "name": "Trade history tracking",
+      "phase": 6,
+      "description": "Track trade events for inspection, store in frontend state",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Trade events stored in state",
+          "Can retrieve trade by ID or participants"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-031",
+      "name": "Edgeworth box modal",
+      "phase": 6,
+      "description": "Modal dialog showing Edgeworth box for selected trade",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Modal opens on trade click/selection",
+          "Shows box with correct dimensions",
+          "Displays pre/post allocation points"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-032",
+      "name": "Indifference curves rendering",
+      "phase": 6,
+      "description": "Draw indifference curves for both agents in Edgeworth box",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Curves for both agents rendered",
+          "Curves pass through allocation points",
+          "Different colors for each agent"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-033",
+      "name": "Contract curve rendering",
+      "phase": 6,
+      "description": "Draw contract curve in Edgeworth box",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Contract curve rendered",
+          "Trade point shown on/near curve"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-034",
+      "name": "Trade details display",
+      "phase": 6,
+      "description": "Show utility values and gains for trade in Edgeworth modal",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Shows pre/post utilities for both agents",
+          "Shows gains from trade",
+          "Shows alpha values"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-035",
+      "name": "Trade network panel",
+      "phase": 7,
+      "description": "Separate panel/modal for trade network visualization",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Panel opens from menu/button",
+          "Can be closed",
+          "Displays network graph area"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-036",
+      "name": "Force-directed layout",
+      "phase": 7,
+      "description": "D3-force layout for trade network",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Nodes positioned by force simulation",
+          "Edges connect trading pairs",
+          "Layout stabilizes reasonably"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-037",
+      "name": "Circular layout",
+      "phase": 7,
+      "description": "Alternative circular layout for trade network",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Nodes arranged in circle",
+          "Edges cross through center"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-038",
+      "name": "Layout toggle",
+      "phase": 7,
+      "description": "Toggle between force-directed and circular layouts",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Toggle switches layout",
+          "Transition is smooth or instant"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-039",
+      "name": "Network node coloring",
+      "phase": 7,
+      "description": "Color network nodes by agent alpha (same as grid)",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Node colors match grid agent colors",
+          "Color mapping consistent"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-040",
+      "name": "Network edge encoding",
+      "phase": 7,
+      "description": "Edge thickness = trade frequency, color = recency",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Thicker edges for more trades",
+          "Brighter/different color for recent trades"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-041",
+      "name": "Network statistics display",
+      "phase": 7,
+      "description": "Show network metrics (density, clustering, avg degree)",
+      "priority": 3,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Displays density metric",
+          "Displays average degree",
+          "Displays cluster count (optional)"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-042",
+      "name": "Configuration modal UI",
+      "phase": 8,
+      "description": "Modal for configuring simulation parameters",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Modal opens from button",
+          "Shows all configurable parameters",
+          "Has cancel and apply buttons"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-043",
+      "name": "Configuration API endpoint",
+      "phase": 8,
+      "description": "GET/POST /api/config for reading and updating configuration",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "GET returns current config",
+          "POST updates config",
+          "Validation on invalid values"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-044",
+      "name": "Apply configuration and reset",
+      "phase": 8,
+      "description": "Apply new config and reset simulation with new parameters",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "New config applied on submit",
+          "Simulation resets with new params",
+          "UI reflects new configuration"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-045",
+      "name": "PNG export",
+      "phase": 8,
+      "description": "Export current grid view as PNG image",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Button triggers PNG download",
+          "Image captures grid state",
+          "Filename includes tick number"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-046",
+      "name": "CSV export",
+      "phase": 8,
+      "description": "Export simulation data as CSV",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Button triggers CSV download",
+          "CSV contains agent/trade data",
+          "Format is parseable"
+        ]
+      },
+      "verification_commands": []
+    },
+    {
+      "id": "FEAT-047",
+      "name": "JSON export",
+      "phase": 8,
+      "description": "Export simulation data as JSON",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Button triggers JSON download",
+          "JSON contains full tick history",
+          "Format matches logging format"
+        ]
+      },
+      "verification_commands": []
+    }
+  ],
+
+  "architectural_decisions": {
+    "resolved": [
+      {
+        "id": "ADR-WEB-001",
+        "decision": "Process architecture",
+        "choice": "Two-process (FastAPI backend + Vite frontend)",
+        "rationale": "Simpler dev experience, hot reload for frontend, can wrap in Tauri/pywebview later if needed",
+        "source": "interview"
+      },
+      {
+        "id": "ADR-WEB-002",
+        "decision": "Real-time communication",
+        "choice": "WebSocket for tick streaming, REST for commands",
+        "rationale": "Low latency for simulation updates, simple request/response for controls",
+        "source": "vision"
+      },
+      {
+        "id": "ADR-WEB-003",
+        "decision": "State management",
+        "choice": "Zustand",
+        "rationale": "Lightweight, good TypeScript support, simpler than Redux",
+        "source": "vision"
+      },
+      {
+        "id": "ADR-WEB-004",
+        "decision": "Grid rendering",
+        "choice": "Canvas 2D, upgrade to Pixi.js if performance issues",
+        "rationale": "Sufficient for expected agent counts, simpler API",
+        "source": "vision"
+      },
+      {
+        "id": "ADR-WEB-005",
+        "decision": "Session model",
+        "choice": "Single simulation per backend instance",
+        "rationale": "Simpler state management, sufficient for research use",
+        "source": "interview"
+      },
+      {
+        "id": "ADR-WEB-006",
+        "decision": "Directory structure",
+        "choice": "backend/ and frontend/ at project root",
+        "rationale": "Clear separation, parallel naming convention",
+        "source": "interview"
+      }
+    ],
+    "pending_adrs": []
+  },
+
+  "tracking": {
+    "theory_divergences_file": null,
+    "retrospective_template": null
+  },
+
+  "escalation_triggers": [
+    "Test failures in simulation core (existing 669 tests must pass)",
+    "WebSocket connection architecture changes without discussion",
+    "Significant deviation from approved design sketches",
+    "Introduction of new Python dependencies beyond fastapi/uvicorn/websockets"
+  ],
+
+  "loop_parameters": {
+    "max_iterations": 20,
+    "progress_tracking": ["git_commits", "progress_file", "prd_status"],
+    "on_phase_complete": "continue"
+  }
+}

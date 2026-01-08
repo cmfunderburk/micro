@@ -1,0 +1,682 @@
+
+ ▐▛███▜▌   Claude Code v2.1.1
+▝▜█████▛▘  Opus 4.5 · Claude Max
+  ▘▘ ▝▝    ~/Work/microecon
+
+❯ @docs/WEB-FRONTEND-EXPLORATION.md let's continue discussing this idea 
+  ⎿  Read docs/WEB-FRONTEND-EXPLORATION.md (939 lines)
+
+● This is a thorough exploration document. The architecture makes sense - keeping the proven Python simulation core while gaining the web ecosystem's advantages for visualization.
+
+  A few observations and questions to continue the discussion:
+
+  On the local-only constraint:
+  The pywebview option is interesting as a deployment simplification (single Python entry point), but I'd lean toward the "two-process localhost" approach for development. You get full browser DevTools, hot reload, and can always wrap in pywebview or Tauri later for distribution.
+
+  On framework choice:
+  The React + shadcn/ui recommendation is solid given the LLM-assistance angle. However, Svelte's reactivity model is genuinely simpler for someone new to frontend - less boilerplate around state updates. Worth considering if React hooks feel awkward.
+
+  Questions to help narrow decisions:
+
+  1. What's the primary pain point you want to address first? Is it:
+    - Styling/aesthetics (the "polished look" DearPyGui struggles with)
+    - A specific visualization that's hitting DearPyGui limits (e.g., animated Edgeworth box)
+    - Development velocity (hot reload, faster iteration)
+    - Future sharing/deployment
+  2. PoC scope: The document lists a minimal PoC (colored circles, start/stop, tick display). Are you ready to start there, or do you want to discuss the architecture more first?
+  3. Any concerns about the WebSocket approach? The document estimates ~50KB/s for 10 agents at 10 ticks/s - negligible for localhost.
+
+  What aspect would you like to dig into?
+
+❯ 1. styling/aesthetics, dev velocity, and future sharing/deployment        
+  2. fine to start with a minimal PoC                                       
+  3. no concerns at all                                                     
+                                                                            
+  we'll start with the react + shadcn/ui framework rec. if we run into      
+  serious problems with workflow or otherwise, can revisit                  
+                                                                            
+  let's continue this discussion with @docs/ralph/RALPH-INTERVIEW.md method 
+  ⎿  Read docs/ralph/RALPH-INTERVIEW.md (1253 lines)
+
+● Starting the Ralph Interview Protocol. Since WEB-FRONTEND-EXPLORATION.md serves as the vision document, I'll begin with Phase 0.
+
+  ---
+  Phase 0: Vision Extraction & Project Type
+
+  Vision Extraction
+
+  Primary Goal
+  Replace DearPyGui visualization with a browser-based TypeScript frontend to gain better styling flexibility, faster design iteration, and the web ecosystem's visualization libraries—while keeping the proven Python simulation core.
+
+  Success Criteria
+  - Identical simulation results (Python remains source of truth)
+  - Modern, polished UI achievable via CSS/component libraries
+  - Hot reload for faster design iteration
+  - <100ms latency from Python tick to rendered frame
+  - UI remains responsive during fast simulation
+
+  Explicit Deliverables
+  1. FastAPI backend (microecon.server) with REST + WebSocket endpoints
+  2. React/TypeScript frontend (web/) with Vite
+  3. Grid visualization (Canvas 2D, agents as colored circles)
+  4. Play/pause/step/reset controls with speed slider
+  5. Real-time tick and welfare display
+  6. (Later phases) Charts, trade network, Edgeworth box, overlays, export
+
+  Open Questions in Vision
+  - Exact component library configuration (shadcn/ui confirmed now)
+  - Whether to use Zustand vs other state management (document recommends Zustand)
+  - Specific chart library (Recharts recommended)
+
+  Assumptions I'm Making
+  - Two-process localhost approach for development (not Tauri/pywebview yet)
+  - Canvas 2D sufficient for MVP (Pixi.js only if performance issues arise)
+  - No authentication needed (local-only)
+
+  ---
+  Project Type Assessment
+
+  Based on the vision, this is:
+
+  [X] Implementation Project - Features define completeness
+  - This is a UI layer replacement—the simulation core (research software) already exists and is tested
+  - Success = feature parity with DearPyGui, then exceeding it
+  - Verification: Functional tests, visual inspection, latency measurements
+  - No new theoretical grounding needed; we're building a view layer
+
+  Does this accurately capture the vision and project type?
+
+❯ yes, proceed to gap analysis 
+
+● Let me explore the codebase to understand what exists versus what we need to build.
+
+● Explore(Explore codebase for gap analysis)
+  ⎿  Done (32 tool uses · 59.3k tokens · 1m 26s)                         
+
+
+● ---
+  Phase 1: Gap Analysis
+
+  Vision Requirement → Current State → Gap
+  Requirement: FastAPI backend
+  Exists?: No
+  Current State: No web framework code exists
+  Work Needed: Build microecon.server module from scratch
+  ────────────────────────────────────────
+  Requirement: WebSocket for ticks
+  Exists?: No
+  Current State: No WebSocket code
+  Work Needed: Implement /ws/simulation endpoint
+  ────────────────────────────────────────
+  Requirement: REST endpoints
+  Exists?: No
+  Current State: No REST API
+  Work Needed: Implement config, start/stop/step/reset, export endpoints
+  ────────────────────────────────────────
+  Requirement: Simulation serialization
+  Exists?: Yes
+  Current State: All dataclasses have to_dict() / from_dict()
+  Work Needed: Ready to use
+  ────────────────────────────────────────
+  Requirement: TickRecord streaming
+  Exists?: Yes
+  Current State: SimulationLogger supports streaming mode
+  Work Needed: Wrap in WebSocket handler
+  ────────────────────────────────────────
+  Requirement: Replay controller
+  Exists?: Yes
+  Current State: ReplayController with step/seek/reset API
+  Work Needed: Expose via REST endpoints
+  ────────────────────────────────────────
+  Requirement: React frontend
+  Exists?: No
+  Current State: No web/ directory
+  Work Needed: Build from scratch with Vite
+  ────────────────────────────────────────
+  Requirement: Canvas grid rendering
+  Exists?: No
+  Current State: DearPyGui custom draw code exists
+  Work Needed: Reimplement in Canvas 2D
+  ────────────────────────────────────────
+  Requirement: Agent color mapping
+  Exists?: Yes
+  Current State: alpha → hue mapping in visualization/app.py
+  Work Needed: Port logic to TypeScript
+  ────────────────────────────────────────
+  Requirement: Play/pause/step controls
+  Exists?: No (web)
+  Current State: DearPyGui buttons exist
+  Work Needed: Build React components
+  ────────────────────────────────────────
+  Requirement: State management
+  Exists?: No
+  Current State: N/A
+  Work Needed: Set up Zustand store
+  ────────────────────────────────────────
+  Requirement: Charts
+  Exists?: No (web)
+  Current State: ImPlot charts exist
+  Work Needed: Reimplement with Recharts
+  ────────────────────────────────────────
+  Requirement: Trade network
+  Exists?: No (web)
+  Current State: Force-directed layout in network.py
+  Work Needed: Reimplement with D3-force
+  ────────────────────────────────────────
+  Requirement: Edgeworth box
+  Exists?: No (web)
+  Current State: Custom draw in edgeworth.py
+  Work Needed: Reimplement with D3/Canvas
+  ────────────────────────────────────────
+  Requirement: Overlays
+  Exists?: No (web)
+  Current State: Trails, perception, heatmap exist
+  Work Needed: Reimplement in Canvas
+  ────────────────────────────────────────
+  Requirement: Export
+  Exists?: Partial
+  Current State: Python export code exists
+  Work Needed: Add REST endpoints for download
+  ────────────────────────────────────────
+  Requirement: Web dependencies
+  Exists?: No
+  Current State: No fastapi/uvicorn in pyproject.toml
+  Work Needed: Add to dependencies
+  Key Reusable Assets
+
+  1. Complete serialization layer - TickRecord, AgentSnapshot, TradeEvent all serialize to JSON
+  2. AgentProxy pattern - Unified interface for live vs replay (can inform TypeScript types)
+  3. ReplayController API - Direct mapping to REST endpoints
+  4. Color mapping logic - alpha * 240 for hue (red→blue spectrum)
+  5. Analysis infrastructure - Can call from backend for computed metrics
+
+  Clarifying Questions
+
+  Q1.1: Backend module location
+  The vision doc proposes src/microecon/server/. Should I:
+  - Put it there (keeps everything in the Python package)
+  - Create a separate backend/ directory at project root
+  - Something else?
+
+  Q1.2: Dependency management
+  For web dependencies (fastapi, uvicorn, websockets), should they be:
+  - Core dependencies (always installed)
+  - Optional [web] extra (like current [export])
+
+  Q1.3: Frontend scope for PoC
+  The PoC in the vision doc is minimal (grid + controls + tick/welfare display). Should the PRD:
+  - Cover only the PoC scope (Phase 0 from vision doc)
+  - Cover through Phase 1 (core visualization with hover/selection)
+  - Cover full feature parity with DearPyGui (Phases 0-4)
+  - Something else?
+
+✻ Crunched for 2m 9s
+
+❯ 1.1 -- let's create a backend/ directory                                  
+  1.2 -- core dependencies                                                  
+  1.3 -- PRD should cover full feature parity with dearpygui                
+
+● Got it. Now proceeding to Phase 2.
+
+  ---
+  Phase 2: Clarification Interview & ADR Identification
+
+  Since we're targeting full DearPyGui feature parity, let me confirm a few architectural decisions and priorities.
+
+  Clarifying Questions
+
+  Q2.1: Replay mode
+  DearPyGui supports both live simulation AND replay from logged .jsonl files. Should the web frontend support:
+  - Live mode only (PoC focus, add replay later)
+  - Both live and replay from the start
+  - Both live and replay, plus dual-replay (side-by-side comparison)
+
+  Q2.2: Session management
+  For the backend, when a user opens the web UI:
+  - Single session (one simulation at a time, simpler)
+  - Multi-session (multiple browser tabs can run independent simulations)
+
+  Q2.3: Frontend directory structure
+  The vision doc proposes web/ at project root. Given backend/ is also at root, should we use:
+  - web/ (matches vision doc)
+  - frontend/ (pairs with backend/)
+  - Something else
+
+  Q2.4: Build/deployment approach
+  For running the system:
+  - Two terminals: python -m backend + npm run dev (development)
+  - Single command that spawns both (convenience script)
+  - Both options available
+
+  Q2.5: Phase priority
+  For the phased rollout, which order makes most sense:
+  - Option A: Grid → Controls → Charts → Overlays → Trade inspection → Network panel → Export
+  - Option B: Grid → Controls → Trade inspection (Edgeworth) → Charts → Overlays → Network → Export
+  - Option C: Different order you prefer
+
+❯ 2.1 -- live mode only, replay later (we don't currently have a useable    
+  pipeline for creating saved runs anyway)                                  
+  2.2 -- single session (may revist later, but single should be fine)       
+  2.3 -- use frontend/                                                      
+  2.4 -- both options would be awesome                                      
+  2.4 -- Option A seems fine                                                
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ 2.1 -- live mode only, replay later (we don't currently have a useable    
+  pipeline for creating saved runs anyway)                                  
+  2.2 -- single session (may revist later, but single should be fine)       
+  2.3 -- use frontend/                                                      
+  2.4 -- both options would be awesome                                      
+  2.5 -- Option A seems fine                                                
+
+● Excellent. Let me capture the architectural decisions, then move to design sketches.
+
+  ---
+  ADR Identification
+
+  For this implementation project, I'll include these as inline ADRs in the PRD (they're standard patterns, not requiring separate files):
+  ┌─────────────┬────────────────┬─────────────────┬───────────────────────────┐
+  │     ID      │    Decision    │     Choice      │         Rationale         │
+  ├─────────────┼────────────────┼─────────────────┼───────────────────────────┤
+  │             │ Process        │ Two-process     │ Simpler dev experience,   │
+  │ ADR-WEB-001 │ architecture   │ (FastAPI +      │ hot reload for frontend,  │
+  │             │                │ Vite)           │ can wrap later if needed  │
+  ├─────────────┼────────────────┼─────────────────┼───────────────────────────┤
+  │             │                │ WebSocket for   │ Low latency for           │
+  │ ADR-WEB-002 │ Real-time      │ ticks, REST for │ simulation updates,       │
+  │             │ communication  │  commands       │ simple request/response   │
+  │             │                │                 │ for controls              │
+  ├─────────────┼────────────────┼─────────────────┼───────────────────────────┤
+  │             │ State          │                 │ Lightweight, good         │
+  │ ADR-WEB-003 │ management     │ Zustand         │ TypeScript support,       │
+  │             │                │                 │ simpler than Redux        │
+  ├─────────────┼────────────────┼─────────────────┼───────────────────────────┤
+  │             │                │ Canvas 2D       │                           │
+  │ ADR-WEB-004 │ Grid rendering │ (upgrade to     │ Sufficient for expected   │
+  │             │                │ Pixi.js if      │ agent counts, simpler API │
+  │             │                │ needed)         │                           │
+  ├─────────────┼────────────────┼─────────────────┼───────────────────────────┤
+  │             │                │ Single          │ Simpler state management, │
+  │ ADR-WEB-005 │ Session model  │ simulation per  │  sufficient for research  │
+  │             │                │ backend         │ use                       │
+  │             │                │ instance        │                           │
+  └─────────────┴────────────────┴─────────────────┴───────────────────────────┘
+  Any of these you'd want as separate ADR files, or are inline references sufficient?
+
+  ---
+  Phase 2.5: Design Sketches
+
+  Since this is a visualization project, let me sketch the main UI components.
+
+  Design Sketch 1: Main Layout
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  [Logo] Microecon Simulation          [Config] [Network] [Export]   │
+  ├─────────────────────────────────────────────────────────────────────┤
+  │                                              │                      │
+  │                                              │   Metrics Panel      │
+  │                                              │   ─────────────      │
+  │                                              │   Tick: 142          │
+  │         Grid Canvas                          │   Trades: 28         │
+  │         (600x600)                            │   Welfare: 456.2     │
+  │                                              │   Gains: +12.4       │
+  │         [Agents as colored circles]          │                      │
+  │         [Trade flash animations]             │   ─────────────      │
+  │                                              │   Selected Agent     │
+  │                                              │   ID: a1b2c3         │
+  │                                              │   α: 0.65            │
+  │                                              │   Utility: 45.3      │
+  │                                              │                      │
+  ├──────────────────────────────────────────────┴──────────────────────┤
+  │  [▶ Play] [⏸ Pause] [⏭ Step] [↺ Reset]    Speed: [━━━●━━━]  1.0x   │
+  ├─────────────────────────────────────────────────────────────────────┤
+  │                     Time Series Charts                              │
+  │   Welfare ────────────────────    Trade Count ──────────────────    │
+  │   [line chart]                    [line chart]                      │
+  └─────────────────────────────────────────────────────────────────────┘
+
+  Information Encoded:
+  Visual Property: Agent circle color
+  Data Property: α (preference param)
+  Why: Red (α→0) to blue (α→1), matches DearPyGui
+  ────────────────────────────────────────
+  Visual Property: Agent position
+  Data Property: Grid cell
+  Why: Direct mapping
+  ────────────────────────────────────────
+  Visual Property: Trade flash (line)
+  Data Property: Recent trade
+  Why: 2-second fade between trading agents
+  Interaction Model:
+  - Hover agent: Show tooltip (ID, α, utility, endowment)
+  - Click agent: Select, show details in panel, optional perception radius overlay
+  - Click empty: Deselect
+
+  Design Sketch 2: Overlays (toggleable)
+
+  ┌─────────────────────────┐
+  │ Overlays:               │
+  │ [x] Movement trails     │  ← Fading path lines behind agents
+  │ [ ] Perception radius   │  ← Circle around selected agent
+  │ [ ] Surplus heatmap     │  ← Background color gradient
+  │ [ ] Trade connections   │  ← Lines between recent trade partners
+  └─────────────────────────┘
+
+  Design Sketch 3: Trade Network Panel (separate window/modal)
+
+  ┌──────────────────────────────────────────────┐
+  │  Trade Network                    [X] Close  │
+  ├──────────────────────────────────────────────┤
+  │  Layout: (•) Force-directed  ( ) Circular    │
+  ├──────────────────────────────────────────────┤
+  │                                              │
+  │           ●───────●                          │
+  │          /         \                         │
+  │         ●           ●                        │
+  │          \         /                         │
+  │           ●───────●                          │
+  │                                              │
+  │  [Nodes = agents, colored by α]              │
+  │  [Edges = trades, thickness = frequency]     │
+  │  [Edge color = recency (bright = recent)]    │
+  ├──────────────────────────────────────────────┤
+  │  Density: 0.42  |  Clusters: 2  |  Avg Deg: 3│
+  └──────────────────────────────────────────────┘
+
+  Design Sketch 4: Edgeworth Box (modal on trade click)
+
+  ┌──────────────────────────────────────────────┐
+  │  Trade Inspection: a1b2 ↔ c3d4    [X] Close  │
+  ├──────────────────────────────────────────────┤
+  │     Good Y                                   │
+  │       ▲                                      │
+  │       │    ╲  IC₂                           │
+  │       │     ╲    ●──────● Trade             │
+  │       │      ╲  /                           │
+  │       │       ╲/   Contract curve           │
+  │       │       /╲                            │
+  │       │      /  ╲                           │
+  │       │  IC₁     ╲                          │
+  │       └──────────────────► Good X           │
+  │                                              │
+  │  Agent 1: α=0.65  Utility: 45.3 → 48.1 (+2.8)│
+  │  Agent 2: α=0.35  Utility: 32.1 → 33.9 (+1.8)│
+  └──────────────────────────────────────────────┘
+
+  Design Sketch 5: Configuration Modal
+
+  ┌──────────────────────────────────────────────┐
+  │  Simulation Configuration         [X] Close  │
+  ├──────────────────────────────────────────────┤
+  │  Agents:        [  10  ] ▼                   │
+  │  Grid Size:     [  15  ] ▼                   │
+  │  Seed:          [  42  ]                     │
+  │                                              │
+  │  ── Institutions ──                          │
+  │  Bargaining:    (•) Nash  ( ) Rubinstein     │
+  │  Matching:      (•) Opportunistic ( ) Stable │
+  │                                              │
+  │  ── Search ──                                │
+  │  Perception:    [━━━●━━━] 7.0                │
+  │  Discount:      [━━━━●━━] 0.9                │
+  │                                              │
+  │           [Cancel]  [Apply & Reset]          │
+  └──────────────────────────────────────────────┘
+
+  ---
+  Potential Issues
+
+  1. Canvas performance with many agents - Mitigated by starting with Canvas 2D, upgrading to Pixi.js if >50 agents causes issues
+  2. Trade flash timing - Need to track trade events and animate independently of tick rate
+  3. Chart updates at high speed - May need to throttle chart redraws to 10fps even if simulation runs faster
+
+  ---
+  Do these designs align with your expectations? Any adjustments before I proceed to verification design and scope confirmation?
+
+✻ Cooked for 45s
+
+❯ designs look good, proceed 
+
+● ---
+  Phase 3: Verification Design
+
+  Since this is an Implementation Project, verification focuses on functional criteria and visual inspection.
+
+  Verification by Feature Area
+
+  Backend API
+  Feature: REST endpoints
+  Verification: pytest tests for each endpoint (status codes, response schemas)
+  ────────────────────────────────────────
+  Feature: WebSocket streaming
+  Verification: Integration test: connect, receive ticks, verify JSON structure
+  ────────────────────────────────────────
+  Feature: Simulation lifecycle
+  Verification: Test start/stop/step/reset state transitions
+  ────────────────────────────────────────
+  Feature: Configuration
+  Verification: Test config GET/POST, verify simulation uses new params
+  Frontend Core
+  Feature: WebSocket connection
+  Verification: Connection status indicator works; reconnects on disconnect
+  ────────────────────────────────────────
+  Feature: Grid rendering
+  Verification: Agents appear at correct positions; colors match α values
+  ────────────────────────────────────────
+  Feature: Controls
+  Verification: Play/pause/step/reset buttons trigger correct backend calls
+  ────────────────────────────────────────
+  Feature: Speed slider
+  Verification: Tick rate changes proportionally
+  Visualizations
+  Feature: Trade animations
+  Verification: Line appears between agents on trade, fades over 2s
+  ────────────────────────────────────────
+  Feature: Hover tooltips
+  Verification: Correct agent data displayed
+  ────────────────────────────────────────
+  Feature: Agent selection
+  Verification: Click selects, panel updates, perception overlay (if enabled)
+  ────────────────────────────────────────
+  Feature: Time-series charts
+  Verification: Welfare/trade count update each tick, scale appropriately
+  ────────────────────────────────────────
+  Feature: Overlays
+  Verification: Each toggle enables/disables corresponding visual layer
+  Advanced Features
+  Feature: Trade network panel
+  Verification: Opens, displays graph, layout toggle works
+  ────────────────────────────────────────
+  Feature: Edgeworth box
+  Verification: Opens on trade click, shows correct indifference curves
+  ────────────────────────────────────────
+  Feature: Configuration modal
+  Verification: Changes apply, simulation resets with new params
+  ────────────────────────────────────────
+  Feature: Export
+  Verification: PNG/CSV downloads contain correct data
+  Success Metrics (from Vision Doc)
+
+  1. Latency: <100ms from Python tick to rendered frame
+  2. Correctness: Agent positions match Python state exactly
+  3. Stability: No connection drops over 5-minute session
+  4. Responsiveness: UI remains responsive at 10+ ticks/second
+
+  ---
+  Phase 4: Scope Confirmation
+
+  Scope: Full DearPyGui feature parity (live mode only, replay deferred)
+
+  Included:
+  - Grid visualization with agents
+  - Play/pause/step/reset controls + speed slider
+  - Metrics panel (tick, trades, welfare, gains)
+  - Hover tooltips, click selection
+  - Time-series charts (welfare, trade count)
+  - Overlays (trails, perception radius, surplus heatmap, trade connections)
+  - Trade network panel (force-directed + circular layouts)
+  - Edgeworth box trade inspection
+  - Configuration modal
+  - Export (PNG, CSV, JSON)
+  - Convenience script to run both processes
+
+  Explicitly deferred:
+  - Replay mode (load from .jsonl files)
+  - Dual replay (side-by-side comparison)
+  - Scenario browser
+  - Agent perspective mode (belief visualization)
+  - GIF/video export
+  - Multi-session support
+
+  Does this scope look correct?
+
+❯ yes, proceed 
+
+● ---
+  Phase 5: Loop Parameters
+
+  Q5.1: Iteration budget for the entire PRD
+
+  Given the scope (full feature parity, ~6-7 phases, significant new code in both Python and TypeScript):
+  - Conservative (40-60): Likely too tight
+  - Standard (60-100): Reasonable if work goes smoothly
+  - Extended (100-150): Safer given two-language codebase and new framework
+
+  Recommendation: 100 iterations (extended, given TypeScript is new territory)
+
+  Your preference?
+
+  Q5.2: Progress tracking
+  - Git commits only
+  - Git commits + progress.txt
+  - All methods (git + progress.txt + PRD status updates) ← Recommended
+
+  Q5.3: Phase transition behavior
+
+  Given this is a significant build with visual components you'll want to inspect:
+  - continue: Proceed automatically (HOTL, you're watching)
+  - ask: Pause and request approval between phases ← Recommended for this project
+  - stop: Emit phase-specific promise, require new loop invocation
+
+  Q5.4: Escalation triggers (loop should STOP if):
+
+  Defaults:
+  - Test failures in simulation core (existing 669 tests must pass)
+  - WebSocket connection architecture changes without discussion
+  - Significant deviation from design sketches
+
+  Any custom triggers to add?
+
+❯ 5.1 -- let's go with 20, and if we need to run it again then we can       
+  5.2 -- all methods                                                        
+  5.3 -- continue                                                           
+  5.4 -- looks good                                                         
+
+● ---
+  Convergence Check
+
+  Project: Web Frontend for Microecon Simulation
+  Project Type: Implementation
+
+  Vision in my words: Replace the DearPyGui visualization with a browser-based React/TypeScript frontend communicating with a FastAPI backend via WebSocket/REST. The Python simulation core remains unchanged. The web UI should achieve feature parity with DearPyGui for live simulation mode, with better styling flexibility and faster design iteration.
+
+  Scope: Full DearPyGui feature parity (live mode only)
+
+  Directory Structure:
+  microecon/
+  ├── src/microecon/          # Existing (unchanged)
+  ├── backend/                # NEW: FastAPI server
+  ├── frontend/               # NEW: React/TypeScript app
+  └── pyproject.toml          # Add fastapi, uvicorn to deps
+
+  Phases I'll define:
+  1. Infrastructure: Backend skeleton, frontend scaffold, WebSocket connection, convenience script
+  2. Grid & Controls: Canvas rendering, play/pause/step/reset, speed slider, metrics panel
+  3. Interaction: Hover tooltips, click selection, agent details panel
+  4. Charts: Time-series charts (welfare, trade count) with Recharts
+  5. Overlays: Movement trails, perception radius, surplus heatmap, trade connections
+  6. Trade Inspection: Edgeworth box modal with indifference curves
+  7. Network Panel: Trade network visualization with D3-force
+  8. Configuration & Export: Config modal, PNG/CSV/JSON export
+
+  Key clarifications received:
+  - backend/ and frontend/ directories at project root
+  - Web dependencies as core (not optional)
+  - Single session, live mode only
+  - Phase transitions: continue automatically
+  - 20 iterations (can restart if needed)
+
+  ADRs: Inline only (ADR-WEB-001 through ADR-WEB-005)
+
+  Verification approach: Functional tests, integration tests, visual inspection, latency measurement
+
+  Does this accurately capture what the PRD should specify?
+
+❯ yes, proceed 
+
+● Now generating the PRD and startup document.
+
+● Write(docs/PRD-WEB-FRONTEND.json)
+  ⎿  Wrote 925 lines to docs/PRD-WEB-FRONTEND.json                       
+      1 {
+      2   "task": {
+      3     "name": "Web Frontend for Microecon Simulation",
+      4     "description": "Replace DearPyGui visualization with a browse
+        r-based React/TypeScript frontend communicating with a FastAPI ba
+        ckend. Achieve feature parity with DearPyGui for live simulation 
+        mode, with improved styling flexibility and faster design iterati
+        on.",
+      5     "created": "2026-01-07",
+      6     "vision_source": "docs/WEB-FRONTEND-EXPLORATION.md",
+      7     "project_type": "implementation",
+      8     "completion_promise": "<promise>WEB-FRONTEND-COMPLETE</promis
+        e>"
+      9   },
+     … +915 lines (ctrl+o to expand)
+
+● Write(docs/START-RALPH-LOOP-WEB-FRONTEND.md)
+  ⎿  Wrote 187 lines to docs/START-RALPH-LOOP-WEB-FRONTEND.md    
+      1 # Ralph Loop Startup: Web Frontend
+      2 Copy and paste the command below to start the ralph-loop.
+      3 ---
+      4 ## Pre-flight Checklist
+      5 Before starting:
+      6 - [ ] All existing tests pass: `uv run pytest`
+     … +177 lines (ctrl+o to expand)
+
+● ---
+  Phase 6 Complete: Interview Artifacts Generated
+
+  Created two files:
+
+  1. docs/PRD-WEB-FRONTEND.json - Full PRD with:
+    - 47 features across 8 phases
+    - Inline ADRs (ADR-WEB-001 through ADR-WEB-006)
+    - Verification criteria for each feature
+    - Escalation triggers
+    - Loop parameters (20 iterations, continue mode)
+  2. docs/START-RALPH-LOOP-WEB-FRONTEND.md - Startup document with:
+    - Pre-flight checklist
+    - Copy-paste startup prompt
+    - Resume prompt for interrupted loops
+    - Phase-specific resume prompts
+    - Expected outputs by phase
+    - Verification commands
+
+  ---
+  Interview Complete
+
+  Summary:
+  - Scope: Full DearPyGui feature parity (live mode), 47 features, 8 phases
+  - Architecture: backend/ (FastAPI) + frontend/ (React/Vite/shadcn)
+  - Iterations: 20 (can restart if needed)
+  - Phase transitions: Automatic continue
+
+  To start the ralph-loop, use the startup prompt from docs/START-RALPH-LOOP-WEB-FRONTEND.md.
+
+  Would you like me to make any adjustments to the PRD before you begin?
+
+✻ Cogitated for 3m 15s
+
+
+

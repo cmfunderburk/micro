@@ -1,6 +1,7 @@
 import { useSimulationSocket } from '@/hooks/useSimulationSocket';
 import { useSimulationStore } from '@/store';
 import { useComparisonStore } from '@/store/comparisonStore';
+import { useReplayStore } from '@/store/replayStore';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { GridCanvas, AgentTooltip } from '@/components/Grid';
@@ -17,6 +18,7 @@ import {
   ComparisonTradeChart,
   ComparisonMetrics,
 } from '@/components/Comparison';
+import { ReplayLoader, ReplayView } from '@/components/Replay';
 import {
   Dialog,
   DialogContent,
@@ -37,6 +39,9 @@ function App() {
 
   // Comparison mode state
   const comparisonMode = useComparisonStore((state) => state.comparisonMode);
+
+  // Replay mode state
+  const replayMode = useReplayStore((state) => state.replayMode);
 
   // Network panel state
   const [networkPanelOpen, setNetworkPanelOpen] = useState(false);
@@ -135,13 +140,14 @@ function App() {
         {/* Utility buttons */}
         <div className="flex items-center gap-1">
           <ComparisonControls sendCommand={sendCommand} />
+          <ReplayLoader />
           <Button
             onClick={() => setTradeHistoryOpen(true)}
             variant="outline"
             size="icon"
             className="h-8 w-8"
             title="Trade History"
-            disabled={comparisonMode}
+            disabled={comparisonMode || replayMode}
           >
             <History className="h-4 w-4" />
           </Button>
@@ -151,7 +157,7 @@ function App() {
             size="icon"
             className="h-8 w-8"
             title="Trade Network"
-            disabled={comparisonMode}
+            disabled={comparisonMode || replayMode}
           >
             <Network className="h-4 w-4" />
           </Button>
@@ -161,7 +167,7 @@ function App() {
             size="icon"
             className="h-8 w-8"
             title="Configuration"
-            disabled={comparisonMode}
+            disabled={comparisonMode || replayMode}
           >
             <Settings className="h-4 w-4" />
           </Button>
@@ -181,8 +187,36 @@ function App() {
         </div>
       </header>
 
-      {/* Main content - conditional on comparison mode */}
-      {comparisonMode ? (
+      {/* Main content - conditional on mode */}
+      {replayMode ? (
+        /* Replay mode layout */
+        <div className="flex-1 grid grid-cols-[200px_1fr_320px] gap-3 min-h-0">
+          {/* Left column: Replay info */}
+          <div className="flex flex-col gap-3 min-h-0">
+            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0">
+              <h2 className="text-sm font-semibold mb-2 text-zinc-400">Replay Mode</h2>
+              <p className="text-xs text-zinc-500">
+                Viewing saved simulation run. Use controls below the grid to navigate.
+              </p>
+            </div>
+            <div className="flex-1" />
+          </div>
+
+          {/* Middle column: Replay view */}
+          <div className="bg-zinc-900 rounded-lg border border-zinc-800 flex flex-col min-h-0">
+            <ReplayView />
+          </div>
+
+          {/* Right column: Placeholder */}
+          <div className="flex flex-col gap-3 min-h-0">
+            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-1 min-h-0 flex flex-col items-center justify-center">
+              <p className="text-xs text-zinc-500 text-center">
+                Charts coming soon for replay mode
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : comparisonMode ? (
         /* Comparison mode layout */
         <div className="flex-1 grid grid-cols-[200px_1fr_320px] gap-3 min-h-0">
           {/* Left column: Comparison Metrics */}

@@ -195,7 +195,14 @@ class TradeAnimation:
     agent1_id: str
     agent2_id: str
     start_time: float
-    duration: float = 0.5
+    duration: float = 2.0  # Increased from 0.5 for easier clicking (VIZ-012)
+    # Pre/post allocation data for Edgeworth box (VIZ-012)
+    pre_endow_1: Optional[tuple[float, float]] = None
+    pre_endow_2: Optional[tuple[float, float]] = None
+    post_alloc_1: Optional[tuple[float, float]] = None
+    post_alloc_2: Optional[tuple[float, float]] = None
+    alpha_1: Optional[float] = None
+    alpha_2: Optional[float] = None
 
 
 # ============================================================================
@@ -754,13 +761,51 @@ class VisualizationApp:
         self.selected_agent = None
 
     def record_trades(self, trades: list[TradeEvent]) -> None:
-        """Record trades for animation."""
+        """Record trades for animation with allocation data for Edgeworth box."""
         current_time = time.time()
         for trade in trades:
+            # Get agent data for Edgeworth box
+            agent1 = next((a for a in self.sim.agents if a.id == trade.agent1_id), None) if self.sim else None
+            agent2 = next((a for a in self.sim.agents if a.id == trade.agent2_id), None) if self.sim else None
+
+            # Extract pre-trade and post-trade allocations from outcome
+            # Note: After trade, agent.endowment == outcome.allocation
+            # Pre-trade endowments can be computed from total and allocation
+            pre_1 = post_1 = pre_2 = post_2 = None
+            alpha1 = alpha2 = None
+
+            if hasattr(trade, 'outcome') and trade.outcome is not None:
+                outcome = trade.outcome
+                post_1 = (outcome.allocation_1.x, outcome.allocation_1.y)
+                post_2 = (outcome.allocation_2.x, outcome.allocation_2.y)
+                # Pre-trade: total = post_1 + post_2, so we can estimate
+                # For now, use gains to estimate utility change
+                # Actually, store post allocations and use them for visualization
+
+            if agent1:
+                alpha1 = agent1.preferences.alpha
+                if post_1 is None:
+                    post_1 = (agent1.endowment.x, agent1.endowment.y)
+            if agent2:
+                alpha2 = agent2.preferences.alpha
+                if post_2 is None:
+                    post_2 = (agent2.endowment.x, agent2.endowment.y)
+
+            # Estimate pre-trade endowments (before this trade)
+            # Since we don't have actual pre-trade data, use current as approximation
+            pre_1 = post_1
+            pre_2 = post_2
+
             self.trade_animations.append(TradeAnimation(
                 agent1_id=trade.agent1_id,
                 agent2_id=trade.agent2_id,
                 start_time=current_time,
+                pre_endow_1=pre_1,
+                pre_endow_2=pre_2,
+                post_alloc_1=post_1,
+                post_alloc_2=post_2,
+                alpha_1=alpha1,
+                alpha_2=alpha2,
             ))
 
     def record_positions(self) -> None:
@@ -873,10 +918,43 @@ class VisualizationApp:
 
             # Check if point is close to line segment
             if self._point_near_line(x, y, p1[0], p1[1], p2[0], p2[1], threshold=15):
-                # Build TradeData for this animation
-                return self._build_trade_data(anim.agent1_id, anim.agent2_id)
+                # Build TradeData from animation data if available (VIZ-012 fix)
+                return self._build_trade_data_from_anim(anim, agent1, agent2)
 
         return None
+
+    def _build_trade_data_from_anim(
+        self, anim: TradeAnimation, agent1: AgentProxy, agent2: AgentProxy
+    ) -> TradeData:
+        """Build TradeData from animation with stored allocation data."""
+        # Use stored allocation data if available
+        endow_1 = anim.pre_endow_1 or (agent1.endowment_x, agent1.endowment_y)
+        endow_2 = anim.pre_endow_2 or (agent2.endowment_x, agent2.endowment_y)
+        alloc_1 = anim.post_alloc_1 or endow_1
+        alloc_2 = anim.post_alloc_2 or endow_2
+        alpha1 = anim.alpha_1 or agent1.alpha
+        alpha2 = anim.alpha_2 or agent2.alpha
+
+        # Compute utilities
+        def cobb_douglas_u(x: float, y: float, alpha: float) -> float:
+            if x <= 0 or y <= 0:
+                return 0.0
+            return (x ** alpha) * (y ** (1 - alpha))
+
+        return TradeData(
+            agent_a_id=anim.agent1_id,
+            alpha_a=alpha1,
+            endowment_a=endow_1,
+            allocation_a=alloc_1,
+            utility_a_before=cobb_douglas_u(endow_1[0], endow_1[1], alpha1),
+            utility_a_after=cobb_douglas_u(alloc_1[0], alloc_1[1], alpha1),
+            agent_b_id=anim.agent2_id,
+            alpha_b=alpha2,
+            endowment_b=endow_2,
+            allocation_b=alloc_2,
+            utility_b_before=cobb_douglas_u(endow_2[0], endow_2[1], alpha2),
+            utility_b_after=cobb_douglas_u(alloc_2[0], alloc_2[1], alpha2),
+        )
 
     def _point_near_line(
         self, px: float, py: float,

@@ -1,5 +1,6 @@
 import { useSimulationSocket } from '@/hooks/useSimulationSocket';
 import { useSimulationStore } from '@/store';
+import { useComparisonStore } from '@/store/comparisonStore';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { GridCanvas, AgentTooltip } from '@/components/Grid';
@@ -9,6 +10,13 @@ import { BeliefPanel } from '@/components/Beliefs';
 import { TradeHistoryPanel, EdgeworthModal } from '@/components/TradeInspection';
 import { NetworkPanel } from '@/components/Network';
 import { ConfigModal, ExportMenu } from '@/components/Config';
+import {
+  DualGridView,
+  ComparisonControls,
+  ComparisonWelfareChart,
+  ComparisonTradeChart,
+  ComparisonMetrics,
+} from '@/components/Comparison';
 import {
   Dialog,
   DialogContent,
@@ -26,6 +34,9 @@ function App() {
   const tick = useSimulationStore((state) => state.tick);
   const metrics = useSimulationStore((state) => state.metrics);
   const speed = useSimulationStore((state) => state.speed);
+
+  // Comparison mode state
+  const comparisonMode = useComparisonStore((state) => state.comparisonMode);
 
   // Network panel state
   const [networkPanelOpen, setNetworkPanelOpen] = useState(false);
@@ -123,12 +134,14 @@ function App() {
 
         {/* Utility buttons */}
         <div className="flex items-center gap-1">
+          <ComparisonControls sendCommand={sendCommand} />
           <Button
             onClick={() => setTradeHistoryOpen(true)}
             variant="outline"
             size="icon"
             className="h-8 w-8"
             title="Trade History"
+            disabled={comparisonMode}
           >
             <History className="h-4 w-4" />
           </Button>
@@ -138,6 +151,7 @@ function App() {
             size="icon"
             className="h-8 w-8"
             title="Trade Network"
+            disabled={comparisonMode}
           >
             <Network className="h-4 w-4" />
           </Button>
@@ -147,6 +161,7 @@ function App() {
             size="icon"
             className="h-8 w-8"
             title="Configuration"
+            disabled={comparisonMode}
           >
             <Settings className="h-4 w-4" />
           </Button>
@@ -166,89 +181,125 @@ function App() {
         </div>
       </header>
 
-      {/* Main three-column layout */}
-      <div className="flex-1 grid grid-cols-[200px_1fr_320px] gap-3 min-h-0">
-        {/* Left column: Metrics and Overlays */}
-        <div className="flex flex-col gap-3 min-h-0">
-          {/* Compact Metrics */}
-          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0">
-            <h2 className="text-sm font-semibold mb-2 text-zinc-400">Metrics</h2>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
-              <div className="flex justify-between items-center">
-                <span className="text-zinc-500 text-xs">Tick</span>
-                <span className="font-mono text-xs">{tick}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-zinc-500 text-xs">Trades</span>
-                <span className="font-mono text-xs">{metrics.cumulative_trades}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-zinc-500 text-xs">Welfare</span>
-                <span className="font-mono text-xs">{metrics.total_welfare.toFixed(1)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-zinc-500 text-xs">Gains</span>
-                <span className="font-mono text-xs text-green-500">
-                  +{metrics.welfare_gains.toFixed(1)}
-                </span>
+      {/* Main content - conditional on comparison mode */}
+      {comparisonMode ? (
+        /* Comparison mode layout */
+        <div className="flex-1 grid grid-cols-[200px_1fr_320px] gap-3 min-h-0">
+          {/* Left column: Comparison Metrics */}
+          <div className="flex flex-col gap-3 min-h-0">
+            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0">
+              <h2 className="text-sm font-semibold mb-2 text-zinc-400">Comparison</h2>
+              <ComparisonMetrics />
+            </div>
+            <div className="flex-1" />
+          </div>
+
+          {/* Middle column: Dual grids */}
+          <div className="bg-zinc-900 rounded-lg border border-zinc-800 flex flex-col min-h-0">
+            <DualGridView />
+          </div>
+
+          {/* Right column: Comparison Charts */}
+          <div className="flex flex-col gap-3 min-h-0">
+            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-1 min-h-0 flex flex-col">
+              <h2 className="text-sm font-semibold mb-2 text-zinc-400 flex-shrink-0">Welfare Comparison</h2>
+              <div className="flex-1 min-h-0">
+                <ComparisonWelfareChart />
               </div>
             </div>
-          </div>
-
-          {/* Overlays */}
-          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0">
-            <h2 className="text-sm font-semibold mb-2 text-zinc-400">Overlays</h2>
-            <OverlayToggles />
-          </div>
-
-          {/* Beliefs */}
-          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0 overflow-hidden">
-            <h2 className="text-sm font-semibold mb-2 text-zinc-400">Beliefs</h2>
-            <BeliefPanel />
-          </div>
-
-          {/* Perspective Mode */}
-          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0">
-            <h2 className="text-sm font-semibold mb-2 text-zinc-400">Perspective</h2>
-            <PerspectiveMode />
-          </div>
-
-          {/* Spacer to push content up */}
-          <div className="flex-1" />
-        </div>
-
-        {/* Middle column: Grid canvas */}
-        <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex flex-col min-h-0">
-          <div
-            ref={gridContainerRef}
-            className="flex-1 flex items-center justify-center min-h-0"
-          >
-            <div className="relative">
-              <GridCanvas width={gridSize} height={gridSize} />
-              <AgentTooltip />
+            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-1 min-h-0 flex flex-col">
+              <h2 className="text-sm font-semibold mb-2 text-zinc-400 flex-shrink-0">Trades Comparison</h2>
+              <div className="flex-1 min-h-0">
+                <ComparisonTradeChart />
+              </div>
             </div>
           </div>
         </div>
+      ) : (
+        /* Normal mode layout */
+        <div className="flex-1 grid grid-cols-[200px_1fr_320px] gap-3 min-h-0">
+          {/* Left column: Metrics and Overlays */}
+          <div className="flex flex-col gap-3 min-h-0">
+            {/* Compact Metrics */}
+            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0">
+              <h2 className="text-sm font-semibold mb-2 text-zinc-400">Metrics</h2>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-500 text-xs">Tick</span>
+                  <span className="font-mono text-xs">{tick}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-500 text-xs">Trades</span>
+                  <span className="font-mono text-xs">{metrics.cumulative_trades}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-500 text-xs">Welfare</span>
+                  <span className="font-mono text-xs">{metrics.total_welfare.toFixed(1)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-500 text-xs">Gains</span>
+                  <span className="font-mono text-xs text-green-500">
+                    +{metrics.welfare_gains.toFixed(1)}
+                  </span>
+                </div>
+              </div>
+            </div>
 
-        {/* Right column: Charts */}
-        <div className="flex flex-col gap-3 min-h-0">
-          {/* Welfare Chart */}
-          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-1 min-h-0 flex flex-col">
-            <h2 className="text-sm font-semibold mb-2 text-zinc-400 flex-shrink-0">Welfare</h2>
-            <div className="flex-1 min-h-0">
-              <WelfareChart />
+            {/* Overlays */}
+            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0">
+              <h2 className="text-sm font-semibold mb-2 text-zinc-400">Overlays</h2>
+              <OverlayToggles />
+            </div>
+
+            {/* Beliefs */}
+            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0 overflow-hidden">
+              <h2 className="text-sm font-semibold mb-2 text-zinc-400">Beliefs</h2>
+              <BeliefPanel />
+            </div>
+
+            {/* Perspective Mode */}
+            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-shrink-0">
+              <h2 className="text-sm font-semibold mb-2 text-zinc-400">Perspective</h2>
+              <PerspectiveMode />
+            </div>
+
+            {/* Spacer to push content up */}
+            <div className="flex-1" />
+          </div>
+
+          {/* Middle column: Grid canvas */}
+          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex flex-col min-h-0">
+            <div
+              ref={gridContainerRef}
+              className="flex-1 flex items-center justify-center min-h-0"
+            >
+              <div className="relative">
+                <GridCanvas width={gridSize} height={gridSize} />
+                <AgentTooltip />
+              </div>
             </div>
           </div>
 
-          {/* Trade Count Chart */}
-          <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-1 min-h-0 flex flex-col">
-            <h2 className="text-sm font-semibold mb-2 text-zinc-400 flex-shrink-0">Trades</h2>
-            <div className="flex-1 min-h-0">
-              <TradeCountChart />
+          {/* Right column: Charts */}
+          <div className="flex flex-col gap-3 min-h-0">
+            {/* Welfare Chart */}
+            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-1 min-h-0 flex flex-col">
+              <h2 className="text-sm font-semibold mb-2 text-zinc-400 flex-shrink-0">Welfare</h2>
+              <div className="flex-1 min-h-0">
+                <WelfareChart />
+              </div>
+            </div>
+
+            {/* Trade Count Chart */}
+            <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800 flex-1 min-h-0 flex flex-col">
+              <h2 className="text-sm font-semibold mb-2 text-zinc-400 flex-shrink-0">Trades</h2>
+              <div className="flex-1 min-h-0">
+                <TradeCountChart />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Trade History Modal */}
       <Dialog open={tradeHistoryOpen} onOpenChange={setTradeHistoryOpen}>

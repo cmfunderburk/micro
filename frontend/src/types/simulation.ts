@@ -77,11 +77,12 @@ export interface TickData {
 }
 
 export interface WebSocketMessage {
-  type: "init" | "tick" | "status" | "reset" | "speed" | "config" | "error";
+  type: "init" | "tick" | "status" | "reset" | "speed" | "config" | "error" | "comparison_init" | "comparison_tick" | "comparison_exit";
   running?: boolean;
   speed?: number;
   message?: string;
   config?: SimulationConfig;
+  comparison_mode?: boolean;
 }
 
 export type TickMessage = TickData & WebSocketMessage;
@@ -91,4 +92,31 @@ export interface TimeSeriesPoint {
   tick: number;
   welfare: number;
   trades: number;
+}
+
+// Comparison mode types
+export interface ComparisonSimulation {
+  sim_id: string;
+  label: string;
+  tick: number;
+  agents: Agent[];
+  trades: Trade[];
+  metrics: Metrics;
+  config: {
+    grid_size: number;
+  };
+  beliefs: BeliefMap;
+}
+
+export interface ComparisonTickData {
+  comparison_mode: boolean;
+  simulations: ComparisonSimulation[];
+}
+
+export interface ComparisonTimeSeriesPoint {
+  tick: number;
+  welfare_a: number;
+  welfare_b: number;
+  trades_a: number;
+  trades_b: number;
 }

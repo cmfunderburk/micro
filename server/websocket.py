@@ -140,6 +140,55 @@ class ConnectionManager:
                     pass
                 self._simulation_task = None
 
+    async def enter_comparison_mode(
+        self,
+        config1: Any,
+        config2: Any,
+        label1: str = "A",
+        label2: str = "B",
+    ) -> None:
+        """Enter comparison mode with two simulations."""
+        async with self._lock:
+            # Stop any running simulation
+            if self._simulation_task is not None:
+                manager.stop()
+                self._simulation_task.cancel()
+                try:
+                    await self._simulation_task
+                except asyncio.CancelledError:
+                    pass
+                self._simulation_task = None
+
+            # Create comparison simulations
+            sim_id1, sim_id2 = manager.create_comparison(config1, config2, label1, label2)
+
+            # Broadcast comparison state to all clients
+            state = manager.get_state()
+            state["type"] = "comparison_init"
+            await self.broadcast(state)
+
+    async def exit_comparison_mode(self) -> None:
+        """Exit comparison mode and return to single simulation."""
+        async with self._lock:
+            # Stop any running simulation
+            if self._simulation_task is not None:
+                manager.stop()
+                self._simulation_task.cancel()
+                try:
+                    await self._simulation_task
+                except asyncio.CancelledError:
+                    pass
+                self._simulation_task = None
+
+            manager.exit_comparison()
+            manager.create_simulation()
+
+            # Broadcast exit state
+            tick_data = manager.get_tick_data()
+            tick_data["type"] = "comparison_exit"
+            tick_data["config"] = manager.config.to_dict()
+            await self.broadcast(tick_data)
+
     async def _simulation_loop(self) -> None:
         """Main simulation loop that broadcasts to all clients."""
         while manager.running:
@@ -147,8 +196,12 @@ class ConnectionManager:
             manager.step()
 
             # Broadcast tick data to all connected clients
-            tick_data = manager.get_tick_data()
-            tick_data["type"] = "tick"
+            if manager.comparison_mode:
+                tick_data = manager.get_comparison_tick_data()
+                tick_data["type"] = "comparison_tick"
+            else:
+                tick_data = manager.get_tick_data()
+                tick_data["type"] = "tick"
             await self.broadcast(tick_data)
 
             # Wait based on speed setting
@@ -168,18 +221,23 @@ async def simulation_websocket(websocket: WebSocket) -> None:
     - Server sends initial state
     - Client can send commands: {"command": "start"|"stop"|"step"|"reset"|"speed", ...}
     - Server streams tick data when running
+    - Comparison mode: {"command": "comparison", "config1": {...}, "config2": {...}}
 
     All clients share a single simulation. Commands from any client affect all clients.
     """
     await connection_manager.connect(websocket)
 
     # Send initial state
-    if manager.simulation is None:
-        manager.create_simulation()
-
-    initial_state = manager.get_tick_data()
-    initial_state["type"] = "init"
-    initial_state["config"] = manager.config.to_dict()
+    if manager.comparison_mode:
+        initial_state = manager.get_state()
+        initial_state["type"] = "init"
+    else:
+        if manager.simulation is None:
+            manager.create_simulation()
+        initial_state = manager.get_tick_data()
+        initial_state["type"] = "init"
+        initial_state["config"] = manager.config.to_dict()
+        initial_state["comparison_mode"] = False
     initial_state["running"] = manager.running
     await websocket.send_json(initial_state)
 
@@ -203,8 +261,12 @@ async def simulation_websocket(websocket: WebSocket) -> None:
             elif command == "step":
                 if not manager.running:
                     manager.step()
-                    tick_data = manager.get_tick_data()
-                    tick_data["type"] = "tick"
+                    if manager.comparison_mode:
+                        tick_data = manager.get_comparison_tick_data()
+                        tick_data["type"] = "comparison_tick"
+                    else:
+                        tick_data = manager.get_tick_data()
+                        tick_data["type"] = "tick"
                     # Broadcast step to all clients
                     await connection_manager.broadcast(tick_data)
 
@@ -222,6 +284,21 @@ async def simulation_websocket(websocket: WebSocket) -> None:
                 config_data = data.get("config", {})
                 new_config = SimulationConfig.from_dict(config_data)
                 await connection_manager.update_config(new_config)
+
+            elif command == "comparison":
+                # Enter comparison mode with two configs
+                from server.simulation_manager import SimulationConfig
+                config1_data = data.get("config1", {})
+                config2_data = data.get("config2", {})
+                label1 = data.get("label1", "A")
+                label2 = data.get("label2", "B")
+                config1 = SimulationConfig.from_dict(config1_data)
+                config2 = SimulationConfig.from_dict(config2_data)
+                await connection_manager.enter_comparison_mode(config1, config2, label1, label2)
+
+            elif command == "exit_comparison":
+                # Exit comparison mode
+                await connection_manager.exit_comparison_mode()
 
             else:
                 await websocket.send_json({

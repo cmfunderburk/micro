@@ -29,7 +29,7 @@ trap cleanup EXIT
 # Start backend
 echo -e "${GREEN}Starting backend on http://localhost:8000...${NC}"
 cd "$PROJECT_ROOT"
-uv run python -m backend --reload &
+uv run uvicorn server.app:create_app --factory --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 
 # Wait for backend to start

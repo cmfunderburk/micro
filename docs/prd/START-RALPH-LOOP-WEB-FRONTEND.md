@@ -39,7 +39,7 @@ KEY DECISIONS (from ADRs):
 
 REFERENCE: docs/FEATURE-PARITY-REFERENCE.md has full Python feature inventory
 
-Track progress via git commits. Continue through phases automatically (HOTL mode)." --max-iterations 20 --completion-promise "<promise>WEB-FRONTEND-PARITY-COMPLETE</promise>"
+Track progress via git commits. Continue through phases automatically (HOTL mode)." --max-iterations 20 --completion-promise "WEB-FRONTEND-PARITY-COMPLETE"
 ```
 
 ---
@@ -54,7 +54,7 @@ Check current state:
 2. Review recent git commits
 3. Check which phase was in progress
 
-Continue from where execution stopped. HOTL mode - continue through phases automatically." --max-iterations 20 --completion-promise "<promise>WEB-FRONTEND-PARITY-COMPLETE</promise>"
+Continue from where execution stopped. HOTL mode - continue through phases automatically." --max-iterations 20 --completion-promise "WEB-FRONTEND-PARITY-COMPLETE"
 ```
 
 ---

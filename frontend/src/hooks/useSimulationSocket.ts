@@ -6,6 +6,9 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useSimulationStore } from '@/store';
 import type { TickMessage, SimulationConfig } from '@/types/simulation';
 
+// Get reset function from store (outside of hook to avoid selector issues)
+const getResetFn = () => useSimulationStore.getState().reset;
+
 export type Command =
   | { command: 'start' }
   | { command: 'stop' }
@@ -59,8 +62,26 @@ export function useSimulationSocket() {
         switch (data.type) {
           case 'init':
           case 'tick':
+            updateTickData({
+              tick: data.tick,
+              agents: data.agents,
+              trades: data.trades,
+              metrics: data.metrics,
+              config: data.config ? { grid_size: data.config.grid_size } : undefined,
+            });
+            if (data.config) {
+              setConfig(data.config);
+            }
+            // Sync running state from init message
+            if (data.type === 'init' && data.running !== undefined) {
+              setRunning(data.running);
+            }
+            break;
+
           case 'reset':
           case 'config':
+            // Clear all UI state first, then set new data
+            getResetFn()();
             updateTickData({
               tick: data.tick,
               agents: data.agents,

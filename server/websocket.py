@@ -14,10 +14,17 @@ ws_router = APIRouter()
 
 
 class ConnectionManager:
-    """Manages WebSocket connections."""
+    """Manages WebSocket connections and shared simulation loop.
+
+    All connected clients share a single simulation instance.
+    The simulation loop is started once when any client requests start,
+    and stopped when all clients disconnect or any client requests stop.
+    """
 
     def __init__(self) -> None:
         self.active_connections: list[WebSocket] = []
+        self._simulation_task: asyncio.Task | None = None
+        self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -40,24 +47,116 @@ class ConnectionManager:
         for conn in disconnected:
             self.disconnect(conn)
 
+    async def start_simulation(self) -> None:
+        """Start the shared simulation loop if not already running."""
+        async with self._lock:
+            if self._simulation_task is None or self._simulation_task.done():
+                manager.start()
+                self._simulation_task = asyncio.create_task(self._simulation_loop())
+            # Broadcast status to all clients
+            await self.broadcast({"type": "status", "running": True})
+
+    async def stop_simulation(self) -> None:
+        """Stop the shared simulation loop."""
+        async with self._lock:
+            manager.stop()
+            if self._simulation_task is not None:
+                self._simulation_task.cancel()
+                try:
+                    await self._simulation_task
+                except asyncio.CancelledError:
+                    pass
+                self._simulation_task = None
+            # Broadcast status to all clients
+            await self.broadcast({"type": "status", "running": False})
+
+    async def reset_simulation(self) -> None:
+        """Reset simulation and broadcast to all clients."""
+        async with self._lock:
+            was_running = manager.running
+            # Stop loop if running
+            if self._simulation_task is not None:
+                manager.stop()
+                self._simulation_task.cancel()
+                try:
+                    await self._simulation_task
+                except asyncio.CancelledError:
+                    pass
+                self._simulation_task = None
+
+            # Reset simulation
+            manager.reset()
+
+            # Broadcast reset state to all clients
+            tick_data = manager.get_tick_data()
+            tick_data["type"] = "reset"
+            tick_data["config"] = manager.config.to_dict()
+            await self.broadcast(tick_data)
+
+            # Restart if was running
+            if was_running:
+                manager.start()
+                self._simulation_task = asyncio.create_task(self._simulation_loop())
+                await self.broadcast({"type": "status", "running": True})
+
+    async def update_config(self, config: Any) -> None:
+        """Update config and broadcast to all clients."""
+        async with self._lock:
+            was_running = manager.running
+            # Stop loop if running
+            if self._simulation_task is not None:
+                manager.stop()
+                self._simulation_task.cancel()
+                try:
+                    await self._simulation_task
+                except asyncio.CancelledError:
+                    pass
+                self._simulation_task = None
+
+            # Create new simulation with config
+            manager.create_simulation(config)
+
+            # Broadcast config state to all clients
+            tick_data = manager.get_tick_data()
+            tick_data["type"] = "config"
+            tick_data["config"] = manager.config.to_dict()
+            await self.broadcast(tick_data)
+
+            # Restart if was running
+            if was_running:
+                manager.start()
+                self._simulation_task = asyncio.create_task(self._simulation_loop())
+                await self.broadcast({"type": "status", "running": True})
+
+    async def cleanup_on_last_disconnect(self) -> None:
+        """Clean up when the last client disconnects."""
+        async with self._lock:
+            if len(self.active_connections) == 0 and self._simulation_task is not None:
+                manager.stop()
+                self._simulation_task.cancel()
+                try:
+                    await self._simulation_task
+                except asyncio.CancelledError:
+                    pass
+                self._simulation_task = None
+
+    async def _simulation_loop(self) -> None:
+        """Main simulation loop that broadcasts to all clients."""
+        while manager.running:
+            # Execute a tick
+            manager.step()
+
+            # Broadcast tick data to all connected clients
+            tick_data = manager.get_tick_data()
+            tick_data["type"] = "tick"
+            await self.broadcast(tick_data)
+
+            # Wait based on speed setting
+            delay = 1.0 / manager.speed
+            await asyncio.sleep(delay)
+
 
 connection_manager = ConnectionManager()
-
-
-async def simulation_loop() -> None:
-    """Main simulation loop that runs when simulation is started."""
-    while manager.running:
-        # Execute a tick
-        manager.step()
-
-        # Broadcast tick data to all connected clients
-        tick_data = manager.get_tick_data()
-        tick_data["type"] = "tick"
-        await connection_manager.broadcast(tick_data)
-
-        # Wait based on speed setting
-        delay = 1.0 / manager.speed
-        await asyncio.sleep(delay)
 
 
 @ws_router.websocket("/ws/simulation")
@@ -69,6 +168,8 @@ async def simulation_websocket(websocket: WebSocket) -> None:
     - Server sends initial state
     - Client can send commands: {"command": "start"|"stop"|"step"|"reset"|"speed", ...}
     - Server streams tick data when running
+
+    All clients share a single simulation. Commands from any client affect all clients.
     """
     await connection_manager.connect(websocket)
 
@@ -79,10 +180,8 @@ async def simulation_websocket(websocket: WebSocket) -> None:
     initial_state = manager.get_tick_data()
     initial_state["type"] = "init"
     initial_state["config"] = manager.config.to_dict()
+    initial_state["running"] = manager.running
     await websocket.send_json(initial_state)
-
-    # Background task for simulation loop
-    simulation_task: asyncio.Task | None = None
 
     try:
         while True:
@@ -96,73 +195,33 @@ async def simulation_websocket(websocket: WebSocket) -> None:
             command = data.get("command")
 
             if command == "start":
-                manager.start()
-                if simulation_task is None or simulation_task.done():
-                    simulation_task = asyncio.create_task(simulation_loop())
-                await websocket.send_json({"type": "status", "running": True})
+                await connection_manager.start_simulation()
 
             elif command == "stop":
-                manager.stop()
-                if simulation_task is not None:
-                    simulation_task.cancel()
-                    try:
-                        await simulation_task
-                    except asyncio.CancelledError:
-                        pass
-                    simulation_task = None
-                await websocket.send_json({"type": "status", "running": False})
+                await connection_manager.stop_simulation()
 
             elif command == "step":
                 if not manager.running:
                     manager.step()
                     tick_data = manager.get_tick_data()
                     tick_data["type"] = "tick"
-                    await websocket.send_json(tick_data)
+                    # Broadcast step to all clients
+                    await connection_manager.broadcast(tick_data)
 
             elif command == "reset":
-                was_running = manager.running
-                if simulation_task is not None:
-                    simulation_task.cancel()
-                    try:
-                        await simulation_task
-                    except asyncio.CancelledError:
-                        pass
-                    simulation_task = None
-                manager.reset()
-                tick_data = manager.get_tick_data()
-                tick_data["type"] = "reset"
-                tick_data["config"] = manager.config.to_dict()
-                await websocket.send_json(tick_data)
-                # Restart if was running
-                if was_running:
-                    manager.start()
-                    simulation_task = asyncio.create_task(simulation_loop())
+                await connection_manager.reset_simulation()
 
             elif command == "speed":
                 speed = data.get("speed", 1.0)
                 manager.set_speed(speed)
-                await websocket.send_json({"type": "speed", "speed": manager.speed})
+                # Broadcast speed to all clients
+                await connection_manager.broadcast({"type": "speed", "speed": manager.speed})
 
             elif command == "config":
                 from server.simulation_manager import SimulationConfig
                 config_data = data.get("config", {})
                 new_config = SimulationConfig.from_dict(config_data)
-                was_running = manager.running
-                if simulation_task is not None:
-                    simulation_task.cancel()
-                    try:
-                        await simulation_task
-                    except asyncio.CancelledError:
-                        pass
-                    simulation_task = None
-                manager.create_simulation(new_config)
-                tick_data = manager.get_tick_data()
-                tick_data["type"] = "config"
-                tick_data["config"] = manager.config.to_dict()
-                await websocket.send_json(tick_data)
-                if was_running:
-                    manager.start()
-                    simulation_task = asyncio.create_task(simulation_loop())
+                await connection_manager.update_config(new_config)
 
             else:
                 await websocket.send_json({
@@ -172,17 +231,8 @@ async def simulation_websocket(websocket: WebSocket) -> None:
 
     except WebSocketDisconnect:
         connection_manager.disconnect(websocket)
-        # Don't stop simulation on disconnect - other clients may be connected
+        await connection_manager.cleanup_on_last_disconnect()
     except Exception as e:
         connection_manager.disconnect(websocket)
-        # Log error but don't crash
+        await connection_manager.cleanup_on_last_disconnect()
         print(f"WebSocket error: {e}")
-    finally:
-        # Clean up simulation task if this was the last client
-        if simulation_task is not None and len(connection_manager.active_connections) == 0:
-            manager.stop()
-            simulation_task.cancel()
-            try:
-                await simulation_task
-            except asyncio.CancelledError:
-                pass

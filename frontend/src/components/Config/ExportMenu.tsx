@@ -14,10 +14,14 @@ export function ExportMenu() {
   const history = useSimulationStore((state) => state.history);
   const config = useSimulationStore((state) => state.config);
 
-  // Export PNG from canvas
+  // Export PNG from grid canvas
   const exportPNG = useCallback(() => {
-    const canvas = document.querySelector('canvas') as HTMLCanvasElement | null;
-    if (!canvas) return;
+    // Specifically target the grid canvas by id
+    const canvas = document.getElementById('grid-canvas') as HTMLCanvasElement | null;
+    if (!canvas) {
+      console.warn('Grid canvas not found');
+      return;
+    }
 
     const link = document.createElement('a');
     link.download = `simulation-tick-${tick}.png`;

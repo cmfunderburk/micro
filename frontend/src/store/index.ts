@@ -49,8 +49,9 @@ interface SimulationState {
   positionHistory: PositionHistory;
   maxTrailLength: number;
 
-  // Trade connections for overlay
+  // Trade connections for overlay (pruned to maxTradeConnections)
   tradeConnections: TradeConnection[];
+  maxTradeConnections: number;
 
   // Trade history for inspection
   tradeHistory: Trade[];
@@ -66,11 +67,10 @@ interface SimulationState {
   hoveredAgentId: string | null;
   setHoveredAgentId: (id: string | null) => void;
 
-  // Overlays
+  // Overlays (all default to off per VISUALIZATION.md)
   overlays: {
     trails: boolean;
     perceptionRadius: boolean;
-    heatmap: boolean;
     tradeConnections: boolean;
   };
   toggleOverlay: (overlay: keyof SimulationState['overlays']) => void;
@@ -129,6 +129,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
   // Trade connections for overlay
   tradeConnections: [],
+  maxTradeConnections: 100,
 
   // Trade history for inspection
   tradeHistory: [],
@@ -144,11 +145,10 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   hoveredAgentId: null,
   setHoveredAgentId: (id) => set({ hoveredAgentId: id }),
 
-  // Overlays
+  // Overlays (all default to off per VISUALIZATION.md)
   overlays: {
     trails: false,
-    perceptionRadius: true,
-    heatmap: false,
+    perceptionRadius: false,
     tradeConnections: false,
   },
   toggleOverlay: (overlay) =>
@@ -184,7 +184,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     }
 
     // Update trade connections
-    const newConnections = [...state.tradeConnections];
+    let newConnections = [...state.tradeConnections];
     for (const trade of data.trades) {
       // Find existing connection
       const existing = newConnections.find(
@@ -203,6 +203,12 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
           lastTick: data.tick,
         });
       }
+    }
+    // Prune old connections: keep most recent by lastTick
+    if (newConnections.length > state.maxTradeConnections) {
+      newConnections = newConnections
+        .sort((a, b) => b.lastTick - a.lastTick)
+        .slice(0, state.maxTradeConnections);
     }
 
     // Append new trades to history

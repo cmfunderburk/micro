@@ -379,6 +379,7 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
   return (
     <canvas
       ref={canvasRef}
+      id="grid-canvas"
       width={width}
       height={height}
       className="rounded-lg cursor-crosshair"

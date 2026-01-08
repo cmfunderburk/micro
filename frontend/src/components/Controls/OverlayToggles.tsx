@@ -11,7 +11,6 @@ export function OverlayToggles() {
   const overlayOptions = [
     { key: 'trails' as const, label: 'Trails', description: 'Show movement history' },
     { key: 'perceptionRadius' as const, label: 'Perception', description: 'Show view range' },
-    { key: 'heatmap' as const, label: 'Heatmap', description: 'Show surplus potential' },
     { key: 'tradeConnections' as const, label: 'Connections', description: 'Show trade links' },
   ];
 

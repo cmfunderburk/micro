@@ -3,6 +3,9 @@
  *
  * Displays agents as nodes and trades as edges.
  * Supports force-directed and circular layouts.
+ *
+ * Key optimization: Don't recreate the D3 simulation on every tick.
+ * Only update link styles (recency coloring) when tick changes.
  */
 
 import { useRef, useEffect, useMemo, useCallback } from 'react';
@@ -38,13 +41,15 @@ export function TradeNetwork({
 }: TradeNetworkProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const simulationRef = useRef<d3.Simulation<NetworkNode, NetworkLink> | null>(null);
+  const linkSelectionRef = useRef<d3.Selection<SVGLineElement, NetworkLink, SVGGElement, unknown> | null>(null);
+  const lastDataKeyRef = useRef<string>('');
 
   const agents = useSimulationStore((state) => state.agents);
   const tradeConnections = useSimulationStore((state) => state.tradeConnections);
   const tick = useSimulationStore((state) => state.tick);
 
-  // Build network data
-  const { nodes, links, maxCount } = useMemo(() => {
+  // Build network data - only depends on agents and connections, not tick
+  const { nodes, links, maxCount, dataKey } = useMemo(() => {
     const agentIds = new Set(agents.map((a) => a.id));
     const nodeMap = new Map<string, NetworkNode>();
 
@@ -72,10 +77,16 @@ export function TradeNetwork({
       }
     }
 
+    // Create a key to detect when structure changes (not just tick)
+    const nodeIds = Array.from(nodeMap.keys()).sort().join(',');
+    const linkKeys = links.map(l => `${l.source}-${l.target}-${l.count}`).sort().join('|');
+    const dataKey = `${nodeIds}::${linkKeys}`;
+
     return {
       nodes: Array.from(nodeMap.values()),
       links,
       maxCount,
+      dataKey,
     };
   }, [agents, tradeConnections]);
 
@@ -97,10 +108,16 @@ export function TradeNetwork({
     [width, height]
   );
 
-  // Render network
-  const render = useCallback(() => {
+  // Full render - only when structure changes
+  const renderFull = useCallback(() => {
     const svg = d3.select(svgRef.current);
     if (!svg.node()) return;
+
+    // Stop existing simulation
+    if (simulationRef.current) {
+      simulationRef.current.stop();
+      simulationRef.current = null;
+    }
 
     // Clear previous content
     svg.selectAll('*').remove();
@@ -121,23 +138,25 @@ export function TradeNetwork({
     }
 
     // Draw links
-    const link = g
-      .append('g')
+    const linkGroup = g.append('g').attr('class', 'links');
+    const link = linkGroup
       .selectAll('line')
       .data(linksCopy)
       .join('line')
       .attr('stroke', (d) => {
-        // Color based on recency (brighter = more recent)
         const ticksSince = tick - d.lastTick;
         const alpha = Math.max(0.2, 1 - ticksSince / 50);
-        return `rgba(168, 85, 247, ${alpha})`; // purple
+        return `rgba(168, 85, 247, ${alpha})`;
       })
       .attr('stroke-width', (d) => Math.min(1 + (d.count / maxCount) * 4, 5))
       .attr('stroke-linecap', 'round');
 
+    // Store link selection for updates
+    linkSelectionRef.current = link as unknown as d3.Selection<SVGLineElement, NetworkLink, SVGGElement, unknown>;
+
     // Draw nodes
-    const node = g
-      .append('g')
+    const nodeGroup = g.append('g').attr('class', 'nodes');
+    const node = nodeGroup
       .selectAll('circle')
       .data(nodesCopy)
       .join('circle')
@@ -150,7 +169,7 @@ export function TradeNetwork({
     node.append('title').text((d) => `Agent: ${d.id.slice(-8)}\nα = ${d.alpha.toFixed(2)}`);
 
     if (layout === 'force') {
-      // Create force simulation
+      // Create force simulation with higher alpha decay for faster settling
       const simulation = d3
         .forceSimulation<NetworkNode>(nodesCopy)
         .force(
@@ -162,7 +181,8 @@ export function TradeNetwork({
         )
         .force('charge', d3.forceManyBody().strength(-100))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(12));
+        .force('collision', d3.forceCollide().radius(12))
+        .alphaDecay(0.05); // Faster settling
 
       simulationRef.current = simulation;
 
@@ -205,19 +225,42 @@ export function TradeNetwork({
 
       node.attr('cx', (d) => d.x!).attr('cy', (d) => d.y!);
     }
-  }, [nodes, links, maxCount, tick, width, height, layout, positionCircular]);
 
-  // Re-render when data or layout changes
+    lastDataKeyRef.current = dataKey;
+  }, [nodes, links, maxCount, tick, width, height, layout, positionCircular, dataKey]);
+
+  // Update link colors only (for tick changes)
+  const updateLinkColors = useCallback(() => {
+    if (!linkSelectionRef.current) return;
+
+    linkSelectionRef.current.attr('stroke', (d) => {
+      const ticksSince = tick - d.lastTick;
+      const alpha = Math.max(0.2, 1 - ticksSince / 50);
+      return `rgba(168, 85, 247, ${alpha})`;
+    });
+  }, [tick]);
+
+  // Re-render when structure changes, update colors when tick changes
   useEffect(() => {
-    render();
+    if (dataKey !== lastDataKeyRef.current) {
+      // Structure changed - full render
+      renderFull();
+    } else {
+      // Only tick changed - update colors
+      updateLinkColors();
+    }
 
     return () => {
       if (simulationRef.current) {
         simulationRef.current.stop();
-        simulationRef.current = null;
       }
     };
-  }, [render]);
+  }, [dataKey, renderFull, updateLinkColors]);
+
+  // Force re-render on layout change
+  useEffect(() => {
+    renderFull();
+  }, [layout, width, height]);
 
   return (
     <svg

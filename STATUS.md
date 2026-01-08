@@ -22,25 +22,37 @@ A complete simulation engine for bilateral exchange in a spatial economy:
 | `grid.py` | NxN toroidal grid, positions, movement, spatial queries |
 | `information.py` | Information environment abstraction (`FullInformation`, `NoisyAlphaInformation`) |
 | `beliefs.py` | Agent memory, type beliefs, price beliefs, Bayesian and heuristic update rules |
-| `bargaining.py` | Nash and Rubinstein bargaining protocols with belief-aware surplus calculation |
+| `bargaining.py` | Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI) with belief-aware surplus |
 | `search.py` | Target evaluation (discounted surplus), movement decisions, belief integration |
 | `matching.py` | Matching protocols (Opportunistic, StableRoommates) with commitment state |
 | `simulation.py` | Four-phase tick loop, `create_simple_economy()` factory with belief support |
 
 ### Bargaining Protocols
 
-Two complete implementations with theoretical grounding:
+Four complete implementations with theoretical grounding (O&R = Osborne & Rubinstein, *Bargaining and Markets*):
 
-**Nash Bargaining** (`NashBargainingProtocol`)
+**Nash Bargaining** (`NashBargainingProtocol`) — O&R Ch 2
 - Axiomatic solution maximizing Nash product
-- Symmetric surplus split
+- Symmetric surplus split (equal bargaining power)
 - Golden section search for numerical optimization
 
-**Rubinstein Alternating Offers** (`RubinsteinBargainingProtocol`)
+**Rubinstein Alternating Offers** (`RubinsteinBargainingProtocol`) — O&R Ch 3
 - Uses BRW (1986) limit: patience determines bargaining power, not proposer identity
 - More patient agent (higher δ) captures larger share of surplus
 - Equal discount factors → symmetric Nash outcome
 - Future: ClassicRubinsteinProtocol with finite-round first-mover advantage
+
+**Asymmetric Nash Bargaining** (`AsymmetricNashBargainingProtocol`) — O&R Ch 2.6
+- Weighted Nash product: (u₁-d₁)^β × (u₂-d₂)^(1-β)
+- β = w₁/(w₁+w₂) where w = `agent.bargaining_power` attribute
+- Equal weights → symmetric Nash outcome
+- Distinct from Rubinstein: power comes from exogenous attribute, not patience
+
+**Take-It-Or-Leave-It** (`TIOLIBargainingProtocol`) — O&R §2.8
+- Proposer extracts all surplus; responder receives exactly disagreement utility
+- Lexicographic proposer selection (smaller agent ID proposes by default)
+- Closed-form solution via golden section search on responder's indifference curve
+- Theory tests verify proposer identity matters and responder is at indifference (1e-6 tolerance)
 
 ### Matching Protocols
 
@@ -137,7 +149,8 @@ cd frontend && npm run dev
 - Play/pause/step/reset controls with speed slider
 - Configuration modal for simulation parameters:
   - Agent count, grid size, seed
-  - Bargaining protocol (Nash/Rubinstein)
+  - Bargaining protocol (Nash/Rubinstein/Asymmetric Nash/TIOLI) with tooltips
+  - Bargaining power distribution (Uniform/Gaussian/Bimodal) for Asymmetric Nash
   - Matching protocol (Opportunistic/StableRoommates)
   - Perception radius, discount factor, use_beliefs toggle
 - Agent tooltips on hover with detailed state
@@ -207,7 +220,7 @@ The original desktop GUI has been archived to `.archived/visualization-dearpygui
 
 ### Test Coverage
 
-667 tests covering all core modules including theory verification and belief system. Run with: `uv run pytest`
+720 tests covering all core modules including theory verification, belief system, and bilateral bargaining protocols. Run with: `uv run pytest`
 
 ---
 
@@ -472,6 +485,8 @@ tests/
 ├── theory/                  # Theory verification tests
 │   ├── test_nash_bargaining.py
 │   ├── test_rubinstein_bargaining.py
+│   ├── test_asymmetric_nash_protocol.py  # Weighted Nash product (26 tests)
+│   ├── test_tioli_bargaining.py          # Take-it-or-leave-it (27 tests)
 │   ├── test_preferences.py
 │   ├── test_gains_from_trade.py
 │   └── test_pareto_efficiency.py

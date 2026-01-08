@@ -22,7 +22,7 @@ The core simulation infrastructure in `microecon/`:
 | `grid.py` | `Grid(size)`, `Position`, movement, spatial queries |
 | `information.py` | `InformationEnvironment` abstraction (`FullInformation`, `NoisyAlphaInformation`) |
 | `beliefs.py` | Agent beliefs (type beliefs, price beliefs, memory, update rules) |
-| `bargaining.py` | Bargaining solutions (Nash, Rubinstein), protocol abstraction |
+| `bargaining.py` | Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI) |
 | `search.py` | Target evaluation (discounted surplus), movement decisions, belief integration |
 | `matching.py` | Matching protocols (Opportunistic, StableRoommates), commitment state |
 | `simulation.py` | `Simulation` engine with four-phase tick loop, `create_simple_economy()` factory |
@@ -85,7 +85,7 @@ microecon/
 │   ├── grid.py              # Spatial grid and positions
 │   ├── information.py       # Information environments (Full, NoisyAlpha)
 │   ├── beliefs.py           # Agent beliefs (type beliefs, price beliefs, memory)
-│   ├── bargaining.py        # Bargaining protocols (Nash, Rubinstein)
+│   ├── bargaining.py        # Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI)
 │   ├── search.py            # Target selection and movement
 │   ├── matching.py          # Matching protocols (Opportunistic, StableRoommates)
 │   ├── simulation.py        # Main simulation engine (four-phase tick)
@@ -113,9 +113,11 @@ microecon/
 
 **Information environment**: `InformationEnvironment` interface determines what agents can observe about each other. `FullInformation` exposes everything; `NoisyAlphaInformation` adds noise to observed preference parameters, enabling information asymmetry studies.
 
-**Bargaining protocol**: `BargainingProtocol` ABC enables swapping institutional rules. Two implementations:
-- `NashBargainingProtocol`: Axiomatic solution (symmetric, maximizes Nash product)
-- `RubinsteinBargainingProtocol`: Strategic alternating-offers (first-mover advantage, patience = power)
+**Bargaining protocol**: `BargainingProtocol` ABC enables swapping institutional rules. Four implementations:
+- `NashBargainingProtocol`: Axiomatic solution (symmetric, maximizes Nash product). O&R Ch 2.
+- `RubinsteinBargainingProtocol`: BRW limit of alternating-offers (patience = power). O&R Ch 3.
+- `AsymmetricNashBargainingProtocol`: Weighted Nash product using `agent.bargaining_power`. O&R Ch 2.6.
+- `TIOLIBargainingProtocol`: Take-it-or-leave-it (proposer extracts all surplus). O&R §2.8.
 
 **Matching protocol**: `MatchingProtocol` ABC determines how agents form trading pairs. Two implementations:
 - `OpportunisticMatchingProtocol`: Any co-located pair can trade (default, myopic)
@@ -194,7 +196,7 @@ See STATUS.md §5 for a detailed gap analysis vs VISION.md.
 - Agent details on click (compact popover)
 
 **Institutional comparisons** (core research value per VISION.md)
-- Additional bargaining protocols (TIOLI, posted prices, double auction)
+- Additional bargaining protocols (posted prices, double auction)
 - Protocol-aware search (currently uses Nash surplus for all protocols)
 
 **Information environments**

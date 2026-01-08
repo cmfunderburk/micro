@@ -4,17 +4,25 @@ Bargaining solutions for bilateral exchange.
 This module implements bargaining solutions for two agents with Cobb-Douglas
 preferences in a pure exchange economy:
 
-1. Nash Bargaining Solution (axiomatic approach)
-   - Characterized by Pareto efficiency, symmetry, IIA, scale invariance
+1. Nash Bargaining Solution (symmetric) — O&R Ch 2
+   - Axiomatic: Pareto efficiency, symmetry, IIA, scale invariance
    - Maximizes Nash product: (u1 - d1)(u2 - d2)
-   - Reference: O&R-B Ch 2, Kreps II Ch 23
+   - Power source: None (equal split)
 
-2. Rubinstein Alternating Offers (strategic approach)
-   - Unique Subgame Perfect Equilibrium with immediate agreement
-   - Proposer advantage: first-mover gets larger share
-   - Patience = bargaining power: higher δ → larger share
-   - Converges to Nash as δ → 1
-   - Reference: O&R-B Ch 3
+2. Rubinstein / Nash (Patience) — O&R Ch 3, BRW (1986)
+   - BRW limit of alternating-offers SPE
+   - Power source: Patience (discount factors)
+   - Higher δ → larger share; equal δ → symmetric Nash
+
+3. Asymmetric Nash (Power) — O&R Ch 2.6
+   - Weighted Nash product: (u1 - d1)^β × (u2 - d2)^(1-β)
+   - Power source: Exogenous bargaining_power attribute
+   - β = w1 / (w1 + w2)
+
+4. Take-It-Or-Leave-It (TIOLI) — O&R §2.8
+   - Proposer extracts all surplus
+   - Power source: Commitment / first-mover advantage
+   - Responder at indifference (utility == disagreement)
 
 The disagreement point is each agent's utility from their endowment
 (no trade = consume own endowment).

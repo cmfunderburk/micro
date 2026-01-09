@@ -37,6 +37,17 @@ This platform makes institutional rules **explicit, configurable, and comparable
 
 By making institutions visible, we can ask: *What difference does the institution make?* Same preferences, same endowments, different rules - what emerges?
 
+### Corollary Insight: Transaction Costs Made Explicit
+
+The tick-based simulation model operationalizes transaction cost economics. Each phase of economic activity consumes time:
+
+- **Search costs** = ticks spent moving toward partners
+- **Proposal costs** = ticks spent initiating exchange
+- **Negotiation costs** = ticks spent in bargaining
+- **Coordination failure costs** = ticks wasted on rejected proposals
+
+Different institutional configurations have different tick costs. This transforms abstract concepts (Coase's transaction costs, Williamson's governance structures) into measurable simulation quantities, enabling direct comparison of institutional efficiency.
+
 ---
 
 ## 2. Methodological Position
@@ -97,6 +108,18 @@ Agents can operate at different sophistication levels:
 - Learning (RL, evolutionary dynamics)
 
 These levels exist **for comparison**, not because bounded rationality is inherently interesting. The question is: *What changes when agents are smarter or dumber?* Sophistication is an experimental variable, like the institution.
+
+### The Agent as Autonomous Decision-Maker
+
+The platform's agent model follows the Chicago price theory tradition: agents are autonomous decision-makers who optimize subject to constraints. The same analytical toolkit applies to exchange, production, investment, and "noneconomic" behaviors (following Becker's extensions to discrimination, crime, family, health).
+
+Key architectural principles for agents:
+- **Attributes over types**: Agents have attributes (preferences, holdings, patience, position); game-theoretic "type" is derived from attributes plus information environment, not stored
+- **Actions as extensible set**: The action space is not hardcoded; categories (exchange, production, movement) are analytical tags, not structural hierarchy
+- **Beliefs architecturally present**: Agents can hold beliefs about others and prices; whether beliefs affect behavior is configurable (enabling study of naive vs. sophisticated agents)
+- **Perfect self-knowledge**: Agents know their own preferences (standard assumption); bounded rationality is achieved through the decision rule, not self-uncertainty
+
+See **AGENT-ARCHITECTURE.md** for the complete specification.
 
 ---
 
@@ -162,9 +185,13 @@ This scenario demonstrates:
 
 ### What Is In Scope
 
-Anything that can be modeled in the microeconomic tradition in an agent-based setting. In theory, this covers practically all of economics.
+Anything that can be modeled in the microeconomic tradition in an agent-based setting. Following the Chicago price theory tradition (Stigler, Becker, Murphy), this encompasses not just exchange and production but also:
+- Human capital acquisition and specialization
+- Search and matching in labor, marriage, and other markets
+- Information acquisition and signaling
+- "Noneconomic" behaviors analyzable through optimization (discrimination, crime, family, health, addiction)
 
-The practical boundary is complexity: some phenomena require substantial infrastructure to model properly. The platform grows toward comprehensiveness but must remain tractable.
+The same agent architecture — preferences, constraints, optimization — applies across domains. The practical boundary is complexity: some phenomena require substantial infrastructure to model properly. The platform grows toward comprehensiveness but must remain tractable.
 
 ### Conceptual Non-Goals
 
@@ -251,15 +278,23 @@ The platform takes inspiration from VMT's problem space:
 
 This document (**VISION.md**) is the authoritative statement of project identity and direction.
 
-Other documents serve supporting roles:
-- **theoretical-foundations.md**: Textbook mappings and implementation notes
+**Foundational documents:**
+- **AGENT-ARCHITECTURE.md**: Defines what an agent IS — attributes, beliefs, perception, decision architecture, tick model integration, objectives. This is the source of truth for agent design.
+- **theoretical-foundations.md**: Textbook mappings and derivations for bargaining protocols, preferences, and economic concepts.
+
+**Supporting documents:**
 - **CLAUDE.md**: Development guidance and conventions
+- **STATUS.md**: Current implementation state and known limitations
 
-Architecture emerges through development rather than upfront specification.
+Architecture emerges through development rather than upfront specification, but foundational documents (VISION.md, AGENT-ARCHITECTURE.md) provide stable reference points.
 
-When documents conflict, this vision document takes precedence on matters of identity, scope, and methodology.
+When documents conflict:
+- This vision document takes precedence on matters of identity, scope, and methodology
+- AGENT-ARCHITECTURE.md takes precedence on agent model specifics
+- STATUS.md reflects current reality; other documents reflect design intent
 
 ---
 
-**Document Version:** 1.0
+**Document Version:** 1.1
 **Created:** 2026-01-01
+**Updated:** 2026-01-09 (Added transaction costs insight, agent architecture integration, Chicago price theory scope)

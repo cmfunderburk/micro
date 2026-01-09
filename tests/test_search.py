@@ -7,6 +7,8 @@ from microecon.agent import create_agent
 from microecon.information import FullInformation
 from microecon.search import evaluate_targets, compute_move_target, should_trade
 
+pytestmark = pytest.mark.search
+
 
 class TestEvaluateTargets:
     """Test target evaluation for search."""

@@ -23,6 +23,8 @@ from microecon.bargaining import (
     BargainingOutcome,
 )
 
+pytestmark = pytest.mark.theory
+
 
 class TestNashProductMaximization:
     """Test that Nash solution maximizes the Nash product."""

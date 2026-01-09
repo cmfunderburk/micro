@@ -13,6 +13,8 @@ from microecon.scenarios import (
     ScenarioLoadError,
 )
 
+pytestmark = pytest.mark.simulation
+
 
 class TestAgentConfig:
     """Tests for AgentConfig dataclass."""

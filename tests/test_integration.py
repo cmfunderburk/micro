@@ -22,6 +22,8 @@ from microecon.matching import OpportunisticMatchingProtocol, StableRoommatesMat
 from microecon.logging import SimulationLogger, SimulationConfig
 from microecon.batch import BatchRunner
 
+pytestmark = pytest.mark.integration
+
 
 class TestFullPipeline:
     """Test the complete scenario-to-analysis pipeline."""

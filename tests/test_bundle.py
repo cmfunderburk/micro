@@ -3,6 +3,8 @@
 import pytest
 from microecon.bundle import Bundle
 
+pytestmark = pytest.mark.core
+
 
 class TestBundleCreation:
     """Test bundle creation and validation."""

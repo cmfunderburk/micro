@@ -5,6 +5,8 @@ from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
 from microecon.agent import Agent, AgentPrivateState, AgentType, create_agent
 
+pytestmark = pytest.mark.core
+
 
 class TestAgentPrivateState:
     """Test agent private state."""

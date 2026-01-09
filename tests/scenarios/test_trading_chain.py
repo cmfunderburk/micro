@@ -46,6 +46,8 @@ from microecon.matching import (
     OpportunisticMatchingProtocol,
 )
 
+pytestmark = pytest.mark.scenario
+
 
 class TestTradingChainCommittedStage1:
     """

@@ -32,6 +32,8 @@ from microecon.bargaining import (
     AsymmetricNashBargainingProtocol,
 )
 
+pytestmark = pytest.mark.theory
+
 
 class TestAsymmetricNashReducesToSymmetric:
     """

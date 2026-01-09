@@ -167,6 +167,77 @@ print(f'Saved to {results[0].log_path}')
 "
 ```
 
+## Test Selection Guide
+
+Tests are organized with semantic markers to enable targeted test runs. Running the full suite is expensive; select tests based on what you changed.
+
+### Available Markers
+
+| Marker | Purpose | When to Run |
+|--------|---------|-------------|
+| `core` | Bundle, preferences, agent, grid, information | Changes to fundamental data structures |
+| `theory` | Formal theory verification (Nash, Rubinstein, etc.) | Changes to bargaining protocols |
+| `scenario` | Hand-computed theoretical scenarios | Changes to core economics modules |
+| `bargaining` | Bargaining protocol unit tests | Changes to `bargaining.py` |
+| `beliefs` | Agent memory and learning systems | Changes to `beliefs.py` |
+| `search` | Target evaluation and movement | Changes to `search.py` |
+| `matching` | Matching protocols | Changes to `matching.py` |
+| `simulation` | Simulation engine, batch runner, scenarios | Changes to `simulation.py`, `batch.py`, `scenarios/` |
+| `analysis` | Logging and analysis infrastructure | Changes to `logging/` or `analysis/` |
+| `integration` | Full pipeline tests | Before commits, PRs |
+
+### Test Commands by Situation
+
+```bash
+# Fast feedback during development (excludes expensive theory/scenario tests)
+uv run pytest -m "not theory and not scenario"
+
+# After modifying bargaining.py
+uv run pytest -m "bargaining or theory" tests/test_bargaining.py
+
+# After modifying beliefs.py
+uv run pytest -m beliefs
+
+# After modifying search.py
+uv run pytest -m search
+
+# After modifying simulation.py or batch.py
+uv run pytest -m simulation
+
+# After modifying logging/ or analysis/
+uv run pytest -m analysis
+
+# Core data structure changes (bundle, preferences, agent, grid)
+uv run pytest -m core
+
+# Before committing (integration tests)
+uv run pytest -m integration
+
+# Full suite (CI, major changes)
+uv run pytest
+```
+
+### File-to-Test Mapping
+
+| Changed File(s) | Recommended Test Command |
+|-----------------|--------------------------|
+| `bargaining.py` | `uv run pytest -m "bargaining or theory" tests/test_bargaining.py` |
+| `beliefs.py` | `uv run pytest -m beliefs` |
+| `search.py` | `uv run pytest -m search` |
+| `matching.py` | `uv run pytest -m matching` |
+| `simulation.py`, `batch.py` | `uv run pytest -m simulation` |
+| `bundle.py`, `preferences.py`, `agent.py`, `grid.py` | `uv run pytest -m core` |
+| `information.py` | `uv run pytest -m core` |
+| `logging/*`, `analysis/*` | `uv run pytest -m analysis` |
+| Multiple modules / uncertain | `uv run pytest -m "not theory"` |
+
+### Notes for LLM Agents
+
+- **Theory tests are stable**: Only run when bargaining protocols are modified
+- **Default for rapid iteration**: `uv run pytest -m "not theory and not scenario"`
+- **Before any commit**: Run at least `uv run pytest -m "not theory"` to catch regressions
+- **Full suite**: Required for PRs and major refactors
+
 ## Theoretical Grounding Requirements
 
 All behavioral rules, bargaining protocols, and institutional mechanisms must have formal justification from:

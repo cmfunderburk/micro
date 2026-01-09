@@ -9,6 +9,8 @@ from microecon.batch import BatchRunner, run_comparison
 from microecon.bargaining import NashBargainingProtocol, RubinsteinBargainingProtocol
 from microecon.logging import load_run
 
+pytestmark = pytest.mark.simulation
+
 
 class TestBatchRunner:
     """Test BatchRunner functionality."""

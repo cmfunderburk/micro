@@ -25,6 +25,8 @@ from microecon.bargaining import (
 )
 from microecon.search import evaluate_targets, SearchResult
 
+pytestmark = pytest.mark.scenario
+
 
 # =============================================================================
 # Symmetric Hub-and-Spoke (all α=0.5, identical peripheral endowments)

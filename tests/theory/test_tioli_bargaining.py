@@ -27,6 +27,8 @@ from microecon.bargaining import (
     TIOLIBargainingProtocol,
 )
 
+pytestmark = pytest.mark.theory
+
 
 class TestTIOLIProposerExtractsFullSurplus:
     """

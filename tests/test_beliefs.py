@@ -25,6 +25,8 @@ from microecon.beliefs import (
 from microecon.agent import create_agent, Agent
 from microecon.bundle import Bundle
 
+pytestmark = pytest.mark.beliefs
+
 
 class TestAgentMemory:
     """Tests for BELIEF-002: Agent Memory."""

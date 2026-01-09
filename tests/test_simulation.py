@@ -7,6 +7,8 @@ from microecon.agent import create_agent
 from microecon.information import FullInformation
 from microecon.simulation import Simulation, create_simple_economy
 
+pytestmark = pytest.mark.simulation
+
 
 class TestSimulationSetup:
     """Test simulation setup."""

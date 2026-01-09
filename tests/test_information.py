@@ -12,6 +12,8 @@ from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
 from microecon.information import FullInformation, NoisyAlphaInformation
 
+pytestmark = pytest.mark.core
+
 
 class TestFullInformation:
     """Tests for the FullInformation environment."""

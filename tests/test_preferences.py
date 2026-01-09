@@ -5,6 +5,8 @@ import math
 from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
 
+pytestmark = pytest.mark.core
+
 
 class TestCobbDouglasCreation:
     """Test Cobb-Douglas preference creation."""

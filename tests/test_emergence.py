@@ -13,6 +13,8 @@ from microecon.analysis.emergence import (
 )
 from microecon.logging import RunData, SimulationConfig, TickRecord, AgentSnapshot, TradeEvent
 
+pytestmark = pytest.mark.analysis
+
 
 def create_test_run(
     n_agents: int = 4,

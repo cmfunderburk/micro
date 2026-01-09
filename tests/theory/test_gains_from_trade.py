@@ -23,6 +23,8 @@ from microecon.bargaining import (
     BargainingOutcome,
 )
 
+pytestmark = pytest.mark.theory
+
 
 class TestGainsComputation:
     """Test that gains from trade are computed correctly."""

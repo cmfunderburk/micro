@@ -35,6 +35,8 @@ from microecon.analysis import (
 from microecon.logging import SimulationLogger, SimulationConfig
 from microecon.simulation import create_simple_economy
 
+pytestmark = pytest.mark.analysis
+
 
 def _create_test_run(seed=42, protocol="nash", ticks=10):
     """Helper to create a test run."""

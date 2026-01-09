@@ -20,6 +20,16 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "theory: Formal theory verification against canonical texts (run when bargaining protocols change)",
+    "scenario: Hand-computed theoretical scenarios (run when core economics modules change)",
+    "core: Bundle, preferences, agent, grid, information fundamentals (fast, always safe to run)",
+    "beliefs: Agent memory and learning systems (run when beliefs.py changes)",
+    "search: Target evaluation and movement (run when search.py changes)",
+    "matching: Matching protocols (run when matching.py changes)",
+    "bargaining: Bargaining protocol tests (run when bargaining.py changes)",
+    "simulation: Simulation engine and batch runner (run when simulation.py or batch.py changes)",
+    "analysis: Logging and analysis infrastructure (run when logging/ or analysis/ changes)",
+    "integration: Full pipeline tests (run before commits, slower)",
 ]
 
 [build-system]

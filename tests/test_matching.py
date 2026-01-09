@@ -21,6 +21,8 @@ from microecon.agent import Agent, AgentPrivateState
 from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
 
+pytestmark = pytest.mark.matching
+
 
 def make_agent(agent_id: str, alpha: float, endowment_x: float, endowment_y: float) -> Agent:
     """Helper to create agents with explicit IDs for testing."""

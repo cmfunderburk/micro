@@ -25,6 +25,8 @@ from microecon.bargaining import (
     asymmetric_nash_bargaining_solution,
 )
 
+pytestmark = pytest.mark.theory
+
 
 class TestBRWWeightFormula:
     """Test BRW weight formula: w1 = ln(d2)/(ln(d1)+ln(d2))."""

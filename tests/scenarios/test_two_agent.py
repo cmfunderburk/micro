@@ -24,6 +24,8 @@ from microecon.bargaining import (
 )
 from microecon.search import evaluate_targets, SearchResult
 
+pytestmark = pytest.mark.scenario
+
 
 class TestTwoAgentSymmetricScenario:
     """

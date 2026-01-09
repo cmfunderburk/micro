@@ -22,6 +22,8 @@ from microecon.logging import (
 )
 from microecon.simulation import create_simple_economy
 
+pytestmark = pytest.mark.analysis
+
 
 class TestEventSerialization:
     """Test event dataclass serialization roundtrip."""

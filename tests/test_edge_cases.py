@@ -26,6 +26,8 @@ from microecon.bargaining import (
 from microecon.matching import OpportunisticMatchingProtocol, StableRoommatesMatchingProtocol
 from microecon.scenarios import MarketEmergenceConfig, run_market_emergence
 
+pytestmark = pytest.mark.simulation
+
 
 class TestInvalidConfigurations:
     """Test that invalid configurations produce clear error messages."""

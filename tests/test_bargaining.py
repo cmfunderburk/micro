@@ -20,6 +20,8 @@ from microecon.bargaining import (
     RubinsteinBargainingProtocol,
 )
 
+pytestmark = pytest.mark.bargaining
+
 
 class TestNashBargainingSolution:
     """Test Nash bargaining solution computation."""

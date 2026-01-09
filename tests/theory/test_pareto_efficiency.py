@@ -24,6 +24,8 @@ from microecon.bargaining import (
     asymmetric_nash_bargaining_solution,
 )
 
+pytestmark = pytest.mark.theory
+
 
 class TestParetoEfficiencyNash:
     """Test Pareto efficiency of Nash bargaining solution."""

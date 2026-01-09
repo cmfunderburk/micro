@@ -94,6 +94,12 @@ Agent
 ├── Holdings: Bundle                     # Current inventory on-person (mutable)
 ├── StoredHoldings: Bundle | None        # At home/bank (future extension)
 │
+├── Metabolism: Bundle | None            # Per-tick consumption requirement (Phase B+)
+│   # When active: holdings_t+1 = holdings_t - metabolism + acquired_t
+│   # Enables sustained economy; see §8.1 for objective function implications
+│   # Good-specific rates allow heterogeneous treatment (food vs durables)
+│   # None = no metabolism (Phase A: static equilibrium)
+│
 ├── DiscountFactor: float ∈ (0, 1]       # Universal time preference
 │   # Affects ALL temporal decisions:
 │   # - Partner ranking (distant = future, discounted)
@@ -123,6 +129,7 @@ Agent
 | Discount factor scope | **Universal** — affects all temporal decisions | Theoretically correct: δ discounts ANY future payoff. Distance → time → discounted surplus. |
 | Bargaining power | Separate from δ, optional attribute | Different theoretical constructs. Power can derive from non-patience sources (institutional position, outside options, commitment ability). |
 | Action state ownership | Agent-owned for unilateral constraints | Cooldowns are rules for agent's own behavior. Coordination state (mutual matching) tracked at simulation level. |
+| Metabolism | Optional Bundle; None for Phase A | Enables sustained economy (Phase B+). As Bundle, allows good-specific consumption rates. Background depletion, not action choice. |
 
 ### 3.3 Theoretical Grounding
 
@@ -343,29 +350,230 @@ The architecture supports future multilateral exchange by:
 - Acceptance logic can require N-of-M responses
 - Negotiation protocols can involve >2 parties
 
+### 7.6 Tick Structure
+
+Each tick follows a simple three-phase structure:
+
+```
+Tick Structure
+│
+├── PERCEIVE
+│   └── All agents observe current state (frozen snapshot)
+│   └── Perception radius and information environment apply
+│
+├── DECIDE
+│   └── All agents select actions based on perceived state
+│   └── No agent observes another's decision
+│   └── DecisionProcedure.choose() executes for each agent
+│
+└── EXECUTE
+    └── Conflict resolution (see §7.8)
+    └── All actions execute, producing next state
+    └── State changes are batched, not sequential
+```
+
+This replaces any notion of mandatory "phases" within the tick. There is no special "co-location resolution phase" — co-located agents simply have additional actions available (Propose, Accept) which their DecisionProcedure evaluates alongside Move, Gather, Wait, etc.
+
+### 7.7 Interaction State Machine
+
+Bilateral exchange involves interaction states that persist across ticks.
+
+**Agent Interaction States:**
+
+```
+AgentInteractionState
+│
+├── Available
+│   ├── Can propose to others (subject to cooldowns)
+│   ├── Can receive and respond to proposals
+│   └── Can take other actions (Move, Gather, Wait)
+│
+├── ProposalPending(target: AgentId, tick_sent: int)
+│   ├── Has outbound proposal awaiting response
+│   ├── CAN receive and respond to other proposals
+│   │   └── Accepting another withdraws own pending proposal
+│   ├── Locked mode: cannot take other actions until resolved
+│   └── Unlocked mode: can take other actions (configurable)
+│
+├── Negotiating(partner: AgentId, protocol: Protocol, phase: int)
+│   ├── In active negotiation with partner
+│   ├── Cannot take other actions
+│   ├── Cannot receive new proposals
+│   └── Duration: protocol-specific (1+ ticks)
+│
+└── Cooldown: Dict[AgentId, int]  (orthogonal to above)
+    ├── Cannot propose to specific agents until cooldown expires
+    ├── Decrements each tick
+    ├── Default duration: 3 ticks (configurable)
+    └── Triggered by: own proposal rejected by that agent
+```
+
+**State Transitions:**
+
+| From | To | Trigger |
+|------|-----|---------|
+| Available | ProposalPending(B) | Agent chooses Propose(B) |
+| Available | Negotiating(A) | Received proposal from A, chose Accept |
+| ProposalPending(B) | Negotiating(B) | B accepted proposal |
+| ProposalPending(B) | Available + Cooldown(B) | B rejected proposal |
+| ProposalPending(B) | Available | Proposal timeout (1 tick, configurable) |
+| ProposalPending(B) | Available | Co-location lost (B moved away) |
+| ProposalPending(B) | Negotiating(C) | Received proposal from C, chose Accept (withdraws proposal to B) |
+| Negotiating(B) | Available | Protocol completes (trade succeeds or fails) |
+| Negotiating(B) | Available | Co-location lost (negotiation fails) |
+
+**Mutual Proposals:** If A proposes to B and B proposes to A in the same tick, this is detected as mutual interest. Both agents transition directly to Negotiating(other).
+
+**Co-location Requirement:** Strict co-location is required throughout the exchange sequence:
+- Proposal requires co-location to initiate
+- Proposal expires if co-location lost before response
+- Negotiation requires co-location; either agent moving causes failure
+- Trade execution requires co-location
+
+This makes "staying" a meaningful choice — agents in negotiation implicitly choose not to move.
+
+### 7.8 Concurrency Model
+
+All agents decide simultaneously within a tick. Conflicts are resolved deterministically.
+
+```
+Concurrency: Simultaneous Decision, Batched Execution
+
+1. OBSERVATION
+   └── All agents observe frozen state_t
+
+2. DECISION
+   └── All agents select actions based on state_t
+   └── Decisions are independent; no agent sees another's choice
+
+3. CONFLICT RESOLUTION
+   ├── Multiple proposals to same target:
+   │   └── Target evaluates all proposals
+   │   └── Target accepts proposal with highest expected surplus
+   │   └── Non-accepted proposals: treated as "target unavailable"
+   │   └── No cooldown for non-accepted (not explicit rejection)
+   │
+   ├── Mutual proposals (A→B and B→A):
+   │   └── Detected as mutual interest
+   │   └── Both enter Negotiating state
+   │
+   └── Crossing paths (A moves from X to Y, B moves from Y to X):
+       └── No special interaction ("ships in the night")
+       └── A ends at Y, B ends at X
+       └── They were never co-located
+
+4. EXECUTION
+   └── All actions execute against state_t
+   └── State changes combine to produce state_t+1
+   └── Execution order (by agent_id) is deterministic but
+       should not affect outcomes due to batching
+
+5. VALIDATION
+   └── Check invariants (non-negative holdings, valid positions)
+```
+
+**Tie-Breaking Rules:**
+- When choosing among proposals: higher expected surplus wins
+- If surplus tied: lower agent_id wins (deterministic)
+- Any other ties: seeded RNG (reproducible with same seed)
+
+### 7.9 Acceptance Rules
+
+When an agent receives a proposal, they must decide Accept or Reject. The default rule is surplus-based.
+
+**Default Acceptance Rule (Rational Agent):**
+
+```
+For agent B receiving proposal from A:
+
+1. Compute expected outcome under active protocol
+   outcome = protocol.compute_outcome(A, B, info_environment)
+
+2. Compute expected surplus for self
+   surplus_B = u_B(outcome.holdings_B) - u_B(current_holdings_B)
+
+3. Decision
+   if surplus_B ≥ 0: Accept
+   else: Reject
+```
+
+**Information Environment Variants:**
+
+| Environment | Surplus Calculation |
+|-------------|---------------------|
+| FullInformation | Exact: uses true types of both agents |
+| NoisyAlphaInformation | Naive: uses perceived (noisy) types, no Bayesian correction |
+
+Under noisy information, agents may:
+- Accept trades that are actually unfavorable (noise was favorable)
+- Reject trades that would be beneficial (noise was unfavorable)
+
+These "mistakes" are features, not bugs — they enable study of information asymmetry effects.
+
+**Protocol-Specific Notes:**
+
+- **TIOLI (Take-it-or-leave-it):** Responder's surplus = 0 (proposer extracts all). Under ≥ 0 rule, responder accepts when indifferent.
+- **Nash/Rubinstein:** Surplus split according to protocol; both parties typically have positive surplus.
+
+**Configurable Parameters:**
+- `acceptance_threshold: float = 0.0` — change to require strictly positive surplus
+- `acceptance_noise: float = 0.0` — add stochastic element to accept/reject decision
+
 ---
 
 ## 8. Phase 6: Agent Objectives and Welfare
 
 ### 8.1 Agent Objective Function
 
+**Phase A Objective (Static Equilibrium):**
+
 ```
-Agent Objective
+Agent Objective (Phase A)
 ├── Maximize: Σ δ^t · u(holdings_t)
-│   └── Present discounted value of utility stream
+│   └── Present discounted value of utility from holdings
 │
-├── Holdings complexity (future extension)
-│   ├── On-person: Holdings (immediately accessible)
-│   ├── Stored: StoredHoldings (at home/bank/etc.)
-│   └── Utility evaluation options (configurable):
-│       - u(accessible) — only what's on-person
-│       - u(total_wealth) — all assets regardless of location
-│       - u(accessible) + δ_storage · u(stored) — stored goods discounted
+└── Interpretation: Holdings are durable; utility flows from possession
+    └── Valid for: bargaining protocol comparison, convergence studies
+    └── Limitation: economy reaches static equilibrium and trade stops
+```
+
+This formulation is sufficient for Phase A research (bargaining protocol comparison). Agents trade until reaching Pareto-optimal allocation, then stop. Static equilibrium is a valid and interesting outcome for studying protocol properties.
+
+**Phase B+ Objective (Sustained Economy):**
+
+```
+Agent Objective (Phase B+)
+├── Maximize: Σ δ^t · u(c_t)
+│   └── Present discounted value of utility from CONSUMPTION
 │
-└── Research variable: How does "value of storage" affect behavior?
-    - Foraging economy: only accessible matters
-    - Secure property rights: total wealth matters
-    - Imperfect storage: discounted by retrieval cost/risk
+├── Consumption as metabolism (background process)
+│   ├── Each tick: holdings_t+1 = holdings_t - metabolism + acquired_t
+│   ├── metabolism: Bundle specifying per-tick consumption requirement
+│   ├── c_t = metabolism (automatic consumption each tick)
+│   └── Agent's problem: acquire enough to sustain metabolism
+│
+└── Implications:
+    └── Creates ongoing demand ("demand sink")
+    └── Enables sustained market activity
+    └── Makes production/gathering economically necessary
+```
+
+The transition from Phase A to Phase B objective is what enables "market emergence" as an ongoing phenomenon rather than a one-time convergence.
+
+**Holdings Complexity (Future Extension):**
+
+```
+├── On-person: Holdings (immediately accessible)
+├── Stored: StoredHoldings (at home/bank/etc.)
+└── Utility evaluation options (configurable):
+    - u(accessible) — only what's on-person
+    - u(total_wealth) — all assets regardless of location
+    - u(accessible) + δ_storage · u(stored) — stored goods discounted
+
+Research variable: How does "value of storage" affect behavior?
+- Foraging economy: only accessible matters
+- Secure property rights: total wealth matters
+- Imperfect storage: discounted by retrieval cost/risk
 ```
 
 ### 8.2 Welfare Measurement (Analysis Infrastructure)
@@ -405,10 +613,11 @@ Agent
 │   ├── Endowment: Bundle (immutable)
 │   ├── Holdings: Bundle (mutable, on-person)
 │   ├── StoredHoldings: Bundle | None (future)
+│   ├── Metabolism: Bundle | None (Phase B+; enables sustained economy)
 │   ├── DiscountFactor: float ∈ (0, 1]
 │   ├── BargainingPower: float | None
 │   ├── Position: GridPosition
-│   └── ActionState: cooldowns, proposal_state
+│   └── InteractionState: Available | ProposalPending | Negotiating + Cooldowns
 │
 ├── Beliefs (architecturally present, behaviorally deferred)
 │   ├── TypeBeliefs
@@ -425,8 +634,15 @@ Agent
 │   ├── evaluate: Action → float (sophistication-dependent)
 │   └── choose: () → Action
 │
+├── Interaction (see §7.6-7.9)
+│   ├── Tick structure: Perceive → Decide → Execute
+│   ├── State machine: Available/ProposalPending/Negotiating
+│   ├── Concurrency: simultaneous decision, batched execution
+│   └── Acceptance: surplus ≥ 0 (naive under noisy info)
+│
 └── Objective
-    └── Maximize Σ δ^t · u(holdings_t)
+    ├── Phase A: Maximize Σ δ^t · u(holdings_t)
+    └── Phase B+: Maximize Σ δ^t · u(c_t) with metabolism
 ```
 
 ### 9.2 Key Design Principles
@@ -448,14 +664,19 @@ Agent
 |-----------|----------|
 | Agent identity | Autonomous decision-maker; type derived from attributes + info environment |
 | Self-knowledge | Perfect (standard assumption) |
-| Attributes | Full structure defined; StoredHoldings as future extension |
+| Attributes | Full structure defined; Metabolism for Phase B+ |
 | Beliefs | Interface defined; behaviorally inert for now |
 | Perception | Passive reception within radius; attention filtering future |
 | Actions | Typed enumeration with tags; not hierarchical categories |
 | Decision procedure | Evaluation-based; sophistication varies method |
-| Tick model | 1 action/tick default; propose/accept with configurable locking |
-| Bilateral exchange | Sequential with negotiation phase taking time |
-| Objective | Maximize discounted utility; holdings complexity deferred |
+| Tick structure | Perceive → Decide → Execute (no special co-location phase) |
+| Interaction states | Available / ProposalPending / Negotiating with explicit transitions |
+| Co-location | Strict: required throughout proposal → negotiation → execution |
+| Concurrency | Simultaneous decision, batched execution; target chooses among proposals |
+| Acceptance rule | Accept iff surplus ≥ 0; naive (trust observations) under noisy info |
+| Bilateral exchange | Multi-tick sequence with configurable protocol duration |
+| Objective (Phase A) | Maximize Σ δ^t · u(holdings_t); static equilibrium valid |
+| Objective (Phase B+) | Maximize Σ δ^t · u(c_t) with metabolism; sustained economy |
 | Welfare | Multiple measures tracked |
 
 **Deferred:**
@@ -465,8 +686,10 @@ Agent
 | Beliefs affecting behavior | Architecture ready; activation requires resolving Q2.1-Q2.4 |
 | Attention filtering | Interface allows; not in initial model |
 | StoredHoldings | Attribute defined; utility implications need specification |
+| Metabolism implementation | Attribute defined; good-specific rates need specification for diverse economies |
 | Multilateral exchange | Extension point identified; not implemented |
 | Endogenous action budgets | Configurable defined; endogenous logic deferred |
+| Production/Technology | Needed for Phase B comparative advantage; attribute not yet defined |
 
 ---
 
@@ -488,7 +711,7 @@ Agent
 
 ---
 
-**Document Version:** 0.2
+**Document Version:** 0.3
 **Created:** 2026-01-08
 **Updated:** 2026-01-09
-**Status:** Ready for consistency review
+**Status:** Revised with interaction semantics, concurrency model, acceptance rules, and Phase A/B objective clarification

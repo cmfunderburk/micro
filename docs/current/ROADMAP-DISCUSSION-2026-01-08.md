@@ -685,12 +685,39 @@ This aligns with the "institutions as rules agents operate within" paradigm.
 
 ---
 
-**Document Version:** 2.0
+**Document Version:** 2.1
 **Created:** 2026-01-08
-**Updated:** 2026-01-08 (Session 2)
-**Status:** Most design questions resolved; ready for PRD drafting after final items
+**Updated:** 2026-01-09 (Session 3)
+**Status:** Superseded in part by AGENT-ARCHITECTURE.md v0.3
 
 ### Change Log
+
+**v2.1 (Session 3) — Supersession Note:**
+
+**IMPORTANT:** The tick model in §6.2 has been superseded by AGENT-ARCHITECTURE.md §7.6-7.9. Key changes:
+
+| This Document (§6.2) | AGENT-ARCHITECTURE (§7.6-7.9) | Resolution |
+|---------------------|-------------------------------|------------|
+| 4-phase tick: Perception → Co-location Resolution → Action Selection → Execution | 3-phase tick: Perceive → Decide → Execute | **Simplified.** No special "co-location resolution" phase; handled by normal DecisionProcedure. |
+| Trade executes within tick (Phase 1) | Trade spans multiple ticks (propose → accept → negotiate → execute) | **Multi-tick model is canonical.** Transaction costs require observable tick consumption. |
+| Crossing detection triggers interaction | Crossing paths = "ships in the night" | **No interaction.** Agents who cross never become co-located. |
+| MUTUAL MATCH required for trade | Proposal → acceptance sequence | **Explicit proposal model.** Agent proposes; target accepts/rejects. Mutual proposals detected as special case. |
+
+**What remains valid from §6:**
+- Action exclusivity (one action per tick) ✓
+- Consent required (no auto-trade) ✓
+- Rejection cooldown (3 ticks, per-target) ✓
+- Proposer determination by surplus (when relevant) ✓
+- Gather/Produce as future Phase 2 actions ✓
+
+**What should be disregarded:**
+- The specific 4-phase structure in §6.2
+- "Trade executes in this tick" semantics
+- Crossing detection as interaction trigger
+
+**Authoritative source:** AGENT-ARCHITECTURE.md is now the source of truth for tick semantics, interaction states, concurrency model, and acceptance rules.
+
+---
 
 **v2.0 (Session 2):**
 - Added Section 6: Tick Model and Action Budget (new architecture)

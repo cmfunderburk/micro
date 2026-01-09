@@ -22,7 +22,8 @@ interface SimulationState {
   config: SimulationConfig | null;
   tick: number;
   agents: Agent[];
-  trades: Trade[];
+  trades: Trade[];  // Current tick's trades
+  tradeHistory: Trade[];  // Accumulated trade history
   metrics: Metrics;
   gridSize: number;
   beliefs: BeliefMap;
@@ -41,6 +42,7 @@ const initialSimState = (): SimulationState => ({
   tick: 0,
   agents: [],
   trades: [],
+  tradeHistory: [],
   metrics: initialMetrics,
   gridSize: 15,
   beliefs: {},
@@ -92,6 +94,7 @@ export const useComparisonStore = create<ComparisonState>((set, get) => ({
         tick: simA.tick,
         agents: simA.agents,
         trades: simA.trades,
+        tradeHistory: [...simA.trades],  // Initialize with first tick's trades
         metrics: simA.metrics,
         gridSize: simA.config?.grid_size ?? 15,
         beliefs: simA.beliefs ?? {},
@@ -103,6 +106,7 @@ export const useComparisonStore = create<ComparisonState>((set, get) => ({
         tick: simB.tick,
         agents: simB.agents,
         trades: simB.trades,
+        tradeHistory: [...simB.trades],  // Initialize with first tick's trades
         metrics: simB.metrics,
         gridSize: simB.config?.grid_size ?? 15,
         beliefs: simB.beliefs ?? {},
@@ -130,12 +134,18 @@ export const useComparisonStore = create<ComparisonState>((set, get) => ({
 
     const newHistory = [...state.history, newPoint].slice(-state.maxHistoryLength);
 
+    // Accumulate trade history (keep last 1000 trades per simulation)
+    const maxTradeHistory = 1000;
+    const newTradeHistoryA = [...state.simulationA.tradeHistory, ...simA.trades].slice(-maxTradeHistory);
+    const newTradeHistoryB = [...state.simulationB.tradeHistory, ...simB.trades].slice(-maxTradeHistory);
+
     set({
       simulationA: {
         ...state.simulationA,
         tick: simA.tick,
         agents: simA.agents,
         trades: simA.trades,
+        tradeHistory: newTradeHistoryA,
         metrics: simA.metrics,
         gridSize: simA.config?.grid_size ?? state.simulationA.gridSize,
         beliefs: simA.beliefs ?? {},
@@ -145,6 +155,7 @@ export const useComparisonStore = create<ComparisonState>((set, get) => ({
         tick: simB.tick,
         agents: simB.agents,
         trades: simB.trades,
+        tradeHistory: newTradeHistoryB,
         metrics: simB.metrics,
         gridSize: simB.config?.grid_size ?? state.simulationB.gridSize,
         beliefs: simB.beliefs ?? {},

@@ -9,7 +9,19 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useComparisonStore } from '@/store/comparisonStore';
 import { EdgeworthModal } from '@/components/TradeInspection/EdgeworthModal';
+import { cobbDouglasUtility } from '@/components/TradeInspection/edgeworthMath';
 import type { Trade } from '@/types/simulation';
+
+// Compute utility gains from trade allocations
+function computeTradeGains(trade: Trade): { gainA: number; gainB: number; total: number } {
+  const utilityA_before = cobbDouglasUtility(trade.pre_endowment_1[0], trade.pre_endowment_1[1], trade.alpha1);
+  const utilityA_after = cobbDouglasUtility(trade.post_allocation_1[0], trade.post_allocation_1[1], trade.alpha1);
+  const utilityB_before = cobbDouglasUtility(trade.pre_endowment_2[0], trade.pre_endowment_2[1], trade.alpha2);
+  const utilityB_after = cobbDouglasUtility(trade.post_allocation_2[0], trade.post_allocation_2[1], trade.alpha2);
+  const gainA = utilityA_after - utilityA_before;
+  const gainB = utilityB_after - utilityB_before;
+  return { gainA, gainB, total: gainA + gainB };
+}
 
 interface ComparisonTradeHistoryModalProps {
   open: boolean;
@@ -42,28 +54,31 @@ function TradeList({ trades, label, protocol, onSelectTrade }: TradeListProps) {
             No trades yet
           </div>
         ) : (
-          reversedTrades.map((trade) => (
-            <button
-              key={`${trade.tick}-${trade.agent1_id}-${trade.agent2_id}`}
-              className="w-full text-left px-2 py-1.5 rounded text-sm transition-colors
-                bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
-              onClick={() => onSelectTrade(trade)}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-xs">T{trade.tick}</span>
-                <span className="text-green-400 text-xs">
-                  +{(trade.gains[0] + trade.gains[1]).toFixed(2)}
-                </span>
-              </div>
-              <div className="text-xs text-zinc-500 truncate">
-                ...{trade.agent1_id.slice(-6)} ↔ ...{trade.agent2_id.slice(-6)}
-              </div>
-              <div className="text-xs text-zinc-600 flex justify-between mt-0.5">
-                <span>A: +{trade.gains[0].toFixed(2)}</span>
-                <span>B: +{trade.gains[1].toFixed(2)}</span>
-              </div>
-            </button>
-          ))
+          reversedTrades.map((trade) => {
+            const { gainA, gainB, total } = computeTradeGains(trade);
+            return (
+              <button
+                key={`${trade.tick}-${trade.agent1_id}-${trade.agent2_id}`}
+                className="w-full text-left px-2 py-1.5 rounded text-sm transition-colors
+                  bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+                onClick={() => onSelectTrade(trade)}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs">T{trade.tick}</span>
+                  <span className="text-green-400 text-xs">
+                    +{total.toFixed(2)}
+                  </span>
+                </div>
+                <div className="text-xs text-zinc-500 truncate">
+                  ...{trade.agent1_id.slice(-6)} ↔ ...{trade.agent2_id.slice(-6)}
+                </div>
+                <div className="text-xs text-zinc-600 flex justify-between mt-0.5">
+                  <span>A: +{gainA.toFixed(2)}</span>
+                  <span>B: +{gainB.toFixed(2)}</span>
+                </div>
+              </button>
+            );
+          })
         )}
       </div>
     </div>
@@ -97,7 +112,7 @@ export function ComparisonTradeHistoryModal({
 
           <div className="flex gap-4">
             <TradeList
-              trades={simulationA.trades}
+              trades={simulationA.tradeHistory}
               label={simulationA.label}
               protocol={simulationA.config?.bargaining_protocol ?? 'N/A'}
               onSelectTrade={handleSelectTrade}
@@ -106,7 +121,7 @@ export function ComparisonTradeHistoryModal({
             <div className="w-px bg-zinc-700" />
 
             <TradeList
-              trades={simulationB.trades}
+              trades={simulationB.tradeHistory}
               label={simulationB.label}
               protocol={simulationB.config?.bargaining_protocol ?? 'N/A'}
               onSelectTrade={handleSelectTrade}

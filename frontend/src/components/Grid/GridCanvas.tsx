@@ -12,17 +12,11 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useSimulationStore } from '@/store';
 import type { Agent, Trade } from '@/types/simulation';
+import { alphaToColor } from '@/lib/colors';
 
 interface GridCanvasProps {
   width?: number;
   height?: number;
-}
-
-// Map alpha (0-1) to color (red to blue via purple)
-function alphaToColor(alpha: number): string {
-  // HSL interpolation: 0 (red) = hue 0, 1 (blue) = hue 240
-  const hue = alpha * 240;
-  return `hsl(${hue}, 70%, 50%)`;
 }
 
 export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {

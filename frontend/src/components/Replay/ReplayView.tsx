@@ -4,24 +4,25 @@
  * Shows the simulation state at the current replay tick.
  */
 
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, type ReactElement } from 'react';
 import { useReplayStore } from '@/store/replayStore';
+import { useContainerSize } from '@/hooks/useContainerSize';
+import { alphaToColor } from '@/lib/colors';
+import {
+  groupAgentsByPosition,
+  getAgentCanvasPos,
+  getAgentDrawRadius,
+  drawGridLines,
+  clearCanvas,
+} from '@/lib/gridUtils';
 import { TimelineSlider } from './TimelineSlider';
 import { ReplayControls } from './ReplayControls';
-import type { Agent } from '@/types/simulation';
-
-// Map alpha (0-1) to color (red to blue via purple)
-function alphaToColor(alpha: number): string {
-  const hue = alpha * 240;
-  return `hsl(${hue}, 70%, 50%)`;
-}
-
 interface ReplayCanvasProps {
   width: number;
   height: number;
 }
 
-function ReplayCanvas({ width, height }: ReplayCanvasProps) {
+function ReplayCanvas({ width, height }: ReplayCanvasProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const getCurrentTickData = useReplayStore((state) => state.getCurrentTickData);
   const loadedRun = useReplayStore((state) => state.loadedRun);
@@ -35,15 +36,6 @@ function ReplayCanvas({ width, height }: ReplayCanvasProps) {
   const cellSize = Math.min(width, height) / gridSize;
   const agentRadius = cellSize * 0.35;
 
-  const posToCanvas = useCallback(
-    (row: number, col: number): [number, number] => {
-      const x = (col + 0.5) * cellSize;
-      const y = (row + 0.5) * cellSize;
-      return [x, y];
-    },
-    [cellSize]
-  );
-
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -51,65 +43,18 @@ function ReplayCanvas({ width, height }: ReplayCanvasProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear canvas
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(0, 0, width, height);
-
-    // Draw grid lines
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-
-    for (let i = 0; i <= gridSize; i++) {
-      const pos = i * cellSize;
-      ctx.beginPath();
-      ctx.moveTo(pos, 0);
-      ctx.lineTo(pos, height);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, pos);
-      ctx.lineTo(width, pos);
-      ctx.stroke();
-    }
+    clearCanvas(ctx, width, height);
+    drawGridLines(ctx, gridSize, cellSize, width, height);
 
     if (!tickData) return;
 
-    // Build position map for co-location
-    const posMap = new Map<string, Agent[]>();
-    for (const agent of tickData.agents) {
-      const key = `${agent.position[0]},${agent.position[1]}`;
-      const existing = posMap.get(key) || [];
-      existing.push(agent);
-      posMap.set(key, existing);
-    }
-
-    const getAgentCanvasPos = (agent: Agent): [number, number] => {
-      const [row, col] = agent.position;
-      const [baseX, baseY] = posToCanvas(row, col);
-
-      const key = `${row},${col}`;
-      const colocated = posMap.get(key);
-
-      if (!colocated || colocated.length <= 1) return [baseX, baseY];
-
-      const index = colocated.findIndex(a => a.id === agent.id);
-      const count = colocated.length;
-
-      const offsetRadius = agentRadius * 0.6;
-      const angle = (2 * Math.PI * index) / count;
-      const offsetX = Math.cos(angle) * offsetRadius;
-      const offsetY = Math.sin(angle) * offsetRadius;
-
-      return [baseX + offsetX, baseY + offsetY];
-    };
+    const posMap = groupAgentsByPosition(tickData.agents);
 
     // Draw agents
     for (const agent of tickData.agents) {
-      const [x, y] = getAgentCanvasPos(agent);
+      const [x, y] = getAgentCanvasPos(agent, posMap, cellSize, agentRadius);
       const color = alphaToColor(agent.alpha);
-
-      const posKey = `${agent.position[0]},${agent.position[1]}`;
-      const colocatedCount = posMap.get(posKey)?.length ?? 1;
-      const drawRadius = colocatedCount > 1 ? agentRadius * 0.7 : agentRadius;
+      const drawRadius = getAgentDrawRadius(agent, posMap, agentRadius);
 
       ctx.fillStyle = color;
       ctx.beginPath();
@@ -120,7 +65,7 @@ function ReplayCanvas({ width, height }: ReplayCanvasProps) {
       ctx.lineWidth = 1;
       ctx.stroke();
     }
-  }, [tickData, gridSize, cellSize, width, height, agentRadius, posToCanvas]);
+  }, [tickData, gridSize, cellSize, width, height, agentRadius]);
 
   useEffect(() => {
     render();
@@ -136,31 +81,10 @@ function ReplayCanvas({ width, height }: ReplayCanvasProps) {
   );
 }
 
-export function ReplayView() {
+export function ReplayView(): ReactElement | null {
   const loadedRun = useReplayStore((state) => state.loadedRun);
   const getCurrentTickData = useReplayStore((state) => state.getCurrentTickData);
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [gridSize, setGridSize] = useState(500);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const updateGridSize = () => {
-      const rect = container.getBoundingClientRect();
-      const availableWidth = rect.width - 12;
-      const availableHeight = rect.height - 80; // Account for controls
-      const size = Math.min(availableWidth, availableHeight, 600);
-      setGridSize(Math.max(300, Math.floor(size)));
-    };
-
-    const resizeObserver = new ResizeObserver(updateGridSize);
-    resizeObserver.observe(container);
-    requestAnimationFrame(updateGridSize);
-
-    return () => resizeObserver.disconnect();
-  }, []);
+  const { containerRef, size: gridSize } = useContainerSize({ heightOffset: 80 });
 
   if (!loadedRun) return null;
 

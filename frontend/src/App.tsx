@@ -17,6 +17,7 @@ import {
   ComparisonWelfareChart,
   ComparisonTradeChart,
   ComparisonMetrics,
+  ComparisonTradeHistoryModal,
 } from '@/components/Comparison';
 import { ReplayLoader, ReplayView } from '@/components/Replay';
 import { ScenarioBrowser } from '@/components/Scenarios';
@@ -60,6 +61,9 @@ function App() {
 
   // Trade history modal state
   const [tradeHistoryOpen, setTradeHistoryOpen] = useState(false);
+
+  // Comparison trade history modal state
+  const [comparisonTradeHistoryOpen, setComparisonTradeHistoryOpen] = useState(false);
 
   // Trade inspection state
   const tradeHistory = useSimulationStore((state) => state.tradeHistory);
@@ -152,12 +156,18 @@ function App() {
           <ComparisonControls sendCommand={sendCommand} />
           <ReplayLoader />
           <Button
-            onClick={() => setTradeHistoryOpen(true)}
+            onClick={() => {
+              if (comparisonMode) {
+                setComparisonTradeHistoryOpen(true);
+              } else {
+                setTradeHistoryOpen(true);
+              }
+            }}
             variant="outline"
             size="icon"
             className="h-8 w-8"
             title="Trade History"
-            disabled={comparisonMode || replayMode}
+            disabled={replayMode}
           >
             <History className="h-4 w-4" />
           </Button>
@@ -377,6 +387,12 @@ function App() {
         open={configModalOpen}
         onOpenChange={setConfigModalOpen}
         sendCommand={sendCommand}
+      />
+
+      {/* Comparison Trade History Modal */}
+      <ComparisonTradeHistoryModal
+        open={comparisonTradeHistoryOpen}
+        onOpenChange={setComparisonTradeHistoryOpen}
       />
     </div>
   );

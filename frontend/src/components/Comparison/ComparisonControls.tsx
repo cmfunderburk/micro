@@ -20,6 +20,16 @@ import { GitCompare, X } from 'lucide-react';
 import type { SimulationConfig } from '@/types/simulation';
 import type { Command } from '@/hooks/useSimulationSocket';
 
+type BargainingProtocol = 'nash' | 'rubinstein' | 'tioli' | 'asymmetric_nash';
+
+// Protocol display configuration - matches ConfigModal for consistency
+const BARGAINING_PROTOCOLS: { value: BargainingProtocol; label: string; shortLabel: string }[] = [
+  { value: 'nash', label: 'Nash (Symmetric)', shortLabel: 'Nash' },
+  { value: 'rubinstein', label: 'Nash (Patience)', shortLabel: 'Rubinstein' },
+  { value: 'asymmetric_nash', label: 'Nash (Power)', shortLabel: 'Asymmetric' },
+  { value: 'tioli', label: 'Take-It-Or-Leave-It', shortLabel: 'TIOLI' },
+];
+
 interface ComparisonControlsProps {
   sendCommand: (command: Command) => void;
 }
@@ -30,8 +40,8 @@ export function ComparisonControls({ sendCommand }: ComparisonControlsProps) {
   const [open, setOpen] = useState(false);
 
   // Configuration for the comparison
-  const [protocol1, setProtocol1] = useState<'nash' | 'rubinstein'>('nash');
-  const [protocol2, setProtocol2] = useState<'nash' | 'rubinstein'>('rubinstein');
+  const [protocol1, setProtocol1] = useState<BargainingProtocol>('nash');
+  const [protocol2, setProtocol2] = useState<BargainingProtocol>('rubinstein');
   const [nAgents, setNAgents] = useState(config?.n_agents ?? 10);
   const [gridSizeVal, setGridSizeVal] = useState(config?.grid_size ?? 15);
   const [seed, setSeed] = useState<number | ''>('');
@@ -58,12 +68,16 @@ export function ComparisonControls({ sendCommand }: ComparisonControlsProps) {
       bargaining_protocol: protocol2,
     };
 
+    // Get short labels for display
+    const getShortLabel = (p: BargainingProtocol) =>
+      BARGAINING_PROTOCOLS.find((bp) => bp.value === p)?.shortLabel ?? p;
+
     sendCommand({
       command: 'comparison',
       config1,
       config2,
-      label1: protocol1.charAt(0).toUpperCase() + protocol1.slice(1),
-      label2: protocol2.charAt(0).toUpperCase() + protocol2.slice(1),
+      label1: getShortLabel(protocol1),
+      label2: getShortLabel(protocol2),
     });
 
     setOpen(false);
@@ -114,22 +128,28 @@ export function ComparisonControls({ sendCommand }: ComparisonControlsProps) {
               <label className="text-sm font-medium">Protocol A</label>
               <select
                 value={protocol1}
-                onChange={(e) => setProtocol1(e.target.value as 'nash' | 'rubinstein')}
+                onChange={(e) => setProtocol1(e.target.value as BargainingProtocol)}
                 className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm"
               >
-                <option value="nash">Nash</option>
-                <option value="rubinstein">Rubinstein</option>
+                {BARGAINING_PROTOCOLS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Protocol B</label>
               <select
                 value={protocol2}
-                onChange={(e) => setProtocol2(e.target.value as 'nash' | 'rubinstein')}
+                onChange={(e) => setProtocol2(e.target.value as BargainingProtocol)}
                 className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm"
               >
-                <option value="nash">Nash</option>
-                <option value="rubinstein">Rubinstein</option>
+                {BARGAINING_PROTOCOLS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

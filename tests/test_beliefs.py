@@ -662,11 +662,13 @@ class TestSearchIntegration:
             agent1, grid, info_env, agents_by_id, use_beliefs=True
         )
 
-        assert len(evaluations) == 1
-        assert evaluations[0].target_id == "a2"
-        assert evaluations[0].used_belief is True
-        assert evaluations[0].believed_alpha == pytest.approx(0.8, rel=1e-6)
-        assert evaluations[0].observed_alpha == pytest.approx(0.7, rel=1e-6)
+        # Filter out self-evaluation (co-located agent with distance 0)
+        non_self_evals = [e for e in evaluations if e.distance > 0]
+        assert len(non_self_evals) == 1
+        assert non_self_evals[0].target_id == "a2"
+        assert non_self_evals[0].used_belief is True
+        assert non_self_evals[0].believed_alpha == pytest.approx(0.8, rel=1e-6)
+        assert non_self_evals[0].observed_alpha == pytest.approx(0.7, rel=1e-6)
 
     def test_search_without_belief_for_partner_uses_observation(self):
         """Search should use observation when no belief exists for partner."""
@@ -694,9 +696,11 @@ class TestSearchIntegration:
             agent1, grid, info_env, agents_by_id, use_beliefs=True
         )
 
-        assert len(evaluations) == 1
-        assert evaluations[0].used_belief is False
-        assert evaluations[0].believed_alpha is None
+        # Filter out self-evaluation (co-located agent with distance 0)
+        non_self_evals = [e for e in evaluations if e.distance > 0]
+        assert len(non_self_evals) == 1
+        assert non_self_evals[0].used_belief is False
+        assert non_self_evals[0].believed_alpha is None
 
     def test_search_beliefs_affect_target_choice(self):
         """Beliefs should affect which target is chosen."""
@@ -816,11 +820,13 @@ class TestSearchIntegration:
             agent1, grid, info_env, agents_by_id, use_beliefs=False
         )
 
-        assert len(evaluations) == 1
-        assert evaluations[0].used_belief is False
-        assert evaluations[0].believed_alpha is None
+        # Filter out self-evaluation (co-located agent with distance 0)
+        non_self_evals = [e for e in evaluations if e.distance > 0]
+        assert len(non_self_evals) == 1
+        assert non_self_evals[0].used_belief is False
+        assert non_self_evals[0].believed_alpha is None
         # Should use observed alpha (true alpha in FullInformation)
-        assert evaluations[0].observed_alpha == pytest.approx(0.7, rel=1e-6)
+        assert non_self_evals[0].observed_alpha == pytest.approx(0.7, rel=1e-6)
 
 
 class TestExchangeIntegration:

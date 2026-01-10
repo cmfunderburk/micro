@@ -142,7 +142,6 @@ class BatchRunner:
         discount_factor = config.get("discount_factor", 0.95)
         seed = config.get("seed")
         bargaining_protocol = config.get("protocol", NashBargainingProtocol())
-        matching_protocol = config.get("matching_protocol", OpportunisticMatchingProtocol())
 
         # Create simulation using factory function but inject logger
         if seed is not None:
@@ -155,7 +154,6 @@ class BatchRunner:
             discount_factor=discount_factor,
             seed=seed,
             bargaining_protocol=bargaining_protocol,
-            matching_protocol=matching_protocol,
         )
 
         # Inject logger

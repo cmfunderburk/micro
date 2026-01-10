@@ -230,7 +230,6 @@ def run_market_emergence(
     sim = Simulation(
         grid=grid,
         bargaining_protocol=bargaining_protocol,
-        matching_protocol=matching_protocol,
         info_env=info_env,
         logger=logger,
     )

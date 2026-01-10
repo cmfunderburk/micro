@@ -165,3 +165,46 @@ Each entry follows: [timestamp] [phase] [status] [description]
 | StableRoommates deprecated | Expected | Per ROADMAP.md §7.3 |
 | CommitmentState tests skipped | By design | Replaced by InteractionState |
 | Path-crossing tests skipped | By design | Adjacency-based trading changes semantics |
+
+---
+
+## Architecture Gap Analysis
+
+### PRD vs Implementation Differences
+
+| PRD Specification | Implementation | Notes |
+|-------------------|----------------|-------|
+| Multi-tick exchange (ADR-003: min 2 ticks) | Same-tick proposal/accept | Simplified model; trades complete in 1 tick |
+| Phase 5 Event System (exchange_id) | Not implemented | Event correlation deferred as optional |
+| FEAT-017: ProposalEvent, etc. | Not implemented | New event types not added |
+| FEAT-018: exchange_id propagation | Not implemented | Single-tick trades don't need correlation |
+| FEAT-019: TickRecord interaction_states | Partial | InteractionState exists but not logged |
+| FEAT-020: Analysis queries | Not implemented | exchange_duration() n/a for same-tick trades |
+
+### Assessment
+
+The **core agent architecture** is functionally complete:
+- Agents have proper state (holdings, endowment, interaction state)
+- Actions are explicit (Move, Propose, Accept, Reject, Wait)
+- Decision procedure is pluggable (rational, bounded, adaptive)
+- Tick loop is 3-phase (Perceive, Decide, Execute)
+- Exchange requires mutual consent via proposal/accept
+
+The **multi-tick exchange sequence** from ADR-003 was simplified to same-tick semantics:
+- Pro: Simpler to implement and test
+- Pro: Still enables institutional comparison research
+- Con: Transaction costs fixed at 1 tick per exchange (not variable)
+- Con: No coordination failure tracking across ticks
+
+### Recommendation
+
+For Phase A objectives (bargaining protocol comparison, convergence studies), the current
+implementation is sufficient. The same-tick model still enables meaningful comparison:
+- Different protocols produce different surplus splits
+- Search costs are still measurable (ticks to reach partner)
+- Conservation laws hold
+
+Multi-tick exchange (ADR-003 full spec) can be added later if needed for:
+- Coordination failure analysis
+- Variable transaction costs as research variable
+- More realistic negotiation duration modeling

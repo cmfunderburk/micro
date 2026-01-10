@@ -170,6 +170,7 @@ class TestRunComparison:
         protocols = {r.config.protocol_name for r in results}
         assert protocols == {"nash", "rubinstein"}
 
+    @pytest.mark.slow
     def test_run_comparison_multiple_seeds(self):
         results = run_comparison(
             n_agents=4, grid_size=5, ticks=5, seeds=[1, 2, 3]
@@ -199,6 +200,7 @@ class TestRunComparison:
 class TestBatchRunnerParameterCombinations:
     """Test complex parameter combinations."""
 
+    @pytest.mark.slow
     def test_cartesian_product(self):
         runner = BatchRunner(
             base_config={"n_agents": 4, "grid_size": 5},

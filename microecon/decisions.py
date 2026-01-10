@@ -328,8 +328,13 @@ class RationalDecisionProcedure(DecisionProcedure):
     ) -> "Action":
         """
         Choose action with maximum expected utility.
+
+        Tie-breaking (when values are equal):
+        - ProposeAction: lexicographically smallest target_id
+        - MoveAction: lexicographically smallest target position (row, col)
+        - Action type priority: Propose (0) > Move (1) > Wait (2)
         """
-        from microecon.actions import WaitAction
+        from microecon.actions import WaitAction, ProposeAction, MoveAction
 
         actions = self.available_actions(agent, context)
 
@@ -340,10 +345,40 @@ class RationalDecisionProcedure(DecisionProcedure):
         # Evaluate all actions
         evaluated = [(action, self.evaluate(agent, action, context)) for action in actions]
 
-        # Choose maximum (ties broken by first occurrence)
-        best_action, best_value = max(evaluated, key=lambda x: x[1])
+        # Choose maximum with deterministic tie-breaking
+        best_action = None
+        best_value = float('-inf')
+        best_tie_breaker: tuple = ()
 
-        return best_action
+        for action, value in evaluated:
+            # Compute tie-breaker: (action_type_priority, secondary_key)
+            # When value > 0: prefer Propose > Move > Wait (take beneficial action)
+            # When value <= 0: prefer Wait > Move > Propose (don't act without benefit)
+            if value > 0:
+                # Positive value: prefer actions over waiting
+                if isinstance(action, ProposeAction):
+                    tie_breaker = (0, action.target_id)
+                elif isinstance(action, MoveAction):
+                    tie_breaker = (1, (action.target_position.row, action.target_position.col))
+                else:
+                    tie_breaker = (2, "")
+            else:
+                # Zero or negative value: prefer waiting over acting
+                if isinstance(action, WaitAction):
+                    tie_breaker = (0, "")
+                elif isinstance(action, MoveAction):
+                    tie_breaker = (1, (action.target_position.row, action.target_position.col))
+                else:
+                    # ProposeAction with no benefit - lowest priority
+                    tie_breaker = (2, action.target_id if isinstance(action, ProposeAction) else "")
+
+            # Update if better value, or same value with smaller tie-breaker
+            if value > best_value or (value == best_value and tie_breaker < best_tie_breaker):
+                best_action = action
+                best_value = value
+                best_tie_breaker = tie_breaker
+
+        return best_action if best_action is not None else WaitAction()
 
     def evaluate_proposal(
         self,

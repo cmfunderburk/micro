@@ -161,9 +161,10 @@ class TestInformationEnvironmentIntegration:
 
         def run_with_info_env(info_env, sim_seed=42):
             """Run simulation and collect search decision chosen_values."""
+            # Use explicit agent IDs for deterministic tie-breaking across runs
             agents = [
-                create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, perception_radius=10.0),
-                create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, perception_radius=10.0),
+                create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, perception_radius=10.0, agent_id="agent_a"),
+                create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, perception_radius=10.0, agent_id="agent_b"),
             ]
             config = SimulationConfig(n_agents=2, grid_size=10, seed=sim_seed, protocol_name="nash")
             logger = SimulationLogger(config=config)

@@ -292,37 +292,74 @@ Action Budget
 ├── Default: 1 action per tick
 ├── Configurable per scenario
 └── Future: endogenous budgets (fatigue, energy, etc.)
+
+What Consumes Action Budget:
+├── Trade execution: 1 action (BOTH parties)
+├── Movement: 1 action
+└── Wait: 0 actions
+
+What Does NOT Consume Action Budget (Coordination):
+├── Propose: signaling intent (like raising hand)
+├── Accept: agreeing to terms (like nodding)
+└── Reject: declining (like shaking head)
 ```
+
+Coordination activities (Propose/Accept/Reject) are **not agent decisions** in the game-theoretic sense. They are the simulation's coordination mechanism for establishing mutual consent before trade execution.
 
 ### 7.2 Bilateral Exchange Sequence
 
-Trade requires mutual consent. The default model:
+Trade requires mutual consent. Coordination is resolved within a single tick.
+
+**Agent Decision (DECIDE phase):**
+
+Agents choose an *intent* with a pre-computed *fallback*:
 
 ```
-Bilateral Exchange Sequence
+TradeIntent(target=B, fallback=Move(toward_B))
 │
-├── Tick T: Agent A chooses Propose(target=B, terms=...)
-│   ├── Proposer lock: configurable (locked = default)
-│   │   - Locked: A waits for response, cannot act
-│   │   - Unlocked: A can continue other activities
-│   └── Multiple proposals: protocol-specific
-│       - Exclusive: one active proposal at a time
-│       - Broadcast: can propose to multiple; first acceptance wins
-│
-├── Tick T+1: Agent B observes proposal
-│   ├── Visibility determined by information environment:
-│   │   - Posted price → public within perception radius
-│   │   - Targeted offer → private to recipient
-│   └── B chooses Accept(A) | Reject | other action
-│
-├── Tick T+2: Negotiation phase (if accepted)
-│   ├── Bargaining protocol executes
-│   ├── Duration: configurable (1 tick default)
-│   └── Can fail (no zone of agreement)
-│
-└── Tick T+3: Trade executes (if negotiation succeeds)
-    └── Holdings update for both agents
+├── Primary: attempt trade with B
+└── Fallback: if trade fails, execute this instead
+    └── Pre-computed based on perceive-time information
 ```
+
+**Coordination Resolution (EXECUTE phase):**
+
+The simulation applies institutional constraints to resolve coordination:
+
+```
+Coordination Constraints (institutional rules, not agent decisions)
+│
+├── Proposal matching
+│   └── Identify who proposed to whom
+│
+├── Acceptance check (deterministic given agent's utility function)
+│   └── Does trade surplus >= opportunity cost of target's current plan?
+│
+├── Conflict resolution
+│   └── If multiple proposals to same target: target selects highest surplus
+│
+└── Agreement formation
+    └── Mutual consent verified → trade agreement formed
+```
+
+**Execution Outcomes:**
+
+| Scenario | Proposer (A) | Target (B) |
+|----------|--------------|------------|
+| B accepts A | Trade (1 action) | Trade (1 action) |
+| B explicitly rejects A | Cooldown + Fallback | Executes own intent |
+| B accepts C instead (implicit) | Fallback (no cooldown) | Trade with C (1 action) |
+| B unavailable (moved away) | Fallback (no cooldown) | N/A |
+
+**Cooldown Rules:**
+
+| Trigger | Cooldown? | Rationale |
+|---------|-----------|-----------|
+| Explicit rejection | Yes | Target evaluated and said no |
+| Implicit non-selection | No | Target had better option, may accept later |
+| Target unavailable | No | Bad timing, not rejection |
+
+While on cooldown with agent B, agent B is excluded from A's utility calculations (A won't consider proposing to B).
 
 ### 7.3 Failed Actions Yield Information
 
@@ -334,14 +371,20 @@ When actions fail (e.g., proposal rejected, target moved away):
 
 ### 7.4 Transaction Costs Made Explicit
 
-| Phase | Tick Cost | What It Represents |
-|-------|-----------|-------------------|
-| Search | Movement ticks | Physical/information search costs |
-| Proposal | 1 tick (+ wait if locked) | Cost of initiating exchange |
-| Negotiation | 1+ ticks (configurable) | Bargaining/contracting costs |
-| Failed proposal | Wasted tick(s) | Risk of coordination failure |
+| Activity | Action Cost | Other Cost | What It Represents |
+|----------|-------------|------------|-------------------|
+| Search | 1 per move | — | Physical/information search costs |
+| Propose | 0 | — | Signaling intent (coordination) |
+| Trade (success) | 1 (both parties) | — | Physical exchange of goods |
+| Trade (rejected) | 0 | Cooldown (N ticks) | Failed coordination; can't re-propose to rejector |
+| Trade (not selected) | 0 | — | Lost to competitor; can try again |
 
-This operationalizes transaction cost economics. Different protocols have different tick costs, making institutional comparison meaningful.
+**Key insight:** The action budget cost of trade is borne by *both* parties. This means:
+- Accepting a trade is a real commitment (uses your action)
+- Both parties forgo other activities (movement) when trading
+- Trade has symmetric opportunity cost
+
+**Fallback behavior:** When a proposal fails (rejection or non-selection), the proposer executes their pre-computed fallback action. This means failed proposals don't "waste" the proposer's action budget—they simply execute plan B.
 
 ### 7.5 Multilateral Extension Point
 
@@ -352,27 +395,45 @@ The architecture supports future multilateral exchange by:
 
 ### 7.6 Tick Structure
 
-Each tick follows a simple three-phase structure:
+Each tick follows a three-phase structure:
 
 ```
 Tick Structure
 │
 ├── PERCEIVE
-│   └── All agents observe current state (frozen snapshot)
-│   └── Perception radius and information environment apply
+│   ├── All agents observe current state (frozen snapshot)
+│   ├── Perception radius and information environment apply
+│   └── Agent evaluates visible partners (discounted surplus)
 │
-├── DECIDE
-│   └── All agents select actions based on perceived state
+├── DECIDE (agent autonomy)
+│   ├── Each agent selects intent based on perceived state
+│   │   └── TradeIntent(target, fallback) | MoveAction | WaitAction
+│   ├── Fallback pre-computed from perceive-time information
 │   └── No agent observes another's decision
-│   └── DecisionProcedure.choose() executes for each agent
 │
-└── EXECUTE
-    └── Conflict resolution (see §7.8)
-    └── All actions execute, producing next state
-    └── State changes are batched, not sequential
+└── EXECUTE (simulation applies constraints + executes)
+    │
+    ├── Coordination constraints (institutional rules):
+    │   ├── Match proposals (who proposed to whom)
+    │   ├── Check acceptance (surplus >= opportunity cost?)
+    │   ├── Resolve conflicts (multiple proposals to same target)
+    │   └── Form agreements (mutual consent verified)
+    │
+    ├── Action execution:
+    │   ├── Trade agreements → both parties Trade (1 action each)
+    │   ├── Explicit rejection → cooldown + proposer executes fallback
+    │   ├── Implicit non-selection → proposer executes fallback (no cooldown)
+    │   └── Non-proposers who didn't trade → execute original intent
+    │
+    └── State update:
+        └── All changes batched, producing state_t+1
 ```
 
-This replaces any notion of mandatory "phases" within the tick. There is no special "co-location resolution phase" — co-located agents simply have additional actions available (Propose, Accept) which their DecisionProcedure evaluates alongside Move, Gather, Wait, etc.
+**Key distinction:**
+- **DECIDE:** Agent autonomy — agents choose their intent
+- **EXECUTE:** Institutional constraint — simulation resolves coordination according to rules
+
+The coordination constraints are not agent decisions. Given an agent's utility function and current plan, acceptance is deterministic. The simulation enforces: "trades require mutual benefit."
 
 ### 7.7 Interaction State Machine
 
@@ -477,25 +538,30 @@ Concurrency: Simultaneous Decision, Batched Execution
 - If surplus tied: lower agent_id wins (deterministic)
 - Any other ties: seeded RNG (reproducible with same seed)
 
-### 7.9 Acceptance Rules
+### 7.9 Acceptance Constraint
 
-When an agent receives a proposal, they must decide Accept or Reject. The default rule is surplus-based.
+Acceptance is an **institutional constraint**, not an agent decision. The simulation checks whether a trade satisfies the target agent's utility function—given their current plan, would they accept?
 
-**Default Acceptance Rule (Rational Agent):**
+**Acceptance Condition (Opportunity Cost Comparison):**
 
 ```
 For agent B receiving proposal from A:
 
-1. Compute expected outcome under active protocol
-   outcome = protocol.compute_outcome(A, B, info_environment)
+1. Compute surplus from trading with A
+   trade_surplus = u_B(post_trade_holdings) - u_B(current_holdings)
 
-2. Compute expected surplus for self
-   surplus_B = u_B(outcome.holdings_B) - u_B(current_holdings_B)
+2. Compute opportunity cost (B's best alternative)
+   opportunity_cost = δ^d × surplus_from_best_alternative
+   where d = distance to B's current target
 
-3. Decision
-   if surplus_B ≥ 0: Accept
-   else: Reject
+3. Accept iff trade_surplus >= opportunity_cost
 ```
+
+This means B accepts if trading with A *now* is at least as good as pursuing B's current plan. The opportunity cost captures what B gives up by trading instead of continuing toward their target.
+
+**Why Opportunity Cost, Not Just Surplus ≥ 0:**
+
+The naive rule (accept iff surplus ≥ 0) ignores what the agent was planning to do. An agent moving toward a high-value partner should reject a mediocre proposal—even if it has positive surplus—because their current plan is better.
 
 **Information Environment Variants:**
 
@@ -512,12 +578,12 @@ These "mistakes" are features, not bugs — they enable study of information asy
 
 **Protocol-Specific Notes:**
 
-- **TIOLI (Take-it-or-leave-it):** Responder's surplus = 0 (proposer extracts all). Under ≥ 0 rule, responder accepts when indifferent.
-- **Nash/Rubinstein:** Surplus split according to protocol; both parties typically have positive surplus.
+- **TIOLI (Take-it-or-leave-it):** Responder's surplus = 0 (proposer extracts all). Responder accepts only if opportunity cost ≤ 0.
+- **Nash/Rubinstein:** Surplus split according to protocol; typically positive surplus for both.
 
-**Configurable Parameters:**
-- `acceptance_threshold: float = 0.0` — change to require strictly positive surplus
-- `acceptance_noise: float = 0.0` — add stochastic element to accept/reject decision
+**Conflict Resolution (Multiple Proposals):**
+
+When B receives proposals from multiple agents, B selects the proposal with highest `trade_surplus - opportunity_cost`. Non-selected proposals are implicitly rejected (no cooldown for proposers).
 
 ---
 
@@ -667,14 +733,16 @@ Agent
 | Attributes | Full structure defined; Metabolism for Phase B+ |
 | Beliefs | Interface defined; behaviorally inert for now |
 | Perception | Passive reception within radius; attention filtering future |
-| Actions | Typed enumeration with tags; not hierarchical categories |
-| Decision procedure | Evaluation-based; sophistication varies method |
-| Tick structure | Perceive → Decide → Execute (no special co-location phase) |
-| Interaction states | Available / ProposalPending / Negotiating with explicit transitions |
-| Co-location | Strict: required throughout proposal → negotiation → execution |
+| Actions | TradeIntent with fallback, MoveAction, WaitAction |
+| Action budget | Trade = 1 action (both parties); Move = 1 action; Coordination (propose/accept/reject) = free |
+| Decision procedure | Evaluation-based; sophistication varies method; fallback pre-computed |
+| Tick structure | Perceive → Decide → Execute (coordination constraints applied in Execute) |
+| Coordination | Institutional constraint, not agent decision; simulation enforces mutual consent |
+| Co-location | Required for trade; not required for proposal (adjacent suffices) |
 | Concurrency | Simultaneous decision, batched execution; target chooses among proposals |
-| Acceptance rule | Accept iff surplus ≥ 0; naive (trust observations) under noisy info |
-| Bilateral exchange | Multi-tick sequence with configurable protocol duration |
+| Acceptance constraint | Accept iff trade_surplus ≥ opportunity_cost; naive under noisy info |
+| Cooldowns | Explicit rejection → cooldown; implicit non-selection → no cooldown |
+| Bilateral exchange | Same-tick resolution with pre-computed fallback |
 | Objective (Phase A) | Maximize Σ δ^t · u(holdings_t); static equilibrium valid |
 | Objective (Phase B+) | Maximize Σ δ^t · u(c_t) with metabolism; sustained economy |
 | Welfare | Multiple measures tracked |
@@ -711,7 +779,7 @@ Agent
 
 ---
 
-**Document Version:** 0.3
+**Document Version:** 0.4
 **Created:** 2026-01-08
-**Updated:** 2026-01-09
-**Status:** Revised with interaction semantics, concurrency model, acceptance rules, and Phase A/B objective clarification
+**Updated:** 2026-01-10
+**Status:** Revised action budget model (trade costs action, coordination free), acceptance as institutional constraint with opportunity cost, fallback mechanics, cooldown rules

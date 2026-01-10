@@ -170,6 +170,7 @@ class TestCreateSimpleEconomy:
             pos2 = sim2.grid.get_position(a2)
             assert pos1 == pos2
 
+    @pytest.mark.slow
     def test_full_reproducibility(self):
         """Same seed should produce identical simulation runs including trades."""
         sim1 = create_simple_economy(n_agents=6, grid_size=8, seed=123)

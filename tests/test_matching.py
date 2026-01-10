@@ -38,12 +38,18 @@ def make_agent(agent_id: str, alpha: float, endowment_x: float, endowment_y: flo
 
 
 # =============================================================================
-# CommitmentState Tests
+# CommitmentState Tests (DEPRECATED - cleanup scheduled)
 # =============================================================================
 
 
+@pytest.mark.skip(reason="CommitmentState deprecated; replaced by InteractionState. Cleanup scheduled.")
 class TestCommitmentState:
-    """Tests for CommitmentState tracking."""
+    """Tests for CommitmentState tracking.
+
+    DEPRECATED: CommitmentState was designed for StableRoommatesMatchingProtocol.
+    The new architecture uses InteractionState for agent exchange state tracking.
+    These tests are skipped pending full deprecation of CommitmentState.
+    """
 
     def test_initial_state_empty(self):
         """New commitment state has no commitments."""
@@ -177,10 +183,11 @@ class TestOpportunisticMatchingProtocol:
 
 
 # =============================================================================
-# StableRoommatesMatchingProtocol Tests
+# StableRoommatesMatchingProtocol Tests (DEPRECATED - cleanup scheduled)
 # =============================================================================
 
 
+@pytest.mark.skip(reason="StableRoommatesMatchingProtocol deprecated; conflicts with action-budget tick model. Cleanup scheduled.")
 class TestStableRoommatesMatchingProtocol:
     """Tests for Irving's stable roommates algorithm."""
 

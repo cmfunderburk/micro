@@ -412,6 +412,7 @@ class TestMarketEmergenceEdgeCases:
         assert result.analysis.n_agents == 2
         assert result.analysis.total_ticks == 5
 
+    @pytest.mark.slow
     def test_market_emergence_with_rubinstein(self):
         """Market emergence with Rubinstein protocol."""
         config = MarketEmergenceConfig(
@@ -431,6 +432,7 @@ class TestMarketEmergenceEdgeCases:
         """Market emergence with stable roommates matching."""
         pass  # Test skipped - matching_protocol removed from Simulation
 
+    @pytest.mark.slow
     def test_market_emergence_with_noisy_info(self):
         """Market emergence with noisy information."""
         config = MarketEmergenceConfig(

@@ -189,9 +189,13 @@ class RationalDecisionProcedure(DecisionProcedure):
         interaction = agent.interaction_state
 
         if interaction.is_available():
-            # Can move toward visible agents
+            # Can move toward visible agents (excluding cooldown targets)
+            # FEAT-006: cooldown targets excluded from utility calculations
             for target_id, target_agent in context.visible_agents.items():
                 if target_id == agent.id:
+                    continue
+                # Skip cooldown targets - no point moving toward them
+                if target_id in interaction.cooldowns:
                     continue
                 target_pos = context.agent_positions.get(target_id)
                 if target_pos is not None:

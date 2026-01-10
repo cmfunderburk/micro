@@ -169,6 +169,11 @@ def evaluate_targets(
         if target_id == agent.id:
             continue
 
+        # Skip targets on cooldown (FEAT-006: cooldown exclusion from search)
+        # Per AGENT-ARCHITECTURE.md 7.2: cooldown targets excluded from utility calculations
+        if target_id in agent.interaction_state.cooldowns:
+            continue
+
         # Check if we can observe this target
         if not info_env.can_observe(agent, target, distance):
             continue
@@ -285,6 +290,11 @@ def evaluate_targets_detailed(
 
         # Skip self (can't target yourself)
         if target_id == agent.id:
+            continue
+
+        # Skip targets on cooldown (FEAT-006: cooldown exclusion from search)
+        # Per AGENT-ARCHITECTURE.md 7.2: cooldown targets excluded from utility calculations
+        if target_id in agent.interaction_state.cooldowns:
             continue
 
         # Check if we can observe this target

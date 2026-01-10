@@ -888,12 +888,8 @@ class TestRubinsteinProtocol:
         nash_protocol = NashBargainingProtocol()
         rubinstein_protocol = RubinsteinBargainingProtocol()
 
+        # solve() doesn't modify agents, so we can call both without reset
         nash_outcome = nash_protocol.solve(agent_a, agent_b)
-
-        # Reset endowments
-        agent_a.endowment = Bundle(10.0, 2.0)
-        agent_b.endowment = Bundle(2.0, 10.0)
-
         rub_outcome = rubinstein_protocol.solve(agent_a, agent_b, proposer=agent_a)
 
         # Nash is symmetric (50-50)

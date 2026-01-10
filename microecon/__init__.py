@@ -8,7 +8,13 @@ institutional rules.
 
 from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
-from microecon.agent import Agent, AgentPrivateState, AgentType
+from microecon.agent import (
+    Agent,
+    AgentPrivateState,
+    AgentType,
+    InteractionState,
+    AgentInteractionState,
+)
 from microecon.grid import Grid, Position
 from microecon.information import InformationEnvironment, FullInformation, NoisyAlphaInformation
 from microecon.bargaining import (
@@ -32,6 +38,23 @@ from microecon.matching import (
     CommitmentState,
 )
 from microecon.simulation import Simulation, create_simple_economy
+from microecon.actions import (
+    Action,
+    ActionType,
+    ActionTag,
+    ActionContext,
+    ActionResult,
+    MoveAction,
+    ProposeAction,
+    AcceptAction,
+    RejectAction,
+    WaitAction,
+)
+from microecon.decisions import (
+    DecisionProcedure,
+    DecisionContext,
+    RationalDecisionProcedure,
+)
 from microecon.beliefs import (
     # Memory structures
     TradeMemory,
@@ -58,6 +81,8 @@ __all__ = [
     "Agent",
     "AgentPrivateState",
     "AgentType",
+    "InteractionState",
+    "AgentInteractionState",
     "Grid",
     "Position",
     # Information environments
@@ -88,6 +113,21 @@ __all__ = [
     # Simulation
     "Simulation",
     "create_simple_economy",
+    # Actions (ADR-001)
+    "Action",
+    "ActionType",
+    "ActionTag",
+    "ActionContext",
+    "ActionResult",
+    "MoveAction",
+    "ProposeAction",
+    "AcceptAction",
+    "RejectAction",
+    "WaitAction",
+    # Decision procedures (ADR-001)
+    "DecisionProcedure",
+    "DecisionContext",
+    "RationalDecisionProcedure",
     # Beliefs - Memory structures
     "TradeMemory",
     "PriceObservation",

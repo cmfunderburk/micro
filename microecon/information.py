@@ -62,20 +62,26 @@ class InformationEnvironment(ABC):
 
 class FullInformation(InformationEnvironment):
     """
-    Full information environment: type = private state.
+    Full information environment: type = private state with current holdings.
 
     In this environment, all agents can observe each other's true
-    preferences and endowments within their perception radius.
+    preferences and current holdings within their perception radius.
     This is the MVP default.
 
     Game-theoretically, this corresponds to complete information games
     where the structure of the game (including player types) is common knowledge.
+
+    Note: Observable endowment reflects current holdings, not initial endowment.
     """
 
     def get_observable_type(self, agent: Agent) -> AgentType:
-        """Return full private state as observable type."""
+        """Return type with true preferences and current holdings."""
         from microecon.agent import AgentType
-        return AgentType.from_private_state(agent.private_state)
+        # Use holdings (current goods) not initial endowment
+        return AgentType(
+            preferences=agent.preferences,
+            endowment=agent.holdings,
+        )
 
     def can_observe(self, observer: Agent, target: Agent, distance: float) -> bool:
         """
@@ -142,10 +148,10 @@ class NoisyAlphaInformation(InformationEnvironment):
 
     def get_observable_type(self, agent: Agent) -> AgentType:
         """
-        Return type with noisy alpha but true endowment.
+        Return type with noisy alpha but true current holdings.
 
         The alpha parameter is perturbed by Gaussian noise and clipped
-        to remain in the valid range (0, 1).
+        to remain in the valid range (0, 1). Holdings reflect current goods.
         """
         from microecon.agent import AgentType
         from microecon.preferences import CobbDouglas
@@ -159,9 +165,10 @@ class NoisyAlphaInformation(InformationEnvironment):
         # Clip to valid range (epsilon away from boundaries)
         noisy_alpha = max(0.01, min(0.99, noisy_alpha))
 
+        # Use holdings (current goods) not initial endowment
         return AgentType(
             preferences=CobbDouglas(noisy_alpha),
-            endowment=agent.private_state.endowment,
+            endowment=agent.holdings,
         )
 
     def can_observe(self, observer: Agent, target: Agent, distance: float) -> bool:

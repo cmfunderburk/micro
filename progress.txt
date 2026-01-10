@@ -1,96 +1,83 @@
-# Progress Log: Bilateral Protocols Expansion
+# Progress Log: Agent Architecture Rework
 
 ## Format
-Each entry: [timestamp] [phase] [status] [description]
+Each entry follows: [timestamp] [phase] [status] [description]
 
 ---
 
 ## Log
 
-### Phase 1: Core Protocol Implementation
+### Phase 1: Agent Foundation
 
 #### Completed
-- [2026-01-08 16:00] FEAT-001: bargaining_power attribute - Added to Agent dataclass with default 1.0
-- [2026-01-08 16:15] FEAT-002: tioli_bargaining_solution - Closed-form implementation with golden section search
-- [2026-01-08 16:20] FEAT-003: TIOLIBargainingProtocol - Protocol class with lexicographic proposer selection
-- [2026-01-08 16:20] FEAT-004: AsymmetricNashBargainingProtocol - Protocol class using bargaining_power weights
-- [2026-01-08 16:25] FEAT-005: Package exports - Added to microecon/__init__.py
-- [2026-01-08 16:30] Phase 1 Gate - All checks pass, 667 tests still pass
+- [2026-01-09] FEAT-001: Holdings attribute - Added _holdings field to Agent, initialized from endowment in __post_init__
+- [2026-01-09] FEAT-001: Endowment immutable - Removed endowment setter, now read-only property
+- [2026-01-09] FEAT-002: Trade updates holdings - Updated bargaining.execute() to modify holdings not endowment
+- [2026-01-09] FEAT-002: Protocol solve uses holdings - Updated all BargainingProtocol.solve() methods
+- [2026-01-09] FEAT-002: Information env uses holdings - Updated FullInformation and NoisyAlphaInformation
+- [2026-01-09] FEAT-003: InteractionState enum - AVAILABLE, PROPOSAL_PENDING, NEGOTIATING
+- [2026-01-09] FEAT-003: AgentInteractionState dataclass - State + proposal/negotiation tracking + cooldowns
+- [2026-01-09] FEAT-003: Agent.interaction_state - Added property, initialized in __post_init__
 
 #### Issues Encountered
-- [2026-01-08 16:10] ISSUE: TIOLI search bounds inverted
-  - Root cause: Confused upper/lower bound calculation for indifference curve
-  - Resolution: Fixed x_r_at_y_limit to be lower bound (small x_r → large y_r)
-
-#### Skipped/Deferred
 - None
+
+#### Workarounds Applied
+- None
+
+**Phase 1 Gate:** Agent has holdings attribute (mutable), endowment is immutable, InteractionState defined. 115 tests passing.
 
 ---
 
-### Phase 2: Theory Tests
+### Phase 2: Action System
 
 #### Completed
-- [2026-01-08 16:45] FEAT-006: TIOLI proposer extracts full surplus - Grid search verification
-- [2026-01-08 16:45] FEAT-007: TIOLI responder at indifference - 1e-6 tolerance tests
-- [2026-01-08 16:45] FEAT-008: TIOLI proposer identity matters - Surplus swap verification
-- [2026-01-08 16:50] FEAT-009: Asymmetric Nash properties - Equal power, monotonicity, weighted product
-- [2026-01-08 16:55] Phase 2 Gate - 53 theory tests pass (27 TIOLI + 26 AsymNash)
+- [2026-01-09] FEAT-004: Action ABC - Defined in actions.py with action_type, tags, cost(), preconditions(), describe()
+- [2026-01-09] FEAT-004: ActionContext - Dataclass for precondition checking with position/co-location/proposal state
+- [2026-01-09] FEAT-005: MoveAction - Move toward target position, checks available state
+- [2026-01-09] FEAT-005: ProposeAction - Propose exchange, checks available/cooldown/co-location
+- [2026-01-09] FEAT-005: AcceptAction - Accept pending proposal, checks proposal exists/co-located
+- [2026-01-09] FEAT-005: RejectAction - Reject pending proposal, checks proposal exists
+- [2026-01-09] FEAT-005: WaitAction - No-op action, always available
+- [2026-01-09] FEAT-006: DecisionProcedure ABC - Interface with available_actions(), evaluate(), choose()
+- [2026-01-09] FEAT-006: DecisionContext - Extended context with visible_agents, bargaining_protocol
+- [2026-01-09] FEAT-007: RationalDecisionProcedure - Baseline rational choice maximizing expected utility
 
 #### Issues Encountered
-- None
+- Dataclass inheritance error with Action subclasses (child had required fields after parent defaults)
 
-#### Skipped/Deferred
-- None
+#### Workarounds Applied
+- Converted Action ABC and concrete actions from @dataclass to regular classes with explicit __init__
+
+**Phase 2 Gate:** Action ABC defined, 5 action types implemented, DecisionProcedure with RationalDecisionProcedure. 115 tests passing.
 
 ---
 
-### Phase 3: Server & UI Integration
-
-#### Completed
-- [2026-01-08 17:00] FEAT-010: Server protocol routing - Added tioli/asymmetric_nash to _create_simulation_from_config
-- [2026-01-08 17:05] FEAT-014: Server bargaining_power distribution - Generates powers for asymmetric_nash
-- [2026-01-08 17:10] FEAT-011: UI protocol selector - 4 protocols in 2x2 grid
-- [2026-01-08 17:10] FEAT-012: UI tooltips - Display below selector with title attributes
-- [2026-01-08 17:10] FEAT-013: UI power distribution config - Shows when asymmetric_nash selected
-- [2026-01-08 17:15] Phase 3 Gate - Frontend builds, 720 tests pass
-
-#### Issues Encountered
-- [2026-01-08 17:02] ISSUE: numpy not available in server
-  - Root cause: Server environment doesn't have numpy
-  - Resolution: Rewrote _generate_bargaining_powers using stdlib random module
-
-#### Skipped/Deferred
-- None
+### Phase 3: Tick Restructure
+[not started]
 
 ---
 
-### Phase 4: Documentation
+### Phase 4: Exchange Sequence
+[not started]
 
-#### Completed
-- [2026-01-08 17:25] FEAT-015: Update CLAUDE.md - Listed all 4 protocols with O&R references
-- [2026-01-08 17:25] FEAT-016: Update STATUS.md - Updated bargaining protocols section with all 4 protocols
-- [2026-01-08 17:30] FEAT-017: Protocol docstrings - Updated module docstring with power source explanations
-- [2026-01-08 17:30] Phase 4 Gate - 197 theory tests pass, all documentation updated
+---
 
-#### Issues Encountered
-- None
+### Phase 5: Event System
+[not started]
 
-#### Skipped/Deferred
-- None
+---
+
+### Phase 6: Test Restoration
+[not started]
 
 ---
 
 ## Summary Statistics
 | Metric | Count |
 |--------|-------|
-| Features completed | 17/17 |
+| Features completed | 7/24 |
 | Features skipped | 0 |
-| Issues encountered | 2 |
-| Phases completed | 4/4 |
-
-## Final Status
-PRD-BILATERAL-PROTOCOLS-EXPANSION complete. All 4 phases implemented:
-- Phase 1: bargaining_power attr, TIOLI, Asymmetric Nash protocols
-- Phase 2: 53 theory tests (27 TIOLI + 26 AsymNash)
-- Phase 3: Server routing + UI with 4-protocol selector
-- Phase 4: CLAUDE.md, STATUS.md, docstrings with O&R references
+| Issues encountered | 1 |
+| Workarounds applied | 1 |
+| Phases completed | 2/6 |

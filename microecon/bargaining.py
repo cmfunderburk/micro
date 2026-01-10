@@ -1038,10 +1038,11 @@ class BargainingProtocol(ABC):
         effective_type_2: AgentType | None = None,
     ) -> BargainingOutcome:
         """
-        Execute bargaining and update agent endowments.
+        Execute bargaining and update agent holdings.
 
         This is a convenience method that calls solve() and applies the
-        outcome to the agents' endowments.
+        outcome to the agents' holdings (not endowment - endowment is immutable
+        and defines the disagreement point).
 
         Args:
             agent1: First agent
@@ -1056,8 +1057,8 @@ class BargainingProtocol(ABC):
         outcome = self.solve(agent1, agent2, proposer, effective_type_1, effective_type_2)
 
         if outcome.trade_occurred:
-            agent1.endowment = outcome.allocation_1
-            agent2.endowment = outcome.allocation_2
+            agent1.holdings = outcome.allocation_1
+            agent2.holdings = outcome.allocation_2
 
         return outcome
 
@@ -1117,11 +1118,12 @@ class NashBargainingProtocol(BargainingProtocol):
         effective_type_2: AgentType | None = None,
     ) -> BargainingOutcome:
         """Compute Nash bargaining solution. Proposer is ignored (symmetric)."""
-        # Use effective types if provided, otherwise use agent's true type
+        # Use effective types if provided, otherwise use agent's current holdings
+        # Note: holdings (not endowment) determines what agents have to trade
         prefs_1 = effective_type_1.preferences if effective_type_1 else agent1.preferences
-        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.endowment
+        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.holdings
         prefs_2 = effective_type_2.preferences if effective_type_2 else agent2.preferences
-        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.endowment
+        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.holdings
 
         return nash_bargaining_solution(prefs_1, endow_1, prefs_2, endow_2)
 
@@ -1134,9 +1136,9 @@ class NashBargainingProtocol(BargainingProtocol):
         effective_type_2: AgentType | None = None,
     ) -> float:
         """Compute expected surplus for agent1. Proposer is ignored."""
-        # Use effective types if provided, otherwise construct from agent
-        type1 = effective_type_1 or AgentType(agent1.preferences, agent1.endowment)
-        type2 = effective_type_2 or AgentType(agent2.preferences, agent2.endowment)
+        # Use effective types if provided, otherwise construct from agent's holdings
+        type1 = effective_type_1 or AgentType(agent1.preferences, agent1.holdings)
+        type2 = effective_type_2 or AgentType(agent2.preferences, agent2.holdings)
         return compute_nash_surplus(type1, type2)
 
 
@@ -1187,11 +1189,12 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
         Returns:
             BargainingOutcome with asymmetric Nash allocation based on patience
         """
-        # Use effective types if provided, otherwise use agent's true type
+        # Use effective types if provided, otherwise use agent's current holdings
+        # Note: holdings (not endowment) determines what agents have to trade
         prefs_1 = effective_type_1.preferences if effective_type_1 else agent1.preferences
-        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.endowment
+        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.holdings
         prefs_2 = effective_type_2.preferences if effective_type_2 else agent2.preferences
-        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.endowment
+        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.holdings
 
         return rubinstein_bargaining_solution(
             prefs_1, endow_1, prefs_2, endow_2,
@@ -1223,9 +1226,9 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
         Returns:
             Expected surplus for agent1
         """
-        # Use effective types if provided, otherwise construct from agent
-        type1 = effective_type_1 or AgentType(agent1.preferences, agent1.endowment)
-        type2 = effective_type_2 or AgentType(agent2.preferences, agent2.endowment)
+        # Use effective types if provided, otherwise construct from agent's holdings
+        type1 = effective_type_1 or AgentType(agent1.preferences, agent1.holdings)
+        type2 = effective_type_2 or AgentType(agent2.preferences, agent2.holdings)
 
         return compute_rubinstein_surplus(
             type1,
@@ -1302,11 +1305,12 @@ class TIOLIBargainingProtocol(BargainingProtocol):
 
         proposer_int = 1 if proposer_is_1 else 2
 
-        # Use effective types if provided, otherwise use agent's true type
+        # Use effective types if provided, otherwise use agent's current holdings
+        # Note: holdings (not endowment) determines what agents have to trade
         prefs_1 = effective_type_1.preferences if effective_type_1 else agent1.preferences
-        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.endowment
+        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.holdings
         prefs_2 = effective_type_2.preferences if effective_type_2 else agent2.preferences
-        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.endowment
+        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.holdings
 
         return tioli_bargaining_solution(prefs_1, endow_1, prefs_2, endow_2, proposer_int)
 
@@ -1420,11 +1424,12 @@ class AsymmetricNashBargainingProtocol(BargainingProtocol):
         Returns:
             BargainingOutcome with the asymmetric Nash allocation
         """
-        # Use effective types if provided, otherwise use agent's true type
+        # Use effective types if provided, otherwise use agent's current holdings
+        # Note: holdings (not endowment) determines what agents have to trade
         prefs_1 = effective_type_1.preferences if effective_type_1 else agent1.preferences
-        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.endowment
+        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.holdings
         prefs_2 = effective_type_2.preferences if effective_type_2 else agent2.preferences
-        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.endowment
+        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.holdings
 
         # Compute weights from bargaining_power attributes
         w1 = agent1.bargaining_power

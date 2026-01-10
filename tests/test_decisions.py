@@ -312,3 +312,131 @@ class TestOpportunityCostStorage:
         opp_cost = agent_a.opportunity_cost
         assert isinstance(opp_cost, float)
         assert opp_cost > 0.0
+
+
+class TestOpportunityCostAcceptance:
+    """Tests for FEAT-004: Opportunity cost acceptance check."""
+
+    def test_accept_when_surplus_exceeds_opportunity_cost(self):
+        """Agent accepts proposal when surplus >= opportunity_cost."""
+        grid = Grid(10)
+        agent_a = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, agent_id="agent_a")
+        agent_b = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, agent_id="agent_b")
+
+        grid.place_agent(agent_a, Position(0, 0))
+        grid.place_agent(agent_b, Position(1, 0))
+
+        context = create_test_context([agent_a, agent_b], grid)
+        protocol = NashBargainingProtocol()
+
+        # Set opportunity cost to 0 - should accept any positive surplus
+        agent_b.opportunity_cost = 0.0
+
+        procedure = RationalDecisionProcedure()
+        result = procedure.evaluate_proposal(agent_b, agent_a, context)
+
+        # Surplus should be positive, so accept
+        surplus = protocol.compute_expected_surplus(agent_b, agent_a)
+        assert surplus > 0
+        assert result is True
+
+    def test_reject_when_surplus_below_opportunity_cost(self):
+        """Agent rejects proposal when surplus < opportunity_cost."""
+        grid = Grid(10)
+        agent_a = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, agent_id="agent_a")
+        agent_b = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, agent_id="agent_b")
+
+        grid.place_agent(agent_a, Position(0, 0))
+        grid.place_agent(agent_b, Position(1, 0))
+
+        context = create_test_context([agent_a, agent_b], grid)
+        protocol = NashBargainingProtocol()
+
+        # Compute actual surplus
+        surplus = protocol.compute_expected_surplus(agent_b, agent_a)
+
+        # Set opportunity cost higher than surplus - should reject
+        agent_b.opportunity_cost = surplus + 1.0
+
+        procedure = RationalDecisionProcedure()
+        result = procedure.evaluate_proposal(agent_b, agent_a, context)
+
+        assert result is False
+
+    def test_accept_when_surplus_equals_opportunity_cost(self):
+        """Agent accepts when surplus exactly equals opportunity_cost (>=)."""
+        grid = Grid(10)
+        agent_a = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, agent_id="agent_a")
+        agent_b = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, agent_id="agent_b")
+
+        grid.place_agent(agent_a, Position(0, 0))
+        grid.place_agent(agent_b, Position(1, 0))
+
+        context = create_test_context([agent_a, agent_b], grid)
+        protocol = NashBargainingProtocol()
+
+        # Set opportunity cost exactly equal to surplus
+        surplus = protocol.compute_expected_surplus(agent_b, agent_a)
+        agent_b.opportunity_cost = surplus
+
+        procedure = RationalDecisionProcedure()
+        result = procedure.evaluate_proposal(agent_b, agent_a, context)
+
+        # Should accept (>= not just >)
+        assert result is True
+
+    def test_agent_with_better_alternative_rejects_mediocre_proposal(self):
+        """Agent with high opportunity cost rejects lower-value proposal."""
+        grid = Grid(10)
+        # Create 3 agents with different trade values
+        agent_a = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, agent_id="agent_a")
+        agent_b = create_agent(alpha=0.5, endowment_x=6.0, endowment_y=6.0, agent_id="agent_b")
+        agent_c = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, agent_id="agent_c")
+
+        grid.place_agent(agent_a, Position(0, 0))
+        grid.place_agent(agent_b, Position(1, 0))
+        grid.place_agent(agent_c, Position(2, 0))
+
+        context = create_test_context([agent_a, agent_b, agent_c], grid)
+        protocol = NashBargainingProtocol()
+
+        # B's surplus trading with A vs C
+        surplus_b_with_a = protocol.compute_expected_surplus(agent_b, agent_a)
+        surplus_b_with_c = protocol.compute_expected_surplus(agent_b, agent_c)
+
+        # If B's opportunity cost is from trading with C
+        agent_b.opportunity_cost = surplus_b_with_c
+
+        procedure = RationalDecisionProcedure()
+
+        # B should accept A's proposal only if surplus_with_A >= surplus_with_C
+        result = procedure.evaluate_proposal(agent_b, agent_a, context)
+
+        if surplus_b_with_a >= surplus_b_with_c:
+            assert result is True
+        else:
+            assert result is False
+
+    def test_acceptance_uses_stored_opportunity_cost(self):
+        """evaluate_proposal uses the stored opportunity_cost, not recomputed."""
+        grid = Grid(10)
+        agent_a = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, agent_id="agent_a")
+        agent_b = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, agent_id="agent_b")
+
+        grid.place_agent(agent_a, Position(0, 0))
+        grid.place_agent(agent_b, Position(1, 0))
+
+        context = create_test_context([agent_a, agent_b], grid)
+        protocol = NashBargainingProtocol()
+
+        surplus = protocol.compute_expected_surplus(agent_b, agent_a)
+
+        procedure = RationalDecisionProcedure()
+
+        # Set low opportunity cost - should accept
+        agent_b.opportunity_cost = 0.0
+        assert procedure.evaluate_proposal(agent_b, agent_a, context) is True
+
+        # Set high opportunity cost - should reject
+        agent_b.opportunity_cost = surplus + 10.0
+        assert procedure.evaluate_proposal(agent_b, agent_a, context) is False

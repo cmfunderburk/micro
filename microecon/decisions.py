@@ -443,9 +443,14 @@ class RationalDecisionProcedure(DecisionProcedure):
         context: DecisionContext,
     ) -> bool:
         """
-        Accept proposal if expected surplus is positive.
+        Accept proposal if surplus >= opportunity cost.
 
-        A rational agent accepts any proposal that provides gains from trade.
+        Per AGENT-ARCHITECTURE.md 7.9: acceptance is an institutional constraint
+        where agent accepts iff trade surplus >= opportunity cost of their
+        chosen action. This ensures agents don't give up better alternatives
+        for mediocre proposals.
+
+        Opportunity cost was computed and stored during choose() (FEAT-003).
         """
         surplus = context.bargaining_protocol.compute_expected_surplus(agent, proposer)
-        return surplus > 0
+        return surplus >= agent.opportunity_cost

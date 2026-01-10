@@ -1,0 +1,312 @@
+{
+  "task": {
+    "name": "Action Budget & Coordination Model",
+    "description": "Implement the action budget model where trade execution costs actions for both parties, coordination (propose/accept/reject) is free, and agents use pre-computed fallbacks when proposals fail.",
+    "created": "2026-01-10T12:00:00Z",
+    "vision_source": "docs/current/AGENT-ARCHITECTURE.md",
+    "project_type": "research_software",
+    "completion_promise": "ACTION-BUDGET-MODEL-COMPLETE"
+  },
+
+  "context": {
+    "codebase_state": "active",
+    "primary_language": "python",
+    "frameworks": ["pytest"],
+    "vision_extraction": {
+      "primary_goal": "Implement action budget model where trade costs actions, coordination is free, and failed proposals trigger fallback execution",
+      "success_criteria": [
+        "Trade consumes 1 action for both proposer and acceptor",
+        "Failed proposals allow proposer to execute fallback",
+        "Acceptance determined by opportunity cost comparison",
+        "Cooldowns triggered only by explicit rejection",
+        "Cooldown targets excluded from utility calculations"
+      ],
+      "deliverables": [
+        "ProposeAction.fallback field",
+        "Updated _execute_actions() with fallback execution",
+        "Opportunity cost acceptance check",
+        "Differentiated cooldown triggers",
+        "Search excludes cooldown targets"
+      ]
+    },
+    "gap_analysis_summary": "Current implementation has ProposeAction without fallback, acceptance checks surplus > 0 not opportunity cost, and no fallback execution when proposals fail. Cooldown triggers are partially correct (explicit rejection only).",
+    "resource_constraints": {
+      "compute": null,
+      "time_budget": null,
+      "other": null
+    },
+    "canonical_sources": ["docs/current/AGENT-ARCHITECTURE.md sections 7.1-7.9"]
+  },
+
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Core Mechanics",
+      "description": "Implement ProposeAction fallback, opportunity cost acceptance, and fallback execution in simulation loop",
+      "features": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004", "FEAT-005"],
+      "depends_on": [],
+      "gates_phases": [2],
+      "entry_criteria": "Existing tests pass",
+      "exit_criteria": "Core mechanics implemented and unit tested",
+      "gate_verification": "ProposeAction has fallback field, acceptance uses opportunity cost, fallback executes on rejection"
+    },
+    {
+      "phase": 2,
+      "name": "Integration & Polish",
+      "description": "Cooldown exclusion from search, comprehensive tests, edge cases",
+      "features": ["FEAT-006", "FEAT-007", "FEAT-008", "FEAT-009"],
+      "depends_on": [1],
+      "gates_phases": [],
+      "entry_criteria": "Phase 1 complete",
+      "exit_criteria": "All tests pass, edge cases handled",
+      "gate_verification": "Full test coverage, all scenarios from verification design pass"
+    }
+  ],
+
+  "phase_dependencies": {
+    "dag": {
+      "1": [],
+      "2": [1]
+    },
+    "critical_path": [1, 2],
+    "parallel_eligible": [],
+    "gate_checks": {
+      "1->2": "Core mechanics verified: ProposeAction.fallback exists, evaluate_proposal uses opportunity cost, _execute_actions runs fallback on rejection"
+    }
+  },
+
+  "features": [
+    {
+      "id": "FEAT-001",
+      "name": "ProposeAction fallback field",
+      "phase": 1,
+      "description": "Add optional fallback: Action field to ProposeAction. Fallback is MoveAction or WaitAction, never ProposeAction.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "ProposeAction accepts fallback parameter",
+          "Fallback defaults to None (backward compatible)",
+          "Fallback must be MoveAction or WaitAction (validation)"
+        ],
+        "property": [
+          "Fallback is never ProposeAction"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_actions.py -v"]
+    },
+    {
+      "id": "FEAT-002",
+      "name": "Compute fallback in choose()",
+      "phase": 1,
+      "description": "Update RationalDecisionProcedure.choose() to compute fallback when primary action is ProposeAction",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "When best action is ProposeAction, fallback = MoveAction toward target",
+          "If target is at same position (adjacent), fallback = WaitAction",
+          "Fallback stored in ProposeAction.fallback field"
+        ],
+        "property": [
+          "Fallback always set when returning ProposeAction"
+        ],
+        "theory": [
+          "Fallback pre-computed from perceive-time information per AGENT-ARCHITECTURE.md 7.2"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/test_decisions.py -v -k fallback"]
+    },
+    {
+      "id": "FEAT-003",
+      "name": "Store opportunity cost in agent state",
+      "phase": 1,
+      "description": "During choose(), compute and store agent's opportunity cost (best alternative's discounted surplus) for use in acceptance check",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Agent has _opportunity_cost attribute set during choose()",
+          "Opportunity cost = discounted surplus of best alternative target",
+          "Opportunity cost = 0 when agent chose WaitAction"
+        ],
+        "property": [
+          "Opportunity cost >= 0"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_decisions.py -v -k opportunity"]
+    },
+    {
+      "id": "FEAT-004",
+      "name": "Opportunity cost acceptance check",
+      "phase": 1,
+      "description": "Update evaluate_proposal() to accept iff trade_surplus >= opportunity_cost",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "evaluate_proposal reads agent._opportunity_cost",
+          "Returns True iff surplus >= opportunity_cost",
+          "Agent with better alternative rejects mediocre proposal"
+        ],
+        "property": [],
+        "theory": [
+          "Acceptance is institutional constraint per AGENT-ARCHITECTURE.md 7.9"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/test_decisions.py -v -k accept"]
+    },
+    {
+      "id": "FEAT-005",
+      "name": "Fallback execution on proposal failure",
+      "phase": 1,
+      "description": "Update _execute_actions() to execute proposer's fallback when proposal is rejected or not selected",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Explicit rejection: cooldown added, fallback executed",
+          "Implicit non-selection: no cooldown, fallback executed",
+          "Fallback MoveAction causes movement",
+          "Fallback WaitAction causes no movement"
+        ],
+        "property": [
+          "Proposer either trades OR executes fallback (never both, never neither)"
+        ],
+        "theory": [
+          "Failed proposals don't waste action budget per AGENT-ARCHITECTURE.md 7.4"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/test_simulation.py -v -k fallback"]
+    },
+    {
+      "id": "FEAT-006",
+      "name": "Cooldown exclusion from search",
+      "phase": 2,
+      "description": "Update search/evaluation to exclude agents on cooldown from consideration",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "evaluate_targets_detailed skips cooldown targets",
+          "available_actions excludes ProposeAction for cooldown targets",
+          "Cooldown targets not in visible_agents evaluation"
+        ],
+        "property": [],
+        "theory": [
+          "Cooldown targets excluded from utility calculations per AGENT-ARCHITECTURE.md 7.2"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/test_search.py -v -k cooldown"]
+    },
+    {
+      "id": "FEAT-007",
+      "name": "Theory verification tests",
+      "phase": 2,
+      "description": "Comprehensive tests verifying behavior matches AGENT-ARCHITECTURE.md",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Test: trade costs both parties' action (neither can move)",
+          "Test: failed proposal -> fallback executes",
+          "Test: acceptance = surplus >= opportunity_cost",
+          "Test: explicit rejection -> cooldown",
+          "Test: implicit non-selection -> no cooldown"
+        ],
+        "property": [],
+        "theory": [
+          "All behaviors match AGENT-ARCHITECTURE.md 7.1-7.9"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/test_action_budget.py -v"]
+    },
+    {
+      "id": "FEAT-008",
+      "name": "Scenario tests",
+      "phase": 2,
+      "description": "Test the 5 key scenarios from verification design",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "A proposes to B, B accepts -> both trade, neither moves",
+          "A proposes to B, B rejects -> A moves (fallback), cooldown added",
+          "A and C propose to B, B accepts A -> A+B trade, C moves (no cooldown)",
+          "A proposes to B, B proposes to A -> mutual trade",
+          "A proposes to B while on cooldown -> blocked"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/scenarios/test_action_budget.py -v"]
+    },
+    {
+      "id": "FEAT-009",
+      "name": "Edge case handling",
+      "phase": 2,
+      "description": "Handle edge cases identified during design",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Fallback-is-TradeIntent substituted with WaitAction",
+          "Agent at same position as target: fallback = WaitAction",
+          "Multiple proposals to same target processed correctly"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_edge_cases.py -v -k action_budget"]
+    }
+  ],
+
+  "architectural_decisions": {
+    "resolved": [
+      {
+        "id": "ADR-001",
+        "decision": "Nested TradeIntent fallback resolution",
+        "choice": "Substitute WaitAction when fallback would be ProposeAction",
+        "rationale": "Avoids recursive fallback complexity; pragmatic simplification for initial implementation",
+        "source": "interview",
+        "canonical_reference": null
+      },
+      {
+        "id": "ADR-002",
+        "decision": "Action representation for fallback",
+        "choice": "Extend ProposeAction with optional fallback field",
+        "rationale": "Minimal disruption to existing code; MoveAction/WaitAction don't need fallback",
+        "source": "interview",
+        "canonical_reference": null
+      },
+      {
+        "id": "ADR-003",
+        "decision": "Opportunity cost storage",
+        "choice": "Store in agent state during Decide phase",
+        "rationale": "Simple access during Execute phase; pre-computed per architecture spec",
+        "source": "interview",
+        "canonical_reference": "AGENT-ARCHITECTURE.md 7.2"
+      }
+    ],
+    "pending_adrs": []
+  },
+
+  "tracking": {
+    "theory_divergences_file": null,
+    "retrospective_template": null
+  },
+
+  "escalation_triggers": [
+    "Changes to bargaining protocol behavior",
+    "Test failures suggesting semantic regression in existing functionality",
+    "Modifications to core agent/simulation architecture beyond scope"
+  ],
+
+  "loop_parameters": {
+    "max_iterations": 40,
+    "progress_tracking": ["git_commits", "progress_file"],
+    "on_phase_complete": "continue"
+  }
+}

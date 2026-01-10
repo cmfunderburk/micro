@@ -421,6 +421,19 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
       ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 * opacity})`;
       ctx.lineWidth = 1;
       ctx.stroke();
+
+      // Draw interaction state indicator (inner ring)
+      const state = agent.interaction_state?.state;
+      if (state && state !== 'available') {
+        const stateColor = state === 'negotiating'
+          ? `rgba(34, 197, 94, ${opacity})`  // green-500 for negotiating
+          : `rgba(250, 204, 21, ${opacity})`; // yellow-400 for proposal_pending
+        ctx.strokeStyle = stateColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, drawRadius - 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
 
     // Continue animation loop if there are active trade animations

@@ -2,16 +2,24 @@
  * Types for simulation data received from the backend.
  */
 
+// Agent interaction state (from 3-phase tick model)
+export interface AgentInteractionState {
+  state: "available" | "proposal_pending" | "negotiating";
+  proposal_target: string | null;  // If state is proposal_pending
+  negotiation_partner: string | null;  // If state is negotiating
+}
+
 export interface Agent {
   id: string;
   position: [number, number]; // [row, col]
-  endowment: [number, number]; // [x, y]
+  endowment: [number, number]; // [x, y] - actually current holdings
   alpha: number;
   utility: number;
   perception_radius: number;
   discount_factor: number;
   bargaining_power: number;
   has_beliefs?: boolean;
+  interaction_state?: AgentInteractionState;  // New: agent's current interaction state
 }
 
 // Belief system types

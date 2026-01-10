@@ -119,6 +119,13 @@ class SimulationInstance:
         for agent in sim.agents:
             pos = sim.grid.get_position(agent)
             if pos is not None:
+                # Get interaction state info for visualization
+                interaction_state = agent.interaction_state
+                state_info = {
+                    "state": interaction_state.state.value,
+                    "proposal_target": interaction_state.proposal_target,
+                    "negotiation_partner": interaction_state.negotiation_partner,
+                }
                 agent_data = {
                     "id": agent.id,
                     "position": [pos.row, pos.col],
@@ -129,6 +136,7 @@ class SimulationInstance:
                     "discount_factor": agent.discount_factor,
                     "bargaining_power": agent.bargaining_power,
                     "has_beliefs": agent.has_beliefs,
+                    "interaction_state": state_info,  # New: expose agent state
                 }
                 agents.append(agent_data)
 
@@ -435,6 +443,13 @@ class SimulationManager:
         for agent in sim.agents:
             pos = sim.grid.get_position(agent)
             if pos is not None:
+                # Get interaction state info for visualization
+                interaction_state = agent.interaction_state
+                state_info = {
+                    "state": interaction_state.state.value,
+                    "proposal_target": interaction_state.proposal_target,
+                    "negotiation_partner": interaction_state.negotiation_partner,
+                }
                 agent_data = {
                     "id": agent.id,
                     "position": [pos.row, pos.col],
@@ -445,6 +460,7 @@ class SimulationManager:
                     "discount_factor": agent.discount_factor,
                     "bargaining_power": agent.bargaining_power,
                     "has_beliefs": agent.has_beliefs,
+                    "interaction_state": state_info,  # New: expose agent state
                 }
                 agents.append(agent_data)
 

@@ -36,7 +36,7 @@ export function ExportMenu() {
 
     // Agent data
     lines.push('# Agents');
-    lines.push('id,position_row,position_col,endowment_x,endowment_y,alpha,utility,perception_radius,discount_factor');
+    lines.push('id,position_row,position_col,holdings_x,holdings_y,alpha,utility,perception_radius,discount_factor');
     for (const agent of agents) {
       lines.push(
         [

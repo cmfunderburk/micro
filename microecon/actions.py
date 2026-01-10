@@ -122,6 +122,7 @@ class ActionContext:
     agent_positions: dict[str, "Position"]
     agent_interaction_states: dict[str, Any]  # AgentInteractionState copies
     co_located_agents: dict[str, set[str]]  # agent_id -> set of co-located agent_ids
+    adjacent_agents: dict[str, set[str]]  # agent_id -> set of adjacent agent_ids (includes co-located)
     pending_proposals: dict[str, str]  # target_id -> proposer_id (who proposed to target)
 
     def get_position(self, agent_id: str) -> "Position | None":
@@ -132,6 +133,11 @@ class ActionContext:
         """Check if two agents are at the same position."""
         co_located = self.co_located_agents.get(agent_a_id, set())
         return agent_b_id in co_located
+
+    def are_adjacent(self, agent_a_id: str, agent_b_id: str) -> bool:
+        """Check if two agents are adjacent (Chebyshev distance <= 1)."""
+        adjacent = self.adjacent_agents.get(agent_a_id, set())
+        return agent_b_id in adjacent
 
     def has_pending_proposal_from(self, target_id: str, proposer_id: str) -> bool:
         """Check if target has pending proposal from proposer."""
@@ -218,7 +224,12 @@ class ProposeAction(Action):
 
     def preconditions(self, agent: Agent, context: ActionContext) -> bool:
         """
-        Agent must be available, not in cooldown, and co-located with target.
+        Agent must be available, not in cooldown, and adjacent to target.
+
+        Note: "Adjacent" includes both co-located (same position) and
+        neighboring positions (Chebyshev distance = 1). This allows trades
+        between agents in adjacent squares, preventing the coordination
+        failure where agents oscillate between adjacent positions.
         """
         # Must be available
         if not agent.interaction_state.is_available():
@@ -228,8 +239,8 @@ class ProposeAction(Action):
         if not agent.interaction_state.can_propose_to(self.target_id):
             return False
 
-        # Must be co-located with target
-        if not context.are_co_located(agent.id, self.target_id):
+        # Must be adjacent to target (includes co-located)
+        if not context.are_adjacent(agent.id, self.target_id):
             return False
 
         return True
@@ -272,15 +283,18 @@ class AcceptAction(Action):
         return 1
 
     def preconditions(self, agent: Agent, context: ActionContext) -> bool:
-        """Agent must have pending proposal from proposer and be co-located."""
+        """Agent must have pending proposal from proposer.
+
+        Note: We do NOT require co-location for Accept. The proposal was
+        valid when made (proposer was co-located then). The target can
+        accept even if they moved since the proposal was made. If accepted,
+        agents will need to move back together before negotiation completes.
+        """
         # Must have pending proposal from this proposer
         if not context.has_pending_proposal_from(agent.id, self.proposer_id):
             return False
 
-        # Must be co-located (proposal might have become invalid if proposer moved)
-        if not context.are_co_located(agent.id, self.proposer_id):
-            return False
-
+        # Co-location NOT required for Accept - see note above
         return True
 
     def describe(self) -> str:

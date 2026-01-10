@@ -115,6 +115,30 @@ class DecisionProcedure(ABC):
         """
         pass
 
+    @abstractmethod
+    def evaluate_proposal(
+        self,
+        agent: "Agent",
+        proposer: "Agent",
+        context: DecisionContext,
+    ) -> bool:
+        """
+        Evaluate whether to accept a proposal from another agent.
+
+        This is called during Execute phase when the agent receives a proposal.
+        The agent decides immediately whether to accept or reject, allowing
+        proposal and response to happen in the same tick.
+
+        Args:
+            agent: The agent receiving the proposal
+            proposer: The agent making the proposal
+            context: Current state context
+
+        Returns:
+            True to accept the proposal, False to reject
+        """
+        pass
+
 
 class RationalDecisionProcedure(DecisionProcedure):
     """
@@ -146,15 +170,14 @@ class RationalDecisionProcedure(DecisionProcedure):
         1. WaitAction (always available)
         2. MoveAction toward each visible agent (if available)
         3. ProposeAction to each co-located agent (if available, no cooldown)
-        4. AcceptAction for any pending proposal
-        5. RejectAction for any pending proposal
+
+        Note: AcceptAction/RejectAction are not enumerated here. Proposal responses
+        are handled immediately during the Execute phase via evaluate_proposal().
         """
         from microecon.actions import (
             WaitAction,
             MoveAction,
             ProposeAction,
-            AcceptAction,
-            RejectAction,
         )
 
         actions: list["Action"] = []
@@ -176,22 +199,12 @@ class RationalDecisionProcedure(DecisionProcedure):
                     if action.preconditions(agent, context.action_context):
                         actions.append(action)
 
-            # Can propose to co-located agents
-            co_located = context.action_context.co_located_agents.get(agent.id, set())
-            for target_id in co_located:
+            # Can propose to adjacent agents (includes co-located)
+            adjacent = context.action_context.adjacent_agents.get(agent.id, set())
+            for target_id in adjacent:
                 action = ProposeAction(target_id=target_id)
                 if action.preconditions(agent, context.action_context):
                     actions.append(action)
-
-        # Can accept/reject pending proposals
-        pending_proposer = context.action_context.pending_proposals.get(agent.id)
-        if pending_proposer is not None:
-            accept = AcceptAction(proposer_id=pending_proposer)
-            reject = RejectAction(proposer_id=pending_proposer)
-            if accept.preconditions(agent, context.action_context):
-                actions.append(accept)
-            if reject.preconditions(agent, context.action_context):
-                actions.append(reject)
 
         return actions
 
@@ -205,13 +218,13 @@ class RationalDecisionProcedure(DecisionProcedure):
         Evaluate action by expected utility.
 
         Uses the bargaining protocol to estimate trade surplus.
+
+        Note: Accept/Reject actions are not evaluated here since proposal
+        responses are handled immediately during Execute phase.
         """
         from microecon.actions import (
-            WaitAction,
             MoveAction,
             ProposeAction,
-            AcceptAction,
-            RejectAction,
             ActionType,
         )
 
@@ -226,14 +239,6 @@ class RationalDecisionProcedure(DecisionProcedure):
         if action.action_type == ActionType.PROPOSE:
             assert isinstance(action, ProposeAction)
             return self._evaluate_propose(agent, action, context)
-
-        if action.action_type == ActionType.ACCEPT:
-            assert isinstance(action, AcceptAction)
-            return self._evaluate_accept(agent, action, context)
-
-        if action.action_type == ActionType.REJECT:
-            # Rejecting returns us to available state, no gain
-            return 0.0
 
         return 0.0
 
@@ -316,21 +321,6 @@ class RationalDecisionProcedure(DecisionProcedure):
             return surplus
         return 0.0
 
-    def _evaluate_accept(
-        self,
-        agent: "Agent",
-        action: "AcceptAction",
-        context: DecisionContext,
-    ) -> float:
-        """
-        Evaluate accept action by trade surplus.
-        """
-        proposer = context.visible_agents.get(action.proposer_id)
-        if proposer is None:
-            return 0.0
-
-        return context.bargaining_protocol.compute_expected_surplus(agent, proposer)
-
     def choose(
         self,
         agent: "Agent",
@@ -354,3 +344,17 @@ class RationalDecisionProcedure(DecisionProcedure):
         best_action, best_value = max(evaluated, key=lambda x: x[1])
 
         return best_action
+
+    def evaluate_proposal(
+        self,
+        agent: "Agent",
+        proposer: "Agent",
+        context: DecisionContext,
+    ) -> bool:
+        """
+        Accept proposal if expected surplus is positive.
+
+        A rational agent accepts any proposal that provides gains from trade.
+        """
+        surplus = context.bargaining_protocol.compute_expected_surplus(agent, proposer)
+        return surplus > 0

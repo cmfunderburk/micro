@@ -297,7 +297,8 @@ class Simulation:
         # if not acted upon. For now, we clear all pending proposals at start of tick
         # and let new proposals be created this tick.
 
-        # Check for co-location loss in pending proposals
+        # Check for adjacency loss in pending proposals
+        # Note: With same-tick proposals, this should rarely trigger
         expired_proposals = []
         for target_id, proposer_id in self._pending_proposals.items():
             proposer = self._agents_by_id.get(proposer_id)
@@ -306,18 +307,22 @@ class Simulation:
                 expired_proposals.append(target_id)
                 continue
 
-            # Check if still co-located
+            # Check if still adjacent (Chebyshev distance <= 1)
             proposer_pos = self.grid.get_position(proposer)
             target_pos = self.grid.get_position(target)
-            if proposer_pos is None or target_pos is None or proposer_pos != target_pos:
+            if proposer_pos is None or target_pos is None:
                 expired_proposals.append(target_id)
-                # Proposer returns to AVAILABLE (no cooldown for co-location loss)
+                proposer.interaction_state.enter_available()
+            elif proposer_pos.chebyshev_distance_to(target_pos) > 1:
+                expired_proposals.append(target_id)
+                # Proposer returns to AVAILABLE (no cooldown for adjacency loss)
                 proposer.interaction_state.enter_available()
 
         for target_id in expired_proposals:
             del self._pending_proposals[target_id]
 
-        # Check for co-location loss in negotiating pairs
+        # Check for adjacency loss in negotiating pairs
+        # Note: With same-tick negotiations, this should rarely trigger
         expired_negotiations = []
         for pair, exchange_id in list(self._negotiating_pairs.items()):
             agent_a_id, agent_b_id = pair
@@ -329,7 +334,11 @@ class Simulation:
 
             pos_a = self.grid.get_position(agent_a)
             pos_b = self.grid.get_position(agent_b)
-            if pos_a is None or pos_b is None or pos_a != pos_b:
+            if pos_a is None or pos_b is None:
+                expired_negotiations.append(pair)
+                agent_a.interaction_state.enter_available()
+                agent_b.interaction_state.enter_available()
+            elif pos_a.chebyshev_distance_to(pos_b) > 1:
                 expired_negotiations.append(pair)
                 # Both return to AVAILABLE
                 agent_a.interaction_state.enter_available()
@@ -353,6 +362,12 @@ class Simulation:
             others = self.grid.agents_at_same_position(agent)
             co_located[agent.id] = others
 
+        # Build adjacent agents map (includes co-located + neighboring positions)
+        adjacent: dict[str, set[str]] = {agent.id: set() for agent in self.agents}
+        for agent in self.agents:
+            others = self.grid.agents_adjacent_to(agent)
+            adjacent[agent.id] = others
+
         # Build interaction state copies
         interaction_states = {
             agent.id: agent.interaction_state.copy()
@@ -364,6 +379,7 @@ class Simulation:
             agent_positions=agent_positions,
             agent_interaction_states=interaction_states,
             co_located_agents=co_located,
+            adjacent_agents=adjacent,
             pending_proposals=dict(self._pending_proposals),
         )
 
@@ -391,74 +407,21 @@ class Simulation:
         # Separate actions by type
         move_actions: dict[str, MoveAction] = {}
         propose_actions: dict[str, ProposeAction] = {}
-        accept_actions: dict[str, AcceptAction] = {}
-        reject_actions: dict[str, RejectAction] = {}
 
         for agent_id, action in agent_actions.items():
             if isinstance(action, MoveAction):
                 move_actions[agent_id] = action
             elif isinstance(action, ProposeAction):
                 propose_actions[agent_id] = action
-            elif isinstance(action, AcceptAction):
-                accept_actions[agent_id] = action
-            elif isinstance(action, RejectAction):
-                reject_actions[agent_id] = action
             # WaitAction requires no execution
+            # AcceptAction/RejectAction are not chosen during Decide phase
+            # (proposal responses happen immediately in Execute phase)
+
+        # Track agents that traded this tick (they don't also move)
+        traded_this_tick: set[str] = set()
 
         # =====================================================================
-        # Step 1: Process Accept/Reject responses to pending proposals
-        # =====================================================================
-        for agent_id, action in accept_actions.items():
-            agent = self._agents_by_id.get(agent_id)
-            proposer = self._agents_by_id.get(action.proposer_id)
-            if agent is None or proposer is None:
-                continue
-
-            # Verify proposal still exists and is from this proposer
-            if self._pending_proposals.get(agent_id) != action.proposer_id:
-                continue
-
-            # Check still co-located
-            agent_pos = self.grid.get_position(agent)
-            proposer_pos = self.grid.get_position(proposer)
-            if agent_pos is None or proposer_pos is None or agent_pos != proposer_pos:
-                # Co-location lost, proposal expires
-                del self._pending_proposals[agent_id]
-                proposer.interaction_state.enter_available()
-                continue
-
-            # Accept: both enter NEGOTIATING
-            del self._pending_proposals[agent_id]
-            exchange_id = propose_actions.get(action.proposer_id, ProposeAction(agent_id)).exchange_id
-            agent.interaction_state.enter_negotiating(action.proposer_id, self.tick)
-            proposer.interaction_state.enter_negotiating(agent_id, self.tick)
-
-            # For simplicity, negotiation completes this tick (duration = 1)
-            # Execute trade immediately
-            trade_event = self._execute_trade(agent, proposer, exchange_id)
-            if trade_event:
-                tick_trades.append(trade_event)
-
-            # Both return to AVAILABLE
-            agent.interaction_state.enter_available()
-            proposer.interaction_state.enter_available()
-
-        for agent_id, action in reject_actions.items():
-            agent = self._agents_by_id.get(agent_id)
-            proposer = self._agents_by_id.get(action.proposer_id)
-            if agent is None or proposer is None:
-                continue
-
-            # Verify proposal still exists
-            if self._pending_proposals.get(agent_id) != action.proposer_id:
-                continue
-
-            # Reject: proposer returns to AVAILABLE with cooldown
-            del self._pending_proposals[agent_id]
-            proposer.interaction_state.enter_available(add_cooldown_for=agent_id)
-
-        # =====================================================================
-        # Step 2: Conflict resolution for new proposals
+        # Step 1: Conflict resolution for proposals
         # =====================================================================
         # Group proposals by target
         proposals_by_target: dict[str, list[str]] = {}
@@ -489,10 +452,12 @@ class Simulation:
             if agent_a is None or agent_b is None:
                 continue
 
-            # Verify co-located
+            # Verify adjacent (Chebyshev distance <= 1)
             pos_a = self.grid.get_position(agent_a)
             pos_b = self.grid.get_position(agent_b)
-            if pos_a is None or pos_b is None or pos_a != pos_b:
+            if pos_a is None or pos_b is None:
+                continue
+            if pos_a.chebyshev_distance_to(pos_b) > 1:
                 continue
 
             # Mutual interest: both enter NEGOTIATING directly
@@ -511,10 +476,32 @@ class Simulation:
 
             processed_mutual.add(pair_list[0])
             processed_mutual.add(pair_list[1])
+            traded_this_tick.add(pair_list[0])
+            traded_this_tick.add(pair_list[1])
 
-        # Process non-mutual proposals
+        # =====================================================================
+        # Step 2: Process non-mutual proposals with same-tick accept/reject
+        # =====================================================================
+        # For non-mutual proposals, the target immediately decides whether to
+        # accept or reject. This avoids the timing problem where targets move
+        # away before they can respond to a proposal.
+
+        # Build decision context for proposal evaluation
+        action_context = self._build_action_context()
+        decision_context = DecisionContext(
+            action_context=action_context,
+            visible_agents={a.id: a for a in self.agents},  # Full visibility for evaluation
+            bargaining_protocol=self.bargaining_protocol,
+            agent_positions=action_context.agent_positions,
+        )
+
+        # Track targets that have already responded to a proposal this tick
+        responded_targets: set[str] = set()
+
         for proposer_id, action in propose_actions.items():
             if proposer_id in processed_mutual:
+                continue
+            if proposer_id in traded_this_tick:
                 continue
 
             proposer = self._agents_by_id.get(proposer_id)
@@ -522,30 +509,57 @@ class Simulation:
             if proposer is None or target is None:
                 continue
 
-            # Check if target is available and co-located
+            # Target must not have already responded to another proposal
+            if action.target_id in responded_targets:
+                continue
+
+            # Target must not have traded already (from mutual proposal)
+            if action.target_id in traded_this_tick:
+                continue
+
+            # Check adjacency (Chebyshev distance <= 1)
             proposer_pos = self.grid.get_position(proposer)
             target_pos = self.grid.get_position(target)
-            if proposer_pos is None or target_pos is None or proposer_pos != target_pos:
+            if proposer_pos is None or target_pos is None:
+                continue
+            if proposer_pos.chebyshev_distance_to(target_pos) > 1:
                 continue
 
-            # Check if target already has a pending proposal
-            if action.target_id in self._pending_proposals:
-                # Target already has proposal from someone else
-                # This proposer is "unavailable" - no cooldown
-                continue
+            # Target immediately decides whether to accept
+            # This uses the target's decision procedure
+            accept = self.decision_procedure.evaluate_proposal(
+                target, proposer, decision_context
+            )
 
-            # Check if target was processed as mutual
-            if action.target_id in processed_mutual:
-                continue
+            responded_targets.add(action.target_id)
 
-            # Register proposal
-            self._pending_proposals[action.target_id] = proposer_id
-            proposer.interaction_state.enter_proposal_pending(action.target_id, self.tick)
+            if accept:
+                # Trade executes immediately
+                exchange_id = action.exchange_id
+                proposer.interaction_state.enter_negotiating(action.target_id, self.tick)
+                target.interaction_state.enter_negotiating(proposer_id, self.tick)
+
+                trade_event = self._execute_trade(proposer, target, exchange_id)
+                if trade_event:
+                    tick_trades.append(trade_event)
+
+                proposer.interaction_state.enter_available()
+                target.interaction_state.enter_available()
+
+                traded_this_tick.add(proposer_id)
+                traded_this_tick.add(action.target_id)
+            else:
+                # Rejection: proposer gets cooldown for this target
+                proposer.interaction_state.enter_available(add_cooldown_for=action.target_id)
 
         # =====================================================================
         # Step 3: Execute movement actions
         # =====================================================================
         for agent_id, action in move_actions.items():
+            # Skip agents that traded this tick
+            if agent_id in traded_this_tick:
+                continue
+
             agent = self._agents_by_id.get(agent_id)
             if agent is None:
                 continue

@@ -190,8 +190,9 @@ class ProposeAction(Action):
     """
     Propose exchange to a co-located agent.
 
-    Initiates the multi-tick exchange sequence. The proposer enters
-    PROPOSAL_PENDING state and waits for response.
+    Initiates the exchange sequence. The proposer attempts to trade with
+    the target. If the proposal fails (rejected or not selected), the
+    proposer executes their fallback action instead.
 
     Preconditions:
     - Agent is in AVAILABLE state
@@ -199,17 +200,35 @@ class ProposeAction(Action):
     - Agent and target are co-located
 
     Effects:
-    - Agent enters PROPOSAL_PENDING state
-    - Target receives pending proposal
+    - If accepted: trade executes, both parties consume action budget
+    - If rejected: proposer executes fallback, cooldown added for target
+    - If not selected: proposer executes fallback, no cooldown
 
-    Reference: ADR-002-INTERACTION-STATE.md, ADR-003-EXCHANGE-SEQUENCE.md
+    Attributes:
+        target_id: ID of the agent to propose to
+        exchange_id: Unique identifier for this exchange attempt
+        fallback: Action to execute if proposal fails (MoveAction or WaitAction)
+
+    Reference: AGENT-ARCHITECTURE.md §7.1-7.4
     """
 
-    def __init__(self, target_id: str, exchange_id: str | None = None) -> None:
+    def __init__(
+        self,
+        target_id: str,
+        exchange_id: str | None = None,
+        fallback: Action | None = None,
+    ) -> None:
         super().__init__()
         self.target_id = target_id
         # exchange_id generated when action is created, propagates through events
         self.exchange_id = exchange_id or str(uuid.uuid4())[:8]
+        # Validate fallback is not a ProposeAction (would cause recursion)
+        if fallback is not None and isinstance(fallback, ProposeAction):
+            raise ValueError(
+                "ProposeAction fallback cannot be another ProposeAction. "
+                "Use MoveAction or WaitAction instead."
+            )
+        self.fallback = fallback
 
     @property
     def action_type(self) -> ActionType:

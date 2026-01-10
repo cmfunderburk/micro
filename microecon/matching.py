@@ -204,8 +204,8 @@ class StableRoommatesMatchingProtocol(MatchingProtocol):
         is finalized, likely as an emergent outcome of agent proposal/acceptance
         decisions rather than a centralized Irving algorithm.
 
-        See: docs/current/stablematching-roadmap-thinking.md
-        See: docs/current/ROADMAP-DISCUSSION-2026-01-08.md §6 (Tick Model)
+        See: docs/current/ROADMAP.md §7.3 (StableRoommates Deprecation)
+        See: docs/current/ROADMAP.md §2.9-2.13 (Tick Model and Interaction States)
 
     Forms committed pairs with the stability property: no two agents
     would both prefer to be matched with each other over their current
@@ -229,7 +229,7 @@ class StableRoommatesMatchingProtocol(MatchingProtocol):
         warnings.warn(
             "StableRoommatesMatchingProtocol is deprecated. "
             "It will be redesigned to fit the action-budget tick model. "
-            "See docs/current/stablematching-roadmap-thinking.md for details.",
+            "See docs/current/ROADMAP.md §7.3 for details.",
             DeprecationWarning,
             stacklevel=2,
         )

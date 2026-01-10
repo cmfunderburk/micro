@@ -1,0 +1,718 @@
+{
+  "task": {
+    "name": "Agent Architecture Rework",
+    "description": "Restructure the microecon simulation core from implicit 4-phase logic with instantaneous exchange to an explicit action-based 3-phase tick model (Perceive-Decide-Execute) with multi-state interaction semantics. Makes transaction costs explicit through tick-counted exchange sequences, enabling institutional comparison research.",
+    "created": "2026-01-09T00:00:00Z",
+    "vision_source": "VISION.md",
+    "architecture_source": "docs/current/AGENT-ARCHITECTURE.md",
+    "project_type": "research_software",
+    "completion_promise": "AGENT-ARCHITECTURE-COMPLETE"
+  },
+
+  "context": {
+    "codebase_state": "active",
+    "primary_language": "python",
+    "frameworks": ["pytest", "dataclasses", "FastAPI", "React"],
+    "vision_extraction": {
+      "primary_goal": "Make economic institutions visible, configurable, and comparable through explicit transaction costs",
+      "success_criteria": [
+        "Transaction costs measurable as ticks (proposal, negotiation, coordination failure)",
+        "Agent sophistication as experimental variable via DecisionProcedure interface",
+        "Holdings separate from endowment enabling proper disagreement point tracking",
+        "Multi-state interaction enabling coordination failure analysis",
+        "All 667+ tests passing after refactor"
+      ],
+      "deliverables": [
+        "Holdings/Endowment separation on Agent",
+        "InteractionState machine (Available, ProposalPending, Negotiating)",
+        "Action interface with Move, Propose, Accept, Reject, Wait",
+        "DecisionProcedure interface with available_actions, evaluate, choose",
+        "Three-phase tick loop (Perceive, Decide, Execute)",
+        "Multi-tick bilateral exchange sequence",
+        "Conflict resolution for multiple proposals and mutual proposals",
+        "Event correlation via exchange_id"
+      ]
+    },
+    "gap_analysis_summary": "Current implementation has 4-phase tick with instantaneous exchange, binary CommitmentState, implicit actions, and endowment serving as both initial allocation and current holdings. Target requires 3-phase tick, multi-state InteractionState per agent, explicit Action enumeration, and separated Holdings/Endowment.",
+    "resource_constraints": {
+      "compute": null,
+      "time_budget": null,
+      "other": null
+    },
+    "canonical_sources": [
+      "Osborne & Rubinstein, Bargaining and Markets (Ch 2-5)",
+      "Coase (1937), The Nature of the Firm",
+      "Williamson (1985), The Economic Institutions of Capitalism",
+      "Kreps, Microeconomic Foundations I (Ch 1-7)"
+    ]
+  },
+
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Agent Foundation",
+      "description": "Separate Holdings from Endowment on Agent class. Define InteractionState dataclass with Available/ProposalPending/Negotiating states and cooldown tracking.",
+      "features": ["FEAT-001", "FEAT-002", "FEAT-003"],
+      "depends_on": [],
+      "gates_phases": [2, 3, 4],
+      "entry_criteria": "Codebase in working state",
+      "exit_criteria": "Agent has holdings attribute, endowment is immutable, InteractionState dataclass defined with all states and transitions specified",
+      "gate_verification": "Agent construction succeeds with both holdings and endowment; InteractionState can represent all states from ADR-002"
+    },
+    {
+      "phase": 2,
+      "name": "Action System",
+      "description": "Define Action ABC with type, cost, preconditions, transform, tags. Implement concrete actions: Move, Propose, Accept, Reject, Wait. Define DecisionProcedure interface.",
+      "features": ["FEAT-004", "FEAT-005", "FEAT-006", "FEAT-007"],
+      "depends_on": [1],
+      "gates_phases": [3],
+      "entry_criteria": "Phase 1 complete - Agent has holdings and InteractionState defined",
+      "exit_criteria": "All action types instantiate correctly, DecisionProcedure interface defined with rational baseline implementation",
+      "gate_verification": "Can create instances of all action types; DecisionProcedure.choose() returns valid action for test scenario"
+    },
+    {
+      "phase": 3,
+      "name": "Tick Restructure",
+      "description": "Replace 4-phase tick loop with 3-phase (Perceive, Decide, Execute). Implement conflict resolution for multiple proposals to same target and mutual proposals.",
+      "features": ["FEAT-008", "FEAT-009", "FEAT-010", "FEAT-011"],
+      "depends_on": [1, 2],
+      "gates_phases": [4],
+      "entry_criteria": "Phase 2 complete - Action types and DecisionProcedure available",
+      "exit_criteria": "Simulation.tick() uses 3-phase structure, agents select actions via DecisionProcedure, conflict resolution handles multi-proposal and mutual-proposal cases",
+      "gate_verification": "Simulation runs with new tick loop; conflict scenarios produce correct outcomes per ADR-003"
+    },
+    {
+      "phase": 4,
+      "name": "Exchange Sequence",
+      "description": "Implement multi-tick exchange: Propose (T) -> Accept/Reject (T+1) -> Negotiate (T+1) -> Execute. State transitions per ADR-002. Co-location validation throughout.",
+      "features": ["FEAT-012", "FEAT-013", "FEAT-014", "FEAT-015", "FEAT-016"],
+      "depends_on": [1, 2, 3],
+      "gates_phases": [5],
+      "entry_criteria": "Phase 3 complete - 3-phase tick operational",
+      "exit_criteria": "Full exchange sequence works across ticks, state transitions correct, co-location validated at each stage, cooldowns applied on rejection",
+      "gate_verification": "Two-agent exchange takes minimum 2 ticks; rejection triggers cooldown; co-location loss aborts exchange"
+    },
+    {
+      "phase": 5,
+      "name": "Event System",
+      "description": "Define new event types (ProposalEvent, ProposalResponseEvent, NegotiationEvent, CooldownEvent). Add exchange_id to all exchange events. Update TickRecord structure.",
+      "features": ["FEAT-017", "FEAT-018", "FEAT-019", "FEAT-020"],
+      "depends_on": [4],
+      "gates_phases": [6],
+      "entry_criteria": "Phase 4 complete - Exchange sequence operational",
+      "exit_criteria": "All exchange events logged with exchange_id, TickRecord includes interaction_states snapshot, analysis queries work",
+      "gate_verification": "exchange_duration() returns correct tick count; all events in sequence share same exchange_id"
+    },
+    {
+      "phase": 6,
+      "name": "Test Restoration",
+      "description": "Fix broken tests, rewrite tests incompatible with new architecture, add property tests for state machine invariants and conservation laws. Verify all tests pass.",
+      "features": ["FEAT-021", "FEAT-022", "FEAT-023", "FEAT-024"],
+      "depends_on": [1, 2, 3, 4, 5],
+      "gates_phases": [],
+      "entry_criteria": "Phase 5 complete - Full architecture operational",
+      "exit_criteria": "All 667+ tests pass, new property tests for invariants added",
+      "gate_verification": "pytest runs green; property tests cover state machine transitions and conservation laws"
+    }
+  ],
+
+  "phase_dependencies": {
+    "dag": {
+      "1": [],
+      "2": [1],
+      "3": [1, 2],
+      "4": [1, 2, 3],
+      "5": [4],
+      "6": [1, 2, 3, 4, 5]
+    },
+    "critical_path": [1, 2, 3, 4, 5, 6],
+    "parallel_eligible": [],
+    "gate_checks": {
+      "1->2": "Agent.holdings exists and is mutable; Agent.endowment is immutable; InteractionState dataclass defined",
+      "2->3": "All Action types (Move, Propose, Accept, Reject, Wait) instantiate; DecisionProcedure interface implemented",
+      "3->4": "Simulation.tick() uses Perceive-Decide-Execute; conflict resolution operational",
+      "4->5": "Multi-tick exchange completes correctly; state transitions per ADR-002",
+      "5->6": "Events logged with exchange_id; correlation queries return correct results"
+    }
+  },
+
+  "features": [
+    {
+      "id": "FEAT-001",
+      "name": "Holdings attribute on Agent",
+      "phase": 1,
+      "description": "Add holdings: Bundle attribute to Agent, initialized as copy of endowment. Holdings is mutable; endowment becomes immutable.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Agent has holdings attribute of type Bundle",
+          "Holdings initialized to endowment.copy() if not specified",
+          "Holdings can be mutated",
+          "Endowment cannot be mutated after construction"
+        ],
+        "property": [
+          "agent.holdings == agent.endowment at construction (when not specified)",
+          "Modifying holdings does not affect endowment"
+        ],
+        "theory": [
+          "Endowment defines disagreement point for Nash bargaining (O&R Ch 2)"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/test_agent.py -v"]
+    },
+    {
+      "id": "FEAT-002",
+      "name": "Trade updates holdings not endowment",
+      "phase": 1,
+      "description": "Modify bargaining protocol execution to update agent.holdings instead of agent.private_state.endowment.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Bargaining protocols update holdings",
+          "Endowment unchanged after trade"
+        ],
+        "property": [
+          "sum(holdings) == sum(endowments) after any trade (conservation)",
+          "u(holdings) >= u(endowment) for both parties (individual rationality)"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_bargaining.py -v"]
+    },
+    {
+      "id": "FEAT-003",
+      "name": "InteractionState dataclass",
+      "phase": 1,
+      "description": "Define InteractionState with Available/ProposalPending/Negotiating states, proposal tracking, negotiation tracking, and per-partner cooldowns.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "InteractionState enum with AVAILABLE, PROPOSAL_PENDING, NEGOTIATING",
+          "AgentInteractionState dataclass with state, proposal_target, negotiation_partner, cooldowns",
+          "Agent has interaction_state attribute"
+        ],
+        "property": [
+          "Agent starts in AVAILABLE state",
+          "Cooldowns dict starts empty"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_agent.py -v"]
+    },
+    {
+      "id": "FEAT-004",
+      "name": "Action ABC",
+      "phase": 2,
+      "description": "Define abstract Action class with type, cost(), preconditions(), transform(), tags properties/methods.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Action is abstract base class",
+          "Required methods: cost(), preconditions(state), transform(state)",
+          "Required properties: action_type, tags"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_actions.py -v"]
+    },
+    {
+      "id": "FEAT-005",
+      "name": "Concrete action types",
+      "phase": 2,
+      "description": "Implement Move, Propose, Accept, Reject, Wait action classes inheriting from Action ABC.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "MoveAction with target position",
+          "ProposeAction with target agent",
+          "AcceptAction with proposer agent",
+          "RejectAction with proposer agent",
+          "WaitAction (no parameters)"
+        ],
+        "property": [
+          "ProposeAction.preconditions checks: AVAILABLE state, not in cooldown for target, co-located",
+          "AcceptAction.preconditions checks: has pending proposal from specified agent",
+          "RejectAction.preconditions checks: has pending proposal from specified agent"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_actions.py -v"]
+    },
+    {
+      "id": "FEAT-006",
+      "name": "DecisionProcedure interface",
+      "phase": 2,
+      "description": "Define DecisionProcedure ABC with available_actions(), evaluate(action), choose() methods.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "DecisionProcedure is abstract base class",
+          "available_actions(state) returns Set[Action]",
+          "evaluate(action) returns float score",
+          "choose() returns Action"
+        ],
+        "property": [
+          "choose() returns action from available_actions()",
+          "evaluate() returns higher score for higher expected utility"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_decisions.py -v"]
+    },
+    {
+      "id": "FEAT-007",
+      "name": "RationalDecisionProcedure",
+      "phase": 2,
+      "description": "Implement baseline rational decision procedure that evaluates all available actions and chooses maximum expected utility.",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Implements DecisionProcedure interface",
+          "Evaluates Move actions by discounted surplus at destination",
+          "Evaluates Propose by expected trade surplus",
+          "Evaluates Accept by surplus from accepting",
+          "choose() returns argmax of evaluate()"
+        ],
+        "property": [],
+        "theory": [
+          "Rational choice: choose action maximizing expected utility"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/test_decisions.py -v"]
+    },
+    {
+      "id": "FEAT-008",
+      "name": "Perceive phase",
+      "phase": 3,
+      "description": "Implement PERCEIVE phase: freeze state, each agent observes within perception radius filtered by information environment.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "State frozen at start of tick",
+          "Each agent receives perceived state",
+          "Perception radius applied",
+          "Information environment filters observable attributes"
+        ],
+        "property": [
+          "All agents observe same frozen state (no mid-tick updates visible)"
+        ],
+        "theory": [
+          "Simultaneous-move game: decisions based on common state"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/test_simulation.py -v"]
+    },
+    {
+      "id": "FEAT-009",
+      "name": "Decide phase",
+      "phase": 3,
+      "description": "Implement DECIDE phase: each agent's DecisionProcedure.choose() called, actions collected.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "DecisionProcedure.choose() called for each agent",
+          "Actions collected into pending_actions dict",
+          "No agent sees another's pending action"
+        ],
+        "property": [
+          "Each agent produces exactly one action",
+          "Action satisfies preconditions at decision time"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_simulation.py -v"]
+    },
+    {
+      "id": "FEAT-010",
+      "name": "Execute phase",
+      "phase": 3,
+      "description": "Implement EXECUTE phase: conflict resolution, action execution, state update.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Conflict resolution runs before execution",
+          "All actions execute against frozen state",
+          "State changes batched and applied atomically",
+          "Validation checks (non-negative holdings, valid positions)"
+        ],
+        "property": [
+          "Execution order by agent_id is deterministic",
+          "Same seed produces same outcome"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_simulation.py -v"]
+    },
+    {
+      "id": "FEAT-011",
+      "name": "Conflict resolution",
+      "phase": 3,
+      "description": "Handle multiple proposals to same target (target chooses highest surplus), mutual proposals (both enter negotiating).",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Detect multiple proposals to same target",
+          "Target selects proposal with highest expected surplus",
+          "Non-selected proposers return to AVAILABLE (no cooldown)",
+          "Detect mutual proposals (A->B and B->A)",
+          "Mutual proposals both enter NEGOTIATING directly"
+        ],
+        "property": [
+          "Ties broken by lower agent_id",
+          "Exactly one proposal accepted per target"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_simulation.py -v"]
+    },
+    {
+      "id": "FEAT-012",
+      "name": "Proposal state transition",
+      "phase": 4,
+      "description": "Propose action transitions agent to PROPOSAL_PENDING. Track proposal_target and proposal_tick.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Propose action sets state to PROPOSAL_PENDING",
+          "proposal_target set to target agent id",
+          "proposal_tick set to current tick",
+          "Proposer locked (cannot take other actions)"
+        ],
+        "property": [
+          "Proposal requires co-location with target",
+          "Proposal requires not in cooldown for target"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_exchange.py -v"]
+    },
+    {
+      "id": "FEAT-013",
+      "name": "Acceptance state transition",
+      "phase": 4,
+      "description": "Accept action transitions both agents to NEGOTIATING. Reject transitions proposer to AVAILABLE with cooldown.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Accept: both enter NEGOTIATING with each other",
+          "Reject: proposer returns to AVAILABLE",
+          "Reject: cooldown added to proposer for this target",
+          "Timeout (no response): proposer returns to AVAILABLE, no cooldown",
+          "Co-location lost: proposer returns to AVAILABLE, no cooldown"
+        ],
+        "property": [
+          "Cooldown duration = 3 ticks",
+          "Timeout = 1 tick"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_exchange.py -v"]
+    },
+    {
+      "id": "FEAT-014",
+      "name": "Negotiation and trade execution",
+      "phase": 4,
+      "description": "NEGOTIATING state: bargaining protocol executes, trade completes or fails, both return to AVAILABLE.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Bargaining protocol computes outcome",
+          "If success: holdings update, both return to AVAILABLE",
+          "If failure (no zone of agreement): both return to AVAILABLE, no cooldown",
+          "If co-location lost: both return to AVAILABLE"
+        ],
+        "property": [
+          "Negotiation duration = 1 tick",
+          "Conservation law holds after trade"
+        ],
+        "theory": [
+          "Trade outcome matches bargaining protocol specification (Nash, Rubinstein, etc.)"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/test_exchange.py tests/test_bargaining.py -v"]
+    },
+    {
+      "id": "FEAT-015",
+      "name": "Co-location validation",
+      "phase": 4,
+      "description": "Validate co-location at proposal, during waiting, during negotiation, at execution.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Propose requires co-location",
+          "Proposal expires if co-location lost before response",
+          "Negotiation fails if either agent moves (locked mode prevents this)",
+          "Trade requires co-location"
+        ],
+        "property": [
+          "No trade occurs between non-co-located agents"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_exchange.py -v"]
+    },
+    {
+      "id": "FEAT-016",
+      "name": "Cooldown mechanics",
+      "phase": 4,
+      "description": "Per-partner cooldowns: decrement each tick, remove at 0, prevent proposal while active.",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "Cooldowns stored as dict[agent_id, int]",
+          "Decremented at start of each tick",
+          "Removed when reaching 0",
+          "Propose precondition checks cooldown"
+        ],
+        "property": [
+          "Agent cannot propose to target while cooldown > 0"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_exchange.py -v"]
+    },
+    {
+      "id": "FEAT-017",
+      "name": "New event types",
+      "phase": 5,
+      "description": "Define ProposalEvent, ProposalResponseEvent, NegotiationEvent, CooldownEvent dataclasses.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "ProposalEvent: tick, exchange_id, proposer_id, target_id, position",
+          "ProposalResponseEvent: tick, exchange_id, responder_id, proposer_id, response",
+          "NegotiationEvent: tick, exchange_id, agent_a_id, agent_b_id, protocol, outcome",
+          "CooldownEvent: tick, exchange_id, agent_id, target_id, duration, reason"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_logging.py -v"]
+    },
+    {
+      "id": "FEAT-018",
+      "name": "exchange_id generation and propagation",
+      "phase": 5,
+      "description": "Generate exchange_id on Propose, propagate through all events in sequence including TradeEvent.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "exchange_id generated when Propose action created",
+          "Carried through ProposalResponse, Negotiation, Trade events",
+          "TradeEvent extended with exchange_id field"
+        ],
+        "property": [
+          "All events in exchange sequence share same exchange_id"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_logging.py -v"]
+    },
+    {
+      "id": "FEAT-019",
+      "name": "TickRecord updates",
+      "phase": 5,
+      "description": "Update TickRecord to include interaction_states snapshot and unified events list.",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "TickRecord.interaction_states: dict[str, InteractionState]",
+          "TickRecord.events: list[Event] (all event types)",
+          "Convenience properties: proposals, trades, etc."
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_logging.py -v"]
+    },
+    {
+      "id": "FEAT-020",
+      "name": "Analysis query functions",
+      "phase": 5,
+      "description": "Implement exchange_duration(), exchange_outcome(), rejection_rate() analysis functions.",
+      "priority": 2,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "exchange_duration(events, exchange_id) returns tick count",
+          "exchange_outcome(events, exchange_id) returns 'completed'|'reject'|'timeout'|etc.",
+          "rejection_rate(events) returns fraction of proposals rejected"
+        ],
+        "property": [
+          "exchange_duration >= 2 for completed trades"
+        ],
+        "theory": [
+          "Transaction costs measurable as ticks (Coase/Williamson)"
+        ]
+      },
+      "verification_commands": ["uv run pytest tests/test_analysis.py -v"]
+    },
+    {
+      "id": "FEAT-021",
+      "name": "Fix simulation tests",
+      "phase": 6,
+      "description": "Update tests in test_simulation.py to work with new 3-phase tick model.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "All simulation tests pass",
+          "Tests use new action-based API where appropriate"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_simulation.py -v"]
+    },
+    {
+      "id": "FEAT-022",
+      "name": "Fix matching tests",
+      "phase": 6,
+      "description": "Remove CommitmentState tests, add InteractionState tests.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "CommitmentState references removed",
+          "InteractionState transitions tested",
+          "Cooldown mechanics tested"
+        ],
+        "property": [],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_matching.py -v"]
+    },
+    {
+      "id": "FEAT-023",
+      "name": "Property tests for invariants",
+      "phase": 6,
+      "description": "Add hypothesis property tests for state machine invariants and conservation laws.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "State machine transition tests (no invalid transitions)",
+          "Conservation law tests (holdings sum = endowments sum)",
+          "Cooldown decrement/removal tests"
+        ],
+        "property": [
+          "No sequence of actions produces invalid InteractionState",
+          "sum(holdings) == sum(endowments) at every tick"
+        ],
+        "theory": []
+      },
+      "verification_commands": ["uv run pytest tests/test_properties.py -v"]
+    },
+    {
+      "id": "FEAT-024",
+      "name": "Theory test preservation",
+      "phase": 6,
+      "description": "Verify all theory tests (bargaining outcomes, surplus splits) still pass with new architecture.",
+      "priority": 1,
+      "passes": false,
+      "criteria": {
+        "functional": [
+          "All test_bargaining.py theory tests pass",
+          "Nash surplus split correct",
+          "Rubinstein patience effects correct",
+          "Asymmetric Nash weights correct"
+        ],
+        "property": [],
+        "theory": [
+          "Bargaining outcomes match O&R specifications"
+        ]
+      },
+      "verification_commands": ["uv run pytest -m theory -v"]
+    }
+  ],
+
+  "architectural_decisions": {
+    "resolved": [
+      {
+        "id": "ADR-001",
+        "decision": "Three-phase tick model",
+        "choice": "Replace 4-phase (Evaluate-Decide-Move-Exchange) with 3-phase (Perceive-Decide-Execute)",
+        "rationale": "Enables explicit action selection, measurable transaction costs, extensible action types",
+        "source": "interview",
+        "canonical_reference": "Simultaneous-move games (O&R Game Theory); Coase (1937); Williamson (1985)",
+        "adr_file": "docs/adr/ADR-001-TICK-MODEL.md"
+      },
+      {
+        "id": "ADR-002",
+        "decision": "Multi-state interaction machine",
+        "choice": "Replace binary CommitmentState with per-agent InteractionState (Available/ProposalPending/Negotiating) + cooldowns",
+        "rationale": "Enables multi-tick exchanges, rejection tracking, coordination failure analysis",
+        "source": "interview",
+        "canonical_reference": "O&R Bargaining Ch 3-4 (alternating offers)",
+        "adr_file": "docs/adr/ADR-002-INTERACTION-STATE.md"
+      },
+      {
+        "id": "ADR-003",
+        "decision": "Multi-tick exchange sequence",
+        "choice": "Propose (T) -> Accept/Reject (T+1) -> Negotiate (T+1) -> Execute, minimum 2 ticks",
+        "rationale": "Makes transaction costs explicit as tick counts; enables protocol comparison",
+        "source": "interview",
+        "canonical_reference": "Coase (1937); Williamson (1985); O&R Bargaining Ch 2-4",
+        "adr_file": "docs/adr/ADR-003-EXCHANGE-SEQUENCE.md"
+      },
+      {
+        "id": "ADR-004",
+        "decision": "Event correlation via exchange_id",
+        "choice": "Generate exchange_id on Propose, propagate through all events in sequence",
+        "rationale": "Enables transaction cost measurement, exchange tracing, analysis queries",
+        "source": "interview",
+        "canonical_reference": "Event sourcing patterns",
+        "adr_file": "docs/adr/ADR-004-EVENT-CORRELATION.md"
+      }
+    ],
+    "pending_adrs": []
+  },
+
+  "configuration": {
+    "proposal_timeout": 1,
+    "proposal_locked": true,
+    "negotiation_duration": 1,
+    "rejection_cooldown": 3,
+    "multiple_proposals": "exclusive",
+    "action_budget": 1,
+    "notes": "All values fixed for initial implementation; extensibility deferred"
+  },
+
+  "tracking": {
+    "theory_divergences_file": null,
+    "retrospective_template": null
+  },
+
+  "escalation_triggers": [
+    "Theory test failures (may indicate broken invariants in bargaining or surplus calculation)",
+    "More than 50% of tests failing at any checkpoint",
+    "Architectural ambiguity not covered by ADRs",
+    "Conservation law violations (holdings sum != endowments sum)"
+  ],
+
+  "loop_parameters": {
+    "max_iterations": null,
+    "progress_tracking": ["git_commits", "progress_file", "prd_status_updates"],
+    "on_phase_complete": "continue"
+  }
+}

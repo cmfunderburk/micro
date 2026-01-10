@@ -225,4 +225,4 @@ This is a **medium priority** enhancement. The simulation works correctly withou
 
 - O&R Ch 2-3: Discussion of transaction costs in bargaining theory
 - Current codebase: `microecon/bargaining.py`, `microecon/search.py`, `microecon/simulation.py`
-- Related: `docs/current/ROADMAP-DISCUSSION-2026-01-08.md` - tick model discussion
+- Related: `docs/current/ROADMAP.md` §2.9-2.10 - tick model and transaction costs

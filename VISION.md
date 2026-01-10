@@ -119,7 +119,7 @@ Key architectural principles for agents:
 - **Beliefs architecturally present**: Agents can hold beliefs about others and prices; whether beliefs affect behavior is configurable (enabling study of naive vs. sophisticated agents)
 - **Perfect self-knowledge**: Agents know their own preferences (standard assumption); bounded rationality is achieved through the decision rule, not self-uncertainty
 
-See **AGENT-ARCHITECTURE.md** for the complete specification.
+See **ROADMAP.md §2** for the complete specification.
 
 ---
 
@@ -279,18 +279,18 @@ The platform takes inspiration from VMT's problem space:
 This document (**VISION.md**) is the authoritative statement of project identity and direction.
 
 **Foundational documents:**
-- **AGENT-ARCHITECTURE.md**: Defines what an agent IS — attributes, beliefs, perception, decision architecture, tick model integration, objectives. This is the source of truth for agent design.
+- **ROADMAP.md**: Unified source of truth for agent architecture (§2) and development phases (§3-6). Defines what an agent IS — attributes, beliefs, perception, decision architecture, tick model integration, objectives.
 - **theoretical-foundations.md**: Textbook mappings and derivations for bargaining protocols, preferences, and economic concepts.
 
 **Supporting documents:**
 - **CLAUDE.md**: Development guidance and conventions
 - **STATUS.md**: Current implementation state and known limitations
 
-Architecture emerges through development rather than upfront specification, but foundational documents (VISION.md, AGENT-ARCHITECTURE.md) provide stable reference points.
+Architecture emerges through development rather than upfront specification, but foundational documents (VISION.md, ROADMAP.md) provide stable reference points.
 
 When documents conflict:
 - This vision document takes precedence on matters of identity, scope, and methodology
-- AGENT-ARCHITECTURE.md takes precedence on agent model specifics
+- ROADMAP.md takes precedence on agent model and development phase specifics
 - STATUS.md reflects current reality; other documents reflect design intent
 
 ---

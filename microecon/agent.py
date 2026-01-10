@@ -278,6 +278,11 @@ class Agent:
     type_beliefs: dict[str, TypeBelief] | None = field(default=None, repr=False)
     update_rule: BeliefUpdateRule | None = field(default=None, repr=False)
 
+    # Opportunity cost: discounted surplus of best alternative (set during Decide phase)
+    # Used by evaluate_proposal() to determine acceptance threshold
+    # Per ADR-003: stored in agent state during Decide, accessed during Execute
+    _opportunity_cost: float = field(default=0.0, repr=False)
+
     def __post_init__(self) -> None:
         """Initialize holdings and interaction state if not explicitly set."""
         if self._holdings is None:
@@ -318,6 +323,25 @@ class Agent:
     def holdings(self, value: Bundle) -> None:
         """Update the agent's holdings (e.g., after trade)."""
         self._holdings = value
+
+    @property
+    def opportunity_cost(self) -> float:
+        """
+        Opportunity cost for accepting proposals (ADR-003).
+
+        Set during Decide phase by RationalDecisionProcedure.choose().
+        Used during Execute phase by evaluate_proposal() to determine
+        whether to accept incoming proposals.
+
+        Value is the discounted surplus of the best alternative trade
+        the agent could pursue. 0 if agent chose WaitAction.
+        """
+        return self._opportunity_cost
+
+    @opportunity_cost.setter
+    def opportunity_cost(self, value: float) -> None:
+        """Set opportunity cost (called by decision procedure)."""
+        self._opportunity_cost = value
 
     @property
     def interaction_state(self) -> AgentInteractionState:

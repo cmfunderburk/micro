@@ -212,3 +212,103 @@ class TestFallbackPreservesProposeProperties:
         assert isinstance(action, ProposeAction)
         assert action.exchange_id is not None
         assert len(action.exchange_id) == 8  # UUID format
+
+
+class TestOpportunityCostStorage:
+    """Tests for FEAT-003: Store opportunity cost in agent state."""
+
+    def test_opportunity_cost_set_during_choose(self):
+        """Agent._opportunity_cost is set when choose() is called."""
+        grid = Grid(10)
+        agent_a = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, agent_id="agent_a")
+        agent_b = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, agent_id="agent_b")
+
+        grid.place_agent(agent_a, Position(0, 0))
+        grid.place_agent(agent_b, Position(1, 0))
+
+        context = create_test_context([agent_a, agent_b], grid)
+
+        # Check initial value
+        assert agent_a.opportunity_cost == 0.0
+
+        procedure = RationalDecisionProcedure()
+        action = procedure.choose(agent_a, context)
+
+        # After choose, opportunity cost should be set
+        # Since agent chose ProposeAction (beneficial), opportunity cost > 0
+        assert isinstance(action, ProposeAction)
+        assert agent_a.opportunity_cost > 0.0
+
+    def test_opportunity_cost_equals_best_action_value(self):
+        """Opportunity cost equals the value of the chosen action."""
+        grid = Grid(10)
+        agent_a = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, agent_id="agent_a")
+        agent_b = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, agent_id="agent_b")
+
+        grid.place_agent(agent_a, Position(0, 0))
+        grid.place_agent(agent_b, Position(1, 0))
+
+        context = create_test_context([agent_a, agent_b], grid)
+        protocol = NashBargainingProtocol()
+
+        # Compute expected surplus directly
+        expected_surplus = protocol.compute_expected_surplus(agent_a, agent_b)
+
+        procedure = RationalDecisionProcedure()
+        procedure.choose(agent_a, context)
+
+        # Opportunity cost should equal the expected surplus from trading with B
+        assert abs(agent_a.opportunity_cost - expected_surplus) < 1e-10
+
+    def test_opportunity_cost_zero_when_wait_chosen(self):
+        """Opportunity cost is 0 when agent chooses WaitAction."""
+        grid = Grid(10)
+        # Agent alone - no one to trade with
+        agent_a = create_agent(alpha=0.5, endowment_x=5.0, endowment_y=5.0, agent_id="agent_a")
+
+        grid.place_agent(agent_a, Position(0, 0))
+
+        context = create_test_context([agent_a], grid)
+
+        procedure = RationalDecisionProcedure()
+        action = procedure.choose(agent_a, context)
+
+        # Should wait (no trade partners)
+        assert isinstance(action, WaitAction)
+        # Opportunity cost should be 0
+        assert agent_a.opportunity_cost == 0.0
+
+    def test_opportunity_cost_nonnegative(self):
+        """Opportunity cost is always >= 0."""
+        grid = Grid(10)
+        agent_a = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, agent_id="agent_a")
+        agent_b = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, agent_id="agent_b")
+
+        grid.place_agent(agent_a, Position(0, 0))
+        grid.place_agent(agent_b, Position(1, 0))
+
+        context = create_test_context([agent_a, agent_b], grid)
+
+        procedure = RationalDecisionProcedure()
+        procedure.choose(agent_a, context)
+
+        assert agent_a.opportunity_cost >= 0.0
+
+    def test_opportunity_cost_accessible_via_property(self):
+        """Opportunity cost is accessible via agent.opportunity_cost property."""
+        grid = Grid(10)
+        agent_a = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, agent_id="agent_a")
+        agent_b = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, agent_id="agent_b")
+
+        grid.place_agent(agent_a, Position(0, 0))
+        grid.place_agent(agent_b, Position(1, 0))
+
+        context = create_test_context([agent_a, agent_b], grid)
+
+        procedure = RationalDecisionProcedure()
+        procedure.choose(agent_a, context)
+
+        # Verify property accessor works
+        opp_cost = agent_a.opportunity_cost
+        assert isinstance(opp_cost, float)
+        assert opp_cost > 0.0

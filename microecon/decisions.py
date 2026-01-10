@@ -382,7 +382,16 @@ class RationalDecisionProcedure(DecisionProcedure):
                 best_tie_breaker = tie_breaker
 
         if best_action is None:
+            agent.opportunity_cost = 0.0
             return WaitAction()
+
+        # Store opportunity cost: the value of the chosen action
+        # This is what the agent gives up if they accept an incoming proposal instead
+        # Per AGENT-ARCHITECTURE.md 7.9: acceptance iff surplus >= opportunity_cost
+        if isinstance(best_action, WaitAction):
+            agent.opportunity_cost = 0.0
+        else:
+            agent.opportunity_cost = best_value
 
         # If best action is ProposeAction, compute and attach fallback
         if isinstance(best_action, ProposeAction):

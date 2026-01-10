@@ -62,7 +62,7 @@ export interface SimulationConfig {
   discount_factor: number;
   seed: number | null;
   bargaining_protocol: "nash" | "rubinstein" | "tioli" | "asymmetric_nash";
-  matching_protocol: "opportunistic" | "stable_roommates";
+  // matching_protocol removed - agents now use DecisionProcedure
   bargaining_power_distribution?: "uniform" | "gaussian" | "bimodal";
   use_beliefs: boolean;
 }

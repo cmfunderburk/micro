@@ -26,7 +26,7 @@ class ConfigRequest(BaseModel):
     discount_factor: float = 0.95
     seed: int | None = None
     bargaining_protocol: str = "nash"
-    matching_protocol: str = "opportunistic"
+    # matching_protocol removed - agents now use DecisionProcedure
     use_beliefs: bool = False
 
 
@@ -100,7 +100,6 @@ async def set_config(config: ConfigRequest) -> dict[str, Any]:
         discount_factor=config.discount_factor,
         seed=config.seed,
         bargaining_protocol=config.bargaining_protocol,
-        matching_protocol=config.matching_protocol,
         use_beliefs=config.use_beliefs,
     )
     manager.create_simulation(new_config)
@@ -318,7 +317,6 @@ async def load_scenario(scenario_name: str) -> dict[str, Any]:
                         "discount_factor": s.config.discount_factor,
                         "seed": None,  # Scenarios use fixed agent positions
                         "bargaining_protocol": "nash",
-                        "matching_protocol": "opportunistic",
                         "use_beliefs": False,
                     },
                     "agents": [

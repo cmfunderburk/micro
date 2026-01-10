@@ -18,7 +18,7 @@ from microecon.bargaining import (
     TIOLIBargainingProtocol,
     AsymmetricNashBargainingProtocol,
 )
-from microecon.matching import OpportunisticMatchingProtocol, StableRoommatesMatchingProtocol
+# matching_protocol removed in 3-phase tick model rework - agents now use DecisionProcedure
 from microecon.logging import SimulationLogger
 from microecon.logging.events import TickRecord, AgentSnapshot
 
@@ -43,7 +43,7 @@ class SimulationConfig:
     discount_factor: float = 0.95
     seed: int | None = None
     bargaining_protocol: str = "nash"  # "nash", "rubinstein", "tioli", "asymmetric_nash"
-    matching_protocol: str = "opportunistic"  # "opportunistic" or "stable_roommates"
+    # matching_protocol removed - agents now use DecisionProcedure in 3-phase tick model
     use_beliefs: bool = False
     # Bargaining power distribution (only used with asymmetric_nash)
     # Options: "uniform", "gaussian", "bimodal"
@@ -59,7 +59,6 @@ class SimulationConfig:
             "discount_factor": self.discount_factor,
             "seed": self.seed,
             "bargaining_protocol": self.bargaining_protocol,
-            "matching_protocol": self.matching_protocol,
             "use_beliefs": self.use_beliefs,
             "bargaining_power_distribution": self.bargaining_power_distribution,
         }
@@ -95,7 +94,6 @@ class SimulationConfig:
             discount_factor=d.get("discount_factor", 0.95),
             seed=d.get("seed"),
             bargaining_protocol=d.get("bargaining_protocol", "nash"),
-            matching_protocol=d.get("matching_protocol", "opportunistic"),
             use_beliefs=d.get("use_beliefs", False),
             bargaining_power_distribution=d.get("bargaining_power_distribution", "uniform"),
             agents=agents,
@@ -124,7 +122,7 @@ class SimulationInstance:
                 agent_data = {
                     "id": agent.id,
                     "position": [pos.row, pos.col],
-                    "endowment": [agent.endowment.x, agent.endowment.y],
+                    "endowment": [agent.holdings.x, agent.holdings.y],  # Use holdings for current state
                     "alpha": agent.preferences.alpha,
                     "utility": agent.utility(),
                     "perception_radius": agent.perception_radius,
@@ -248,10 +246,7 @@ def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
     else:  # "nash" or default
         bargaining = NashBargainingProtocol()
 
-    if config.matching_protocol == "stable_roommates":
-        matching = StableRoommatesMatchingProtocol()
-    else:
-        matching = OpportunisticMatchingProtocol()
+    # matching_protocol removed - agents now use DecisionProcedure in 3-phase tick model
 
     # Generate bargaining powers if using asymmetric_nash
     bargaining_powers = None
@@ -269,7 +264,6 @@ def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
             grid=grid,
             info_env=FullInformation(),
             bargaining_protocol=bargaining,
-            matching_protocol=matching,
         )
 
         for i, agent_spec in enumerate(config.agents):
@@ -301,7 +295,6 @@ def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
         discount_factor=config.discount_factor,
         seed=config.seed,
         bargaining_protocol=bargaining,
-        matching_protocol=matching,
         use_beliefs=config.use_beliefs,
     )
 
@@ -445,7 +438,7 @@ class SimulationManager:
                 agent_data = {
                     "id": agent.id,
                     "position": [pos.row, pos.col],
-                    "endowment": [agent.endowment.x, agent.endowment.y],
+                    "endowment": [agent.holdings.x, agent.holdings.y],  # Use holdings for current state
                     "alpha": agent.preferences.alpha,
                     "utility": agent.utility(),
                     "perception_radius": agent.perception_radius,

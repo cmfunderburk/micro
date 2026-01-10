@@ -54,7 +54,7 @@ export function ComparisonControls({ sendCommand }: ComparisonControlsProps) {
       perception_radius: config?.perception_radius ?? 7.0,
       discount_factor: config?.discount_factor ?? 0.95,
       seed: seed === '' ? Math.floor(Math.random() * 1000000) : seed,
-      matching_protocol: config?.matching_protocol ?? 'opportunistic',
+      // matching_protocol removed - agents now use DecisionProcedure
       use_beliefs: config?.use_beliefs ?? false,
     };
 

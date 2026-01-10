@@ -22,7 +22,7 @@ interface FormConfig {
   discount_factor: number;
   seed: number | null;
   bargaining_protocol: 'nash' | 'rubinstein' | 'tioli' | 'asymmetric_nash';
-  matching_protocol: 'opportunistic' | 'stable_roommates';
+  // matching_protocol removed - agents now use DecisionProcedure
   bargaining_power_distribution: 'uniform' | 'gaussian' | 'bimodal';
   use_beliefs: boolean;
 }
@@ -67,7 +67,6 @@ export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProp
     discount_factor: 0.95,
     seed: null,
     bargaining_protocol: 'nash',
-    matching_protocol: 'opportunistic',
     bargaining_power_distribution: 'uniform',
     use_beliefs: false,
   });
@@ -82,7 +81,6 @@ export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProp
         discount_factor: config.discount_factor,
         seed: config.seed,
         bargaining_protocol: config.bargaining_protocol as FormConfig['bargaining_protocol'],
-        matching_protocol: config.matching_protocol as 'opportunistic' | 'stable_roommates',
         bargaining_power_distribution: (config.bargaining_power_distribution || 'uniform') as FormConfig['bargaining_power_distribution'],
         use_beliefs: config.use_beliefs,
       });
@@ -204,28 +202,7 @@ export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProp
             </div>
           )}
 
-          {/* Matching Protocol */}
-          <div>
-            <label className="text-sm text-zinc-400 block mb-2">Matching Protocol</label>
-            <div className="flex gap-2">
-              <Button
-                variant={formConfig.matching_protocol === 'opportunistic' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFormConfig({ ...formConfig, matching_protocol: 'opportunistic' })}
-                className="flex-1"
-              >
-                Opportunistic
-              </Button>
-              <Button
-                variant={formConfig.matching_protocol === 'stable_roommates' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFormConfig({ ...formConfig, matching_protocol: 'stable_roommates' })}
-                className="flex-1"
-              >
-                Stable
-              </Button>
-            </div>
-          </div>
+          {/* Matching Protocol removed - agents now use DecisionProcedure */}
 
           {/* Seed */}
           <div>

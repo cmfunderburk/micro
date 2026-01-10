@@ -145,9 +145,12 @@ def evaluate_targets(
             visible_agents=0,
         )
 
-    # Observer knows their own true type (no noise applied to self)
+    # Observer knows their own true type with current holdings (no noise applied to self)
     from microecon.agent import AgentType
-    observer_type = AgentType.from_private_state(agent.private_state)
+    observer_type = AgentType(
+        preferences=agent.preferences,
+        endowment=agent.holdings,  # Use current holdings, not initial endowment
+    )
 
     best_target_id: Optional[str] = None
     best_target_pos: Optional[Position] = None
@@ -160,6 +163,10 @@ def evaluate_targets(
     ):
         target = agents_by_id.get(target_id)
         if target is None:
+            continue
+
+        # Skip self (can't target yourself)
+        if target_id == agent.id:
             continue
 
         # Check if we can observe this target
@@ -255,9 +262,12 @@ def evaluate_targets_detailed(
             [],
         )
 
-    # Observer knows their own true type (no noise applied to self)
+    # Observer knows their own true type with current holdings (no noise applied to self)
     from microecon.agent import AgentType
-    observer_type = AgentType.from_private_state(agent.private_state)
+    observer_type = AgentType(
+        preferences=agent.preferences,
+        endowment=agent.holdings,  # Use current holdings, not initial endowment
+    )
 
     best_target_id: Optional[str] = None
     best_target_pos: Optional[Position] = None
@@ -271,6 +281,10 @@ def evaluate_targets_detailed(
     ):
         target = agents_by_id.get(target_id)
         if target is None:
+            continue
+
+        # Skip self (can't target yourself)
+        if target_id == agent.id:
             continue
 
         # Check if we can observe this target

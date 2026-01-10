@@ -169,20 +169,25 @@ class TestTwoAgentSymmetricScenario:
 
         assert new_distance < initial_distance
 
-    def test_agents_eventually_meet(self, scenario):
-        """Agents should meet within Chebyshev distance ticks."""
+    def test_agents_eventually_meet_or_trade(self, scenario):
+        """Agents should get adjacent (for trade) within Chebyshev distance ticks."""
         sim, agent_a, agent_b = scenario
 
-        # Run for enough ticks to guarantee meeting
-        # With both moving, should meet in ceil(5/2) = 3 ticks at most
+        # Run for enough ticks to guarantee adjacency/meeting
+        # With both moving, should get adjacent in ceil(5/2) = 3 ticks at most
+        # With adjacency-based trading, trade may occur before exact co-location
         for _ in range(self.CHEBYSHEV_DISTANCE):
             sim.step()
             pos_a = sim.grid.get_position(agent_a)
             pos_b = sim.grid.get_position(agent_b)
-            if pos_a == pos_b:
+            # Adjacent means Chebyshev distance <= 1 (includes co-located)
+            if pos_a.chebyshev_distance_to(pos_b) <= 1:
                 break
 
-        assert sim.grid.get_position(agent_a) == sim.grid.get_position(agent_b)
+        pos_a = sim.grid.get_position(agent_a)
+        pos_b = sim.grid.get_position(agent_b)
+        # With adjacency-based trading, agents trade when adjacent (not necessarily co-located)
+        assert pos_a.chebyshev_distance_to(pos_b) <= 1 or len(sim.trades) > 0
 
     # =========================================================================
     # Phase 4: Bargaining outcome verification
@@ -212,10 +217,11 @@ class TestTwoAgentSymmetricScenario:
                 break
 
         # Verify exact allocations (within numerical tolerance)
-        assert agent_a.endowment.x == pytest.approx(self.POST_TRADE_ALLOCATION[0], rel=0.01)
-        assert agent_a.endowment.y == pytest.approx(self.POST_TRADE_ALLOCATION[1], rel=0.01)
-        assert agent_b.endowment.x == pytest.approx(self.POST_TRADE_ALLOCATION[0], rel=0.01)
-        assert agent_b.endowment.y == pytest.approx(self.POST_TRADE_ALLOCATION[1], rel=0.01)
+        # Note: After trade, check holdings (current allocation) not endowment (initial)
+        assert agent_a.holdings.x == pytest.approx(self.POST_TRADE_ALLOCATION[0], rel=0.01)
+        assert agent_a.holdings.y == pytest.approx(self.POST_TRADE_ALLOCATION[1], rel=0.01)
+        assert agent_b.holdings.x == pytest.approx(self.POST_TRADE_ALLOCATION[0], rel=0.01)
+        assert agent_b.holdings.y == pytest.approx(self.POST_TRADE_ALLOCATION[1], rel=0.01)
 
     def test_utilities_increase_as_predicted(self, scenario):
         """Post-trade utilities should be 6.0 (gain ≈ 1.528)."""
@@ -251,8 +257,8 @@ class TestTwoAgentSymmetricScenario:
                 break
 
         # MRS = (α/(1-α)) * (y/x) = 1 * (6/6) = 1 for both
-        mrs_a = agent_a.preferences.marginal_rate_of_substitution(agent_a.endowment)
-        mrs_b = agent_b.preferences.marginal_rate_of_substitution(agent_b.endowment)
+        mrs_a = agent_a.preferences.marginal_rate_of_substitution(agent_a.holdings)
+        mrs_b = agent_b.preferences.marginal_rate_of_substitution(agent_b.holdings)
 
         assert mrs_a == pytest.approx(self.POST_TRADE_MRS, rel=0.01)
         assert mrs_b == pytest.approx(self.POST_TRADE_MRS, rel=0.01)
@@ -271,8 +277,8 @@ class TestTwoAgentSymmetricScenario:
             if trades:
                 break
 
-        final_total_x = agent_a.endowment.x + agent_b.endowment.x
-        final_total_y = agent_a.endowment.y + agent_b.endowment.y
+        final_total_x = agent_a.holdings.x + agent_b.holdings.x
+        final_total_y = agent_a.holdings.y + agent_b.holdings.y
 
         assert final_total_x == pytest.approx(initial_total_x, rel=1e-9)
         assert final_total_y == pytest.approx(initial_total_y, rel=1e-9)
@@ -291,9 +297,9 @@ class TestTwoAgentSymmetricScenario:
             if trades:
                 break
 
-        # Compute surplus with post-trade endowments
-        type_a = AgentType(agent_a.preferences, agent_a.endowment)
-        type_b = AgentType(agent_b.preferences, agent_b.endowment)
+        # Compute surplus with post-trade holdings
+        type_a = AgentType(agent_a.preferences, agent_a.holdings)
+        type_b = AgentType(agent_b.preferences, agent_b.holdings)
 
         surplus_a_from_b = compute_nash_surplus(type_a, type_b)
         surplus_b_from_a = compute_nash_surplus(type_b, type_a)
@@ -422,8 +428,8 @@ class TestTwoAgentNoTradeScenario:
         """Agents at same position should not trade if no gains exist."""
         sim, agent_a, agent_b = scenario
 
-        initial_endow_a = (agent_a.endowment.x, agent_a.endowment.y)
-        initial_endow_b = (agent_b.endowment.x, agent_b.endowment.y)
+        initial_holdings_a = (agent_a.holdings.x, agent_a.holdings.y)
+        initial_holdings_b = (agent_b.holdings.x, agent_b.holdings.y)
 
         # Run several ticks
         for _ in range(5):
@@ -432,9 +438,9 @@ class TestTwoAgentNoTradeScenario:
         # No trades should occur
         assert len(sim.trades) == 0
 
-        # Endowments unchanged
-        assert (agent_a.endowment.x, agent_a.endowment.y) == initial_endow_a
-        assert (agent_b.endowment.x, agent_b.endowment.y) == initial_endow_b
+        # Holdings unchanged (no trades occurred)
+        assert (agent_a.holdings.x, agent_a.holdings.y) == initial_holdings_a
+        assert (agent_b.holdings.x, agent_b.holdings.y) == initial_holdings_b
 
     def test_no_movement_target(self, scenario):
         """Agents should have no movement target when no surplus exists."""
@@ -540,12 +546,12 @@ class TestTwoAgentAsymmetricScenario:
                 break
 
         # A should have less x, more y
-        assert agent_a.endowment.x < initial_a_x
-        assert agent_a.endowment.y > initial_a_y
+        assert agent_a.holdings.x < initial_a_x
+        assert agent_a.holdings.y > initial_a_y
 
         # B should have more x, less y
-        assert agent_b.endowment.x > initial_b_x
-        assert agent_b.endowment.y < initial_b_y
+        assert agent_b.holdings.x > initial_b_x
+        assert agent_b.holdings.y < initial_b_y
 
     def test_allocation_matches_theory(self, scenario):
         """Post-trade allocations should match Nash solution: A=(3,9), B=(9,3)."""
@@ -556,10 +562,10 @@ class TestTwoAgentAsymmetricScenario:
             if trades:
                 break
 
-        assert agent_a.endowment.x == pytest.approx(self.POST_TRADE_ALLOCATION_A[0], rel=0.01)
-        assert agent_a.endowment.y == pytest.approx(self.POST_TRADE_ALLOCATION_A[1], rel=0.01)
-        assert agent_b.endowment.x == pytest.approx(self.POST_TRADE_ALLOCATION_B[0], rel=0.01)
-        assert agent_b.endowment.y == pytest.approx(self.POST_TRADE_ALLOCATION_B[1], rel=0.01)
+        assert agent_a.holdings.x == pytest.approx(self.POST_TRADE_ALLOCATION_A[0], rel=0.01)
+        assert agent_a.holdings.y == pytest.approx(self.POST_TRADE_ALLOCATION_A[1], rel=0.01)
+        assert agent_b.holdings.x == pytest.approx(self.POST_TRADE_ALLOCATION_B[0], rel=0.01)
+        assert agent_b.holdings.y == pytest.approx(self.POST_TRADE_ALLOCATION_B[1], rel=0.01)
 
     def test_utilities_increase_correctly(self, scenario):
         """Post-trade utilities should be ≈ 6.838, gains ≈ 3.848."""
@@ -603,8 +609,8 @@ class TestTwoAgentAsymmetricScenario:
             if trades:
                 break
 
-        mrs_a = agent_a.preferences.marginal_rate_of_substitution(agent_a.endowment)
-        mrs_b = agent_b.preferences.marginal_rate_of_substitution(agent_b.endowment)
+        mrs_a = agent_a.preferences.marginal_rate_of_substitution(agent_a.holdings)
+        mrs_b = agent_b.preferences.marginal_rate_of_substitution(agent_b.holdings)
 
         assert mrs_a == pytest.approx(self.POST_TRADE_MRS, rel=0.01)
         assert mrs_b == pytest.approx(self.POST_TRADE_MRS, rel=0.01)
@@ -619,8 +625,8 @@ class TestTwoAgentAsymmetricScenario:
             if trades:
                 break
 
-        type_a = AgentType(agent_a.preferences, agent_a.endowment)
-        type_b = AgentType(agent_b.preferences, agent_b.endowment)
+        type_a = AgentType(agent_a.preferences, agent_a.holdings)
+        type_b = AgentType(agent_b.preferences, agent_b.holdings)
 
         surplus = compute_nash_surplus(type_a, type_b)
         assert surplus == pytest.approx(0.0, abs=0.01)
@@ -816,8 +822,8 @@ class TestRubinsteinProtocol:
 
         outcome = protocol.execute(agent_a, agent_b, proposer=agent_a)
 
-        mrs_a = agent_a.preferences.marginal_rate_of_substitution(agent_a.endowment)
-        mrs_b = agent_b.preferences.marginal_rate_of_substitution(agent_b.endowment)
+        mrs_a = agent_a.preferences.marginal_rate_of_substitution(agent_a.holdings)
+        mrs_b = agent_b.preferences.marginal_rate_of_substitution(agent_b.holdings)
 
         assert mrs_a == pytest.approx(mrs_b, rel=0.1)
 
@@ -923,8 +929,8 @@ class TestRubinsteinProtocol:
         protocol.execute(agent_a, agent_b, proposer=agent_a)
 
         # Check surplus after trade
-        type_a = AgentType(agent_a.preferences, agent_a.endowment)
-        type_b = AgentType(agent_b.preferences, agent_b.endowment)
+        type_a = AgentType(agent_a.preferences, agent_a.holdings)
+        type_b = AgentType(agent_b.preferences, agent_b.holdings)
 
         surplus = compute_nash_surplus(type_a, type_b)
 

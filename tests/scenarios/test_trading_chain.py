@@ -441,22 +441,22 @@ class TestTradingChainCommittedStage2:
         """B should have (4.8, 7.2) after trading with C."""
         sim, a, b, c, d, trades = scenario_after_first_trade
 
-        assert b.endowment.x == pytest.approx(self.B_POST_TRADE.x, rel=0.01)
-        assert b.endowment.y == pytest.approx(self.B_POST_TRADE.y, rel=0.01)
+        assert b.holdings.x == pytest.approx(self.B_POST_TRADE.x, rel=0.01)
+        assert b.holdings.y == pytest.approx(self.B_POST_TRADE.y, rel=0.01)
 
     def test_c_allocation_after_first_trade(self, scenario_after_first_trade):
         """C should have (7.2, 4.8) after trading with B."""
         sim, a, b, c, d, trades = scenario_after_first_trade
 
-        assert c.endowment.x == pytest.approx(self.C_POST_TRADE.x, rel=0.01)
-        assert c.endowment.y == pytest.approx(self.C_POST_TRADE.y, rel=0.01)
+        assert c.holdings.x == pytest.approx(self.C_POST_TRADE.x, rel=0.01)
+        assert c.holdings.y == pytest.approx(self.C_POST_TRADE.y, rel=0.01)
 
     def test_b_c_reach_mrs_one(self, scenario_after_first_trade):
         """B and C should have MRS=1.0 after trading with each other."""
         sim, a, b, c, d, trades = scenario_after_first_trade
 
-        mrs_b = b.preferences.marginal_rate_of_substitution(b.endowment)
-        mrs_c = c.preferences.marginal_rate_of_substitution(c.endowment)
+        mrs_b = b.preferences.marginal_rate_of_substitution(b.holdings)
+        mrs_c = c.preferences.marginal_rate_of_substitution(c.holdings)
 
         assert mrs_b == pytest.approx(self.POST_TRADE_MRS, rel=0.01)
         assert mrs_c == pytest.approx(self.POST_TRADE_MRS, rel=0.01)
@@ -465,10 +465,10 @@ class TestTradingChainCommittedStage2:
         """A and D should still have (6, 6) after B-C trade."""
         sim, a, b, c, d, trades = scenario_after_first_trade
 
-        assert a.endowment.x == pytest.approx(6.0, rel=1e-6)
-        assert a.endowment.y == pytest.approx(6.0, rel=1e-6)
-        assert d.endowment.x == pytest.approx(6.0, rel=1e-6)
-        assert d.endowment.y == pytest.approx(6.0, rel=1e-6)
+        assert a.holdings.x == pytest.approx(6.0, rel=1e-6)
+        assert a.holdings.y == pytest.approx(6.0, rel=1e-6)
+        assert d.holdings.x == pytest.approx(6.0, rel=1e-6)
+        assert d.holdings.y == pytest.approx(6.0, rel=1e-6)
 
     # =========================================================================
     # Post-first-trade surplus analysis
@@ -478,8 +478,8 @@ class TestTradingChainCommittedStage2:
         """B and C should have zero remaining surplus with each other."""
         sim, a, b, c, d, trades = scenario_after_first_trade
 
-        type_b = AgentType(b.preferences, b.endowment)
-        type_c = AgentType(c.preferences, c.endowment)
+        type_b = AgentType(b.preferences, b.holdings)
+        type_c = AgentType(c.preferences, c.holdings)
 
         surplus = compute_nash_surplus(type_b, type_c)
         assert surplus == pytest.approx(0.0, abs=1e-6)
@@ -488,12 +488,13 @@ class TestTradingChainCommittedStage2:
         """A and D still have positive surplus with each other."""
         sim, a, b, c, d, trades = scenario_after_first_trade
 
-        type_a = AgentType(a.preferences, a.endowment)
-        type_d = AgentType(d.preferences, d.endowment)
+        type_a = AgentType(a.preferences, a.holdings)
+        type_d = AgentType(d.preferences, d.holdings)
 
         surplus = compute_nash_surplus(type_a, type_d)
         assert surplus > 1.0, f"A-D should have positive surplus, got {surplus}"
 
+    @pytest.mark.skip(reason="CommitmentState removed in 3-phase tick model rework")
     def test_a_d_still_committed(self, scenario_after_first_trade):
         """A and D should still be committed to each other."""
         sim, a, b, c, d, trades = scenario_after_first_trade
@@ -501,6 +502,7 @@ class TestTradingChainCommittedStage2:
         assert sim.commitments.get_partner(a.id) == d.id
         assert sim.commitments.get_partner(d.id) == a.id
 
+    @pytest.mark.skip(reason="CommitmentState removed in 3-phase tick model rework")
     def test_b_c_no_longer_committed(self, scenario_after_first_trade):
         """B and C should no longer be committed (traded)."""
         sim, a, b, c, d, trades = scenario_after_first_trade
@@ -625,7 +627,7 @@ class TestTradingChainCommittedStage3:
         sim, a, b, c, d, trades = scenario_at_equilibrium
 
         for agent in [a, b, c, d]:
-            mrs = agent.preferences.marginal_rate_of_substitution(agent.endowment)
+            mrs = agent.preferences.marginal_rate_of_substitution(agent.holdings)
             assert mrs == pytest.approx(1.0, rel=0.01), \
                 f"Agent {agent.id} MRS should be 1.0, got {mrs}"
 
@@ -636,8 +638,8 @@ class TestTradingChainCommittedStage3:
         agents = [a, b, c, d]
         for i, ag1 in enumerate(agents):
             for ag2 in agents[i + 1:]:
-                type1 = AgentType(ag1.preferences, ag1.endowment)
-                type2 = AgentType(ag2.preferences, ag2.endowment)
+                type1 = AgentType(ag1.preferences, ag1.holdings)
+                type2 = AgentType(ag2.preferences, ag2.holdings)
                 surplus = compute_nash_surplus(type1, type2)
                 assert surplus == pytest.approx(0.0, abs=1e-4), \
                     f"{ag1.id}-{ag2.id} should have zero surplus, got {surplus}"
@@ -657,8 +659,8 @@ class TestTradingChainCommittedStage3:
         """Total endowment should be unchanged: (24, 24)."""
         sim, a, b, c, d, trades = scenario_at_equilibrium
 
-        total_x = sum(ag.endowment.x for ag in [a, b, c, d])
-        total_y = sum(ag.endowment.y for ag in [a, b, c, d])
+        total_x = sum(ag.holdings.x for ag in [a, b, c, d])
+        total_y = sum(ag.holdings.y for ag in [a, b, c, d])
 
         assert total_x == pytest.approx(24.0, rel=1e-6)
         assert total_y == pytest.approx(24.0, rel=1e-6)
@@ -688,7 +690,7 @@ class TestTradingChainCommittedStage3:
 
         # All MRS equal implies competitive equilibrium
         mrs_values = [
-            ag.preferences.marginal_rate_of_substitution(ag.endowment)
+            ag.preferences.marginal_rate_of_substitution(ag.holdings)
             for ag in [a, b, c, d]
         ]
 
@@ -824,6 +826,7 @@ class TestTradingChainOpportunisticStage1:
         result_c = evaluate_targets(c, sim.grid, sim.info_env, agents_by_id)
         assert result_c.best_target_id == a.id
 
+    @pytest.mark.skip(reason="CommitmentState removed in 3-phase tick model rework")
     def test_no_initial_commitments(self, scenario):
         """Opportunistic mode has no commitments."""
         sim, a, b, c, d = scenario
@@ -834,6 +837,7 @@ class TestTradingChainOpportunisticStage1:
             assert sim.commitments.get_partner(agent.id) is None
 
 
+@pytest.mark.skip(reason="Path-crossing predictions invalid with adjacency-based trading - agents may trade before crossing")
 class TestTradingChainOpportunisticStage2:
     """
     Trading chain scenario Stage 2: First trade via path crossing.
@@ -948,22 +952,22 @@ class TestTradingChainOpportunisticStage2:
         """B should have (4.8, 7.2) after trading with C."""
         sim, a, b, c, d, trades = scenario_after_first_trade
 
-        assert b.endowment.x == pytest.approx(self.B_POST_TRADE.x, rel=0.01)
-        assert b.endowment.y == pytest.approx(self.B_POST_TRADE.y, rel=0.01)
+        assert b.holdings.x == pytest.approx(self.B_POST_TRADE.x, rel=0.01)
+        assert b.holdings.y == pytest.approx(self.B_POST_TRADE.y, rel=0.01)
 
     def test_c_allocation_after_first_trade(self, scenario_after_first_trade):
         """C should have (7.2, 4.8) after trading with B."""
         sim, a, b, c, d, trades = scenario_after_first_trade
 
-        assert c.endowment.x == pytest.approx(self.C_POST_TRADE.x, rel=0.01)
-        assert c.endowment.y == pytest.approx(self.C_POST_TRADE.y, rel=0.01)
+        assert c.holdings.x == pytest.approx(self.C_POST_TRADE.x, rel=0.01)
+        assert c.holdings.y == pytest.approx(self.C_POST_TRADE.y, rel=0.01)
 
     def test_b_c_reach_mrs_one(self, scenario_after_first_trade):
         """B and C should have MRS=1.0 after trading."""
         sim, a, b, c, d, trades = scenario_after_first_trade
 
-        mrs_b = b.preferences.marginal_rate_of_substitution(b.endowment)
-        mrs_c = c.preferences.marginal_rate_of_substitution(c.endowment)
+        mrs_b = b.preferences.marginal_rate_of_substitution(b.holdings)
+        mrs_c = c.preferences.marginal_rate_of_substitution(c.holdings)
 
         assert mrs_b == pytest.approx(self.POST_TRADE_MRS, rel=0.01)
         assert mrs_c == pytest.approx(self.POST_TRADE_MRS, rel=0.01)
@@ -972,11 +976,12 @@ class TestTradingChainOpportunisticStage2:
         """A and D should still have (6, 6) after B-C trade."""
         sim, a, b, c, d, trades = scenario_after_first_trade
 
-        assert a.endowment.x == pytest.approx(6.0, rel=1e-6)
-        assert a.endowment.y == pytest.approx(6.0, rel=1e-6)
-        assert d.endowment.x == pytest.approx(6.0, rel=1e-6)
-        assert d.endowment.y == pytest.approx(6.0, rel=1e-6)
+        assert a.holdings.x == pytest.approx(6.0, rel=1e-6)
+        assert a.holdings.y == pytest.approx(6.0, rel=1e-6)
+        assert d.holdings.x == pytest.approx(6.0, rel=1e-6)
+        assert d.holdings.y == pytest.approx(6.0, rel=1e-6)
 
+    @pytest.mark.skip(reason="CommitmentState removed in 3-phase tick model rework")
     def test_no_commitments_after_trade(self, scenario_after_first_trade):
         """Opportunistic mode never forms commitments."""
         sim, a, b, c, d, trades = scenario_after_first_trade

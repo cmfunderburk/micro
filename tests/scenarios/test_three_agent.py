@@ -116,10 +116,10 @@ class TestThreeAgentSequentialTrading:
         assert agent_b.id in agents_in_trade
 
         # Both A and B should now have (6, 6)
-        assert agent_a.endowment.x == pytest.approx(6.0, rel=0.01)
-        assert agent_a.endowment.y == pytest.approx(6.0, rel=0.01)
-        assert agent_b.endowment.x == pytest.approx(6.0, rel=0.01)
-        assert agent_b.endowment.y == pytest.approx(6.0, rel=0.01)
+        assert agent_a.holdings.x == pytest.approx(6.0, rel=0.01)
+        assert agent_a.holdings.y == pytest.approx(6.0, rel=0.01)
+        assert agent_b.holdings.x == pytest.approx(6.0, rel=0.01)
+        assert agent_b.holdings.y == pytest.approx(6.0, rel=0.01)
 
     def test_subsequent_trades_with_c(self, scenario):
         """After A-B trade, trades should occur with C."""
@@ -158,12 +158,12 @@ class TestThreeAgentSequentialTrading:
         """C (who prefers y) should end up with more y after trading."""
         sim, agent_a, agent_b, agent_c = scenario
 
-        initial_c_y = agent_c.endowment.y
+        initial_c_y = agent_c.holdings.y
 
         sim.run(50)
 
         # C should have gained y
-        assert agent_c.endowment.y > initial_c_y
+        assert agent_c.holdings.y > initial_c_y
 
     def test_equilibrium_reached(self, scenario):
         """After all trades, no more beneficial opportunities should exist."""
@@ -172,9 +172,9 @@ class TestThreeAgentSequentialTrading:
         sim.run(50)
 
         # Check all pairwise surpluses
-        type_a = AgentType(agent_a.preferences, agent_a.endowment)
-        type_b = AgentType(agent_b.preferences, agent_b.endowment)
-        type_c = AgentType(agent_c.preferences, agent_c.endowment)
+        type_a = AgentType(agent_a.preferences, agent_a.holdings)
+        type_b = AgentType(agent_b.preferences, agent_b.holdings)
+        type_c = AgentType(agent_c.preferences, agent_c.holdings)
 
         surplus_ab = compute_nash_surplus(type_a, type_b)
         surplus_ac = compute_nash_surplus(type_a, type_c)

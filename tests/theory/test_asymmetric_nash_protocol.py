@@ -370,28 +370,33 @@ class TestAsymmetricNashProtocolAPI:
         assert abs(outcome_no_prop.utility_1 - outcome_a1_prop.utility_1) < 1e-9
         assert abs(outcome_no_prop.utility_1 - outcome_a2_prop.utility_1) < 1e-9
 
-    def test_execute_updates_endowments(self):
-        """Test that execute() method updates agent endowments."""
+    def test_execute_updates_holdings(self):
+        """Test that execute() method updates agent holdings (not endowment)."""
         a1 = create_agent(alpha=0.6, endowment_x=5, endowment_y=15,
                           bargaining_power=1.5, agent_id='a1')
         a2 = create_agent(alpha=0.4, endowment_x=15, endowment_y=5,
                           bargaining_power=1.0, agent_id='a2')
 
+        original_h1 = Bundle(a1.holdings.x, a1.holdings.y)
         original_e1 = Bundle(a1.endowment.x, a1.endowment.y)
 
         protocol = AsymmetricNashBargainingProtocol()
         outcome = protocol.execute(a1, a2)
 
         if outcome.trade_occurred:
-            # Endowments should be updated to allocations
-            assert abs(a1.endowment.x - outcome.allocation_1.x) < 1e-9
-            assert abs(a1.endowment.y - outcome.allocation_1.y) < 1e-9
-            assert abs(a2.endowment.x - outcome.allocation_2.x) < 1e-9
-            assert abs(a2.endowment.y - outcome.allocation_2.y) < 1e-9
+            # Holdings should be updated to allocations
+            assert abs(a1.holdings.x - outcome.allocation_1.x) < 1e-9
+            assert abs(a1.holdings.y - outcome.allocation_1.y) < 1e-9
+            assert abs(a2.holdings.x - outcome.allocation_2.x) < 1e-9
+            assert abs(a2.holdings.y - outcome.allocation_2.y) < 1e-9
 
-            # Should differ from original
-            assert (abs(a1.endowment.x - original_e1.x) > 1e-6 or
-                    abs(a1.endowment.y - original_e1.y) > 1e-6)
+            # Holdings should differ from original
+            assert (abs(a1.holdings.x - original_h1.x) > 1e-6 or
+                    abs(a1.holdings.y - original_h1.y) > 1e-6)
+
+            # Endowment should remain unchanged
+            assert abs(a1.endowment.x - original_e1.x) < 1e-9
+            assert abs(a1.endowment.y - original_e1.y) < 1e-9
 
 
 class TestAsymmetricNashFeasibility:

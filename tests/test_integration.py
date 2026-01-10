@@ -63,7 +63,6 @@ class TestFullPipeline:
         sim = Simulation(
             grid=grid,
             bargaining_protocol=NashBargainingProtocol(),
-            matching_protocol=OpportunisticMatchingProtocol(),
             info_env=FullInformation(),
             logger=logger,
         )
@@ -338,38 +337,10 @@ class TestBatchComparisonWorkflow:
             # Should have comparison results
             assert len(comparisons) > 0
 
+    @pytest.mark.skip(reason="matching_protocol removed in 3-phase tick model rework")
     def test_matching_protocol_comparison(self):
         """Compare opportunistic vs stable matching."""
-        from microecon.analysis.emergence import trade_network_stats
-
-        base_config = {
-            'n_agents': 8,
-            'grid_size': 12,
-            'perception_radius': 5.0,
-        }
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Run batch with both matching protocols
-            runner = BatchRunner(
-                base_config=base_config,
-                variations={
-                    'matching_protocol': [
-                        OpportunisticMatchingProtocol(),
-                        StableRoommatesMatchingProtocol(),
-                    ],
-                    'seed': [42],
-                },
-                output_dir=Path(tmpdir),
-            )
-            results = runner.run(ticks=40)
-
-            # Should have 2 results (2 matching protocols x 1 seed)
-            assert len(results) == 2
-
-            # Analyze network structure for each
-            for result in results:
-                network = trade_network_stats(result.run_data)
-                assert network.n_nodes == 8
+        pass  # Test skipped - matching_protocol removed from Simulation
 
 
 class TestScenarioToAnalysisPipeline:

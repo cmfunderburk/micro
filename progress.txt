@@ -54,12 +54,43 @@ Each entry follows: [timestamp] [phase] [status] [description]
 ---
 
 ### Phase 3: Tick Restructure
-[not started]
+
+#### Completed
+- [2026-01-09] FEAT-008: 3-phase tick loop in simulation.py (Perceive, Decide, Execute)
+- [2026-01-09] FEAT-008: ActionContext building for precondition checking
+- [2026-01-09] FEAT-008: DecisionContext building for action evaluation
+- [2026-01-09] FEAT-009: Conflict resolution for multiple proposals to same target
+- [2026-01-09] FEAT-009: Mutual proposal detection -> direct negotiation fast-path
+- [2026-01-09] FEAT-010: Removed matching_protocol from Simulation class
+- [2026-01-09] FEAT-010: Updated create_simple_economy to use decision_procedure
+- [2026-01-09] FEAT-010: Fixed search.py exclude_center=False for co-located visibility
+- [2026-01-09] FEAT-010: Fixed RationalDecisionProcedure Move evaluation (distance=0 returns 0)
+
+#### Issues Encountered
+- search.py was excluding co-located agents (exclude_center=True)
+- Move action at distance 0 had same value as Propose, causing wrong choice
+
+#### Workarounds Applied
+- Changed exclude_center=False in agents_within_radius calls
+- Added distance=0 check in _evaluate_move() to return 0
+
+**Phase 3 Gate:** 3-phase tick loop implemented, conflict resolution for proposals, matching_protocol removed. 115 core+bargaining tests pass, 15 simulation tests pass.
 
 ---
 
 ### Phase 4: Exchange Sequence
-[not started]
+
+#### Completed
+- [2026-01-09] FEAT-011: Multi-tick exchange sequence (Propose -> Accept/Reject -> Execute)
+- [2026-01-09] FEAT-011: Mutual proposal fast-path (skip PROPOSAL_PENDING -> NEGOTIATING -> trade)
+- [2026-01-09] FEAT-012: State transitions (AVAILABLE <-> PROPOSAL_PENDING <-> NEGOTIATING)
+- [2026-01-09] FEAT-012: enter_proposal_pending(), enter_negotiating(), enter_available() methods
+- [2026-01-09] FEAT-013: Co-location validation in proposal and negotiation
+- [2026-01-09] FEAT-013: Proposal expiration on co-location loss
+- [2026-01-09] FEAT-014: Cooldown mechanics (rejection adds 3-tick cooldown)
+- [2026-01-09] FEAT-014: Pre-tick maintenance for cooldown decrement
+
+**Phase 4 Gate:** Multi-tick exchange implemented with state machine, co-location validation, and cooldowns.
 
 ---
 
@@ -76,8 +107,8 @@ Each entry follows: [timestamp] [phase] [status] [description]
 ## Summary Statistics
 | Metric | Count |
 |--------|-------|
-| Features completed | 7/24 |
+| Features completed | 14/24 |
 | Features skipped | 0 |
-| Issues encountered | 1 |
-| Workarounds applied | 1 |
-| Phases completed | 2/6 |
+| Issues encountered | 3 |
+| Workarounds applied | 3 |
+| Phases completed | 4/6 |

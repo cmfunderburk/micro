@@ -177,7 +177,6 @@ class TestDegenerateCases:
         sim = Simulation(
             grid=grid,
             bargaining_protocol=NashBargainingProtocol(),
-            matching_protocol=OpportunisticMatchingProtocol(),
         )
 
         # Create identical agents (no gains from trade)
@@ -363,40 +362,15 @@ class TestExtremeParameters:
 class TestMatchingProtocolEdgeCases:
     """Edge cases for matching protocols."""
 
+    @pytest.mark.skip(reason="matching_protocol removed in 3-phase tick model rework")
     def test_stable_roommates_odd_agents(self):
         """Stable roommates with odd number of agents leaves one unmatched."""
-        grid = Grid(size=5)
-        sim = Simulation(
-            grid=grid,
-            matching_protocol=StableRoommatesMatchingProtocol(),
-        )
+        pass  # Test skipped - matching_protocol removed from Simulation
 
-        # Add 3 agents (odd)
-        for i in range(3):
-            agent = create_agent(alpha=0.3 + 0.2*i, endowment_x=10.0, endowment_y=5.0)
-            sim.add_agent(agent, Position(2, 2))
-
-        # Should run without error
-        sim.run(ticks=10)
-        assert sim.tick == 10
-
+    @pytest.mark.skip(reason="matching_protocol removed in 3-phase tick model rework")
     def test_stable_roommates_no_visible_agents(self):
         """Agents can't see each other (perception radius 0, different positions)."""
-        grid = Grid(size=10)
-        sim = Simulation(
-            grid=grid,
-            matching_protocol=StableRoommatesMatchingProtocol(),
-        )
-
-        # Place far apart with zero perception
-        agent_a = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, perception_radius=0.0)
-        agent_b = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, perception_radius=0.0)
-        sim.add_agent(agent_a, Position(0, 0))
-        sim.add_agent(agent_b, Position(9, 9))
-
-        sim.run(ticks=5)
-        # No trades (can't see each other)
-        assert len(sim.trades) == 0
+        pass  # Test skipped - matching_protocol removed from Simulation
 
 
 class TestNoisyInformationEdgeCases:
@@ -449,19 +423,10 @@ class TestMarketEmergenceEdgeCases:
         )
         assert result.protocol_name == "rubinsteinbargaining"
 
+    @pytest.mark.skip(reason="matching_protocol removed in 3-phase tick model rework")
     def test_market_emergence_with_stable_matching(self):
         """Market emergence with stable roommates matching."""
-        config = MarketEmergenceConfig(
-            n_agents=10,
-            grid_size=8,
-            ticks=10,
-            seed=42,
-        )
-        result = run_market_emergence(
-            config,
-            matching_protocol=StableRoommatesMatchingProtocol(),
-        )
-        assert result.matching_name == "stableroommatesmatching"
+        pass  # Test skipped - matching_protocol removed from Simulation
 
     def test_market_emergence_with_noisy_info(self):
         """Market emergence with noisy information."""

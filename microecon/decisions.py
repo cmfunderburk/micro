@@ -248,6 +248,9 @@ class RationalDecisionProcedure(DecisionProcedure):
 
         Uses the search module's logic: surplus with best target at destination,
         discounted by distance.
+
+        Note: If already at target position, returns 0 since Propose should be
+        preferred over Move when co-located with potential trade partners.
         """
         from microecon.grid import Position
 
@@ -255,10 +258,14 @@ class RationalDecisionProcedure(DecisionProcedure):
         if agent_pos is None:
             return 0.0
 
-        # Find who would be at the target position (or near it)
         target_pos = action.target_position
 
-        # Find the best potential trade partner at/near destination
+        # If already at target position, Move has no value - use Propose instead
+        distance = agent_pos.distance_to(target_pos)
+        if distance == 0:
+            return 0.0
+
+        # Find the best potential trade partner at destination
         best_surplus = 0.0
         for target_id, target_agent in context.visible_agents.items():
             if target_id == agent.id:
@@ -268,7 +275,7 @@ class RationalDecisionProcedure(DecisionProcedure):
             if target_agent_pos is None:
                 continue
 
-            # If this agent is at or near our target position
+            # If this agent is at our target position
             if target_agent_pos == target_pos:
                 # Compute expected surplus
                 surplus = context.bargaining_protocol.compute_expected_surplus(
@@ -278,7 +285,6 @@ class RationalDecisionProcedure(DecisionProcedure):
                     best_surplus = surplus
 
         # Discount by distance
-        distance = agent_pos.distance_to(target_pos)
         discount = agent.discount_factor ** distance
 
         return best_surplus * discount

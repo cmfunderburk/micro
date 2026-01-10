@@ -49,11 +49,13 @@ from microecon.matching import (
 pytestmark = pytest.mark.scenario
 
 
+@pytest.mark.skip(reason="matching_protocol removed in 3-phase tick model rework")
 class TestTradingChainCommittedStage1:
     """
     Trading chain scenario Stage 1: Initial state and target selection.
 
     Uses COMMITTED matching mode (StableRoommatesMatchingProtocol).
+    SKIPPED: matching_protocol removed from Simulation in tick model rework.
 
     Setup:
         Position:   (0,0)    (5,0)    (10,0)   (15,0)
@@ -321,11 +323,13 @@ class TestTradingChainCommittedStage1:
             f"Discounted A-D ({disc_ad:.4f}) should beat A-B ({disc_ab:.4f})"
 
 
+@pytest.mark.skip(reason="matching_protocol removed in 3-phase tick model rework")
 class TestTradingChainCommittedStage2:
     """
     Trading chain scenario Stage 2: First trade and subsequent dynamics.
 
     Uses COMMITTED matching mode (StableRoommatesMatchingProtocol).
+    SKIPPED: matching_protocol removed from Simulation in tick model rework.
 
     Under committed mode, Irving's algorithm forms both optimal pairs
     simultaneously on tick 1: (A,D) and (B,C). The closer pair (B,C)
@@ -505,11 +509,13 @@ class TestTradingChainCommittedStage2:
         assert sim.commitments.get_partner(c.id) is None
 
 
+@pytest.mark.skip(reason="matching_protocol removed in 3-phase tick model rework")
 class TestTradingChainCommittedStage3:
     """
     Trading chain scenario Stage 3: Equilibrium properties.
 
     Uses COMMITTED matching mode (StableRoommatesMatchingProtocol).
+    SKIPPED: matching_protocol removed from Simulation in tick model rework.
 
     Under committed mode, agents reach competitive equilibrium through
     exactly 2 trades: A-D and B-C.
@@ -773,7 +779,6 @@ class TestTradingChainOpportunisticStage1:
             grid=Grid(20),
             info_env=FullInformation(),
             bargaining_protocol=NashBargainingProtocol(),
-            matching_protocol=OpportunisticMatchingProtocol(),  # Opportunistic mode
         )
 
         sim.add_agent(agent_a, Position(0, 0))
@@ -783,12 +788,12 @@ class TestTradingChainOpportunisticStage1:
 
         return sim, agent_a, agent_b, agent_c, agent_d
 
-    def test_opportunistic_protocol_configured(self, scenario):
-        """Verify opportunistic matching protocol is in use."""
+    def test_decision_procedure_configured(self, scenario):
+        """Verify rational decision procedure is in use."""
+        from microecon.decisions import RationalDecisionProcedure
         sim, a, b, c, d = scenario
 
-        assert isinstance(sim.matching_protocol, OpportunisticMatchingProtocol)
-        assert not sim.matching_protocol.requires_commitment
+        assert isinstance(sim.decision_procedure, RationalDecisionProcedure)
 
     def test_initial_utilities_all_equal(self, scenario):
         """All agents have utility 6.0 with uniform (6,6) endowment."""
@@ -898,7 +903,6 @@ class TestTradingChainOpportunisticStage2:
             grid=Grid(20),
             info_env=FullInformation(),
             bargaining_protocol=NashBargainingProtocol(),
-            matching_protocol=OpportunisticMatchingProtocol(),  # Opportunistic mode
         )
 
         sim.add_agent(agent_a, Position(0, 0))
@@ -910,7 +914,7 @@ class TestTradingChainOpportunisticStage2:
 
     @pytest.fixture
     def scenario_after_first_trade(self, scenario):
-        """Run simulation until first trade occurs (opportunistic mode)."""
+        """Run simulation until first trade occurs."""
         sim, a, b, c, d = scenario
 
         trades = []

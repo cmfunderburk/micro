@@ -319,7 +319,6 @@ class TestNoisyAlphaWithSimulation:
             grid=grid,
             info_env=env,
             bargaining_protocol=NashBargainingProtocol(),
-            matching_protocol=OpportunisticMatchingProtocol(),
         )
 
         # Create and place agents
@@ -357,7 +356,6 @@ class TestNoisyAlphaWithSimulation:
             grid=grid,
             info_env=FullInformation(),
             bargaining_protocol=NashBargainingProtocol(),
-            matching_protocol=OpportunisticMatchingProtocol(),
             logger=logger,
         )
         sim.add_agent(observer, Position(0, 0))
@@ -384,7 +382,6 @@ class TestNoisyAlphaWithSimulation:
             grid=grid2,
             info_env=noisy_env,
             bargaining_protocol=NashBargainingProtocol(),
-            matching_protocol=OpportunisticMatchingProtocol(),
             logger=logger2,
         )
         sim2.add_agent(observer2, Position(0, 0))

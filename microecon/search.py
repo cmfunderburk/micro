@@ -154,9 +154,9 @@ def evaluate_targets(
     best_value = 0.0
     visible_count = 0
 
-    # Find all agents within perception radius
+    # Find all agents within perception radius (including co-located for Propose actions)
     for target_id, target_pos, distance in grid.agents_within_radius(
-        agent_pos, agent.perception_radius, exclude_center=True
+        agent_pos, agent.perception_radius, exclude_center=False
     ):
         target = agents_by_id.get(target_id)
         if target is None:
@@ -265,9 +265,9 @@ def evaluate_targets_detailed(
     visible_count = 0
     evaluations: list[TargetEvaluationResult] = []
 
-    # Find all agents within perception radius
+    # Find all agents within perception radius (including co-located for Propose actions)
     for target_id, target_pos, distance in grid.agents_within_radius(
-        agent_pos, agent.perception_radius, exclude_center=True
+        agent_pos, agent.perception_radius, exclude_center=False
     ):
         target = agents_by_id.get(target_id)
         if target is None:

@@ -498,6 +498,12 @@ class Simulation:
         # Track targets that have already responded to a proposal this tick
         responded_targets: set[str] = set()
 
+        # Track proposers with failed proposals (for fallback execution)
+        # rejected_proposers: explicit rejection -> cooldown + fallback
+        # non_selected_proposers: implicit non-selection -> fallback only
+        rejected_proposers: dict[str, ProposeAction] = {}
+        non_selected_proposers: dict[str, ProposeAction] = {}
+
         for proposer_id, action in propose_actions.items():
             if proposer_id in processed_mutual:
                 continue
@@ -511,10 +517,16 @@ class Simulation:
 
             # Target must not have already responded to another proposal
             if action.target_id in responded_targets:
+                # Implicit non-selection: target accepted another proposal
+                # Proposer executes fallback, NO cooldown added
+                non_selected_proposers[proposer_id] = action
                 continue
 
             # Target must not have traded already (from mutual proposal)
             if action.target_id in traded_this_tick:
+                # Implicit non-selection: target was in mutual proposal
+                # Proposer executes fallback, NO cooldown added
+                non_selected_proposers[proposer_id] = action
                 continue
 
             # Check adjacency (Chebyshev distance <= 1)
@@ -549,15 +561,49 @@ class Simulation:
                 traded_this_tick.add(proposer_id)
                 traded_this_tick.add(action.target_id)
             else:
-                # Rejection: proposer gets cooldown for this target
+                # Explicit rejection: proposer gets cooldown for this target
                 proposer.interaction_state.enter_available(add_cooldown_for=action.target_id)
+                rejected_proposers[proposer_id] = action
 
         # =====================================================================
-        # Step 3: Execute movement actions
+        # Step 3: Execute fallback actions for failed proposals
+        # =====================================================================
+        # Per AGENT-ARCHITECTURE.md 7.2: failed proposals trigger fallback execution
+        # - Explicit rejection: cooldown already added above, now execute fallback
+        # - Implicit non-selection: no cooldown, just execute fallback
+
+        all_failed_proposers = {**rejected_proposers, **non_selected_proposers}
+
+        for proposer_id, action in all_failed_proposers.items():
+            proposer = self._agents_by_id.get(proposer_id)
+            if proposer is None:
+                continue
+
+            # Execute fallback if present
+            fallback = action.fallback
+            if fallback is None:
+                continue
+
+            if isinstance(fallback, MoveAction):
+                # Execute movement toward fallback target
+                if proposer.interaction_state.is_available():
+                    self.grid.move_toward(
+                        proposer,
+                        fallback.target_position,
+                        steps=proposer.movement_budget
+                    )
+            # WaitAction: no action needed
+
+        # =====================================================================
+        # Step 4: Execute movement actions
         # =====================================================================
         for agent_id, action in move_actions.items():
             # Skip agents that traded this tick
             if agent_id in traded_this_tick:
+                continue
+
+            # Skip agents that already moved via fallback
+            if agent_id in all_failed_proposers:
                 continue
 
             agent = self._agents_by_id.get(agent_id)

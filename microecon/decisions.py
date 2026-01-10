@@ -333,6 +333,9 @@ class RationalDecisionProcedure(DecisionProcedure):
         - ProposeAction: lexicographically smallest target_id
         - MoveAction: lexicographically smallest target position (row, col)
         - Action type priority: Propose (0) > Move (1) > Wait (2)
+
+        When returning ProposeAction, computes and attaches fallback action
+        (MoveAction toward target, or WaitAction if at same position).
         """
         from microecon.actions import WaitAction, ProposeAction, MoveAction
 
@@ -378,7 +381,51 @@ class RationalDecisionProcedure(DecisionProcedure):
                 best_value = value
                 best_tie_breaker = tie_breaker
 
-        return best_action if best_action is not None else WaitAction()
+        if best_action is None:
+            return WaitAction()
+
+        # If best action is ProposeAction, compute and attach fallback
+        if isinstance(best_action, ProposeAction):
+            best_action = self._attach_fallback(agent, best_action, context)
+
+        return best_action
+
+    def _attach_fallback(
+        self,
+        agent: "Agent",
+        propose_action: "ProposeAction",
+        context: DecisionContext,
+    ) -> "ProposeAction":
+        """
+        Compute and attach fallback to a ProposeAction.
+
+        Fallback is:
+        - MoveAction toward target if not at same position
+        - WaitAction if at same position as target
+
+        Per ADR-001: if fallback would be ProposeAction, use WaitAction instead.
+        """
+        from microecon.actions import WaitAction, ProposeAction, MoveAction
+
+        agent_pos = context.agent_positions.get(agent.id)
+        target_pos = context.agent_positions.get(propose_action.target_id)
+
+        if agent_pos is None or target_pos is None:
+            # Can't determine positions, use WaitAction as safe fallback
+            fallback = WaitAction()
+        elif agent_pos == target_pos:
+            # Already at same position, can't move closer
+            fallback = WaitAction()
+        else:
+            # Move toward target
+            fallback = MoveAction(target_pos)
+
+        # Create new ProposeAction with fallback attached
+        return ProposeAction(
+            target_id=propose_action.target_id,
+            exchange_id=propose_action.exchange_id,
+            fallback=fallback,
+        )
 
     def evaluate_proposal(
         self,

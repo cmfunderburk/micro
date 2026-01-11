@@ -31,10 +31,8 @@ from microecon.bargaining import (
     TIOLIBargainingProtocol,
     AsymmetricNashBargainingProtocol,
 )
-from microecon.matching import (
-    MatchingProtocol,
-    OpportunisticMatchingProtocol,
-)
+# NOTE: MatchingProtocol removed - matching now handled via propose/accept/reject actions
+# See microecon/matching.py for documentation
 from microecon.simulation import Simulation, create_simple_economy
 from microecon.actions import (
     Action,
@@ -103,9 +101,7 @@ __all__ = [
     "RubinsteinBargainingProtocol",
     "TIOLIBargainingProtocol",
     "AsymmetricNashBargainingProtocol",
-    # Matching protocols (institutional abstraction)
-    "MatchingProtocol",
-    "OpportunisticMatchingProtocol",
+    # NOTE: MatchingProtocol removed - see microecon/matching.py
     # Simulation
     "Simulation",
     "create_simple_economy",

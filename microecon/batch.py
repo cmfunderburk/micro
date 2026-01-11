@@ -23,10 +23,6 @@ from microecon.bargaining import (
     NashBargainingProtocol,
     RubinsteinBargainingProtocol,
 )
-from microecon.matching import (
-    MatchingProtocol,
-    OpportunisticMatchingProtocol,
-)
 from microecon.logging import (
     SimulationConfig,
     SimulationLogger,
@@ -51,14 +47,6 @@ def _get_protocol_name(protocol: BargainingProtocol) -> str:
         return "nash"
     elif isinstance(protocol, RubinsteinBargainingProtocol):
         return "rubinstein"
-    else:
-        return protocol.__class__.__name__.lower()
-
-
-def _get_matching_protocol_name(protocol: MatchingProtocol) -> str:
-    """Get a string name for a matching protocol."""
-    if isinstance(protocol, OpportunisticMatchingProtocol):
-        return "opportunistic"
     else:
         return protocol.__class__.__name__.lower()
 
@@ -163,7 +151,6 @@ class BatchRunner:
     ) -> SimulationConfig:
         """Convert config dict to SimulationConfig dataclass."""
         protocol = config.get("protocol", NashBargainingProtocol())
-        matching = config.get("matching_protocol", OpportunisticMatchingProtocol())
         info_env = config.get("info_env", FullInformation())
         return SimulationConfig(
             n_agents=config.get("n_agents", 10),
@@ -174,7 +161,7 @@ class BatchRunner:
             perception_radius=config.get("perception_radius", 7.0),
             discount_factor=config.get("discount_factor", 0.95),
             movement_budget=config.get("movement_budget", 1),
-            matching_protocol_name=_get_matching_protocol_name(matching),
+            # matching_protocol_name defaults to "bilateral_proposal" in SimulationConfig
             info_env_name=_get_info_env_name(info_env),
             info_env_params=_get_info_env_params(info_env),
         )
@@ -188,13 +175,6 @@ class BatchRunner:
         bargaining = config.get("protocol", NashBargainingProtocol())
         bargaining_name = _get_protocol_name(bargaining)
 
-        # Include matching protocol if varying
-        matching = config.get("matching_protocol", OpportunisticMatchingProtocol())
-        matching_name = _get_matching_protocol_name(matching)
-
-        # Build name with both protocols if non-default matching
-        if matching_name != "opportunistic":
-            return f"run_{timestamp}_seed{seed}_{bargaining_name}_{matching_name}_{index:04d}"
         return f"run_{timestamp}_seed{seed}_{bargaining_name}_{index:04d}"
 
     def _run_single(

@@ -1,7 +1,7 @@
 # Current Project Status
 
-**Version:** 0.3.0
-**Date:** 2026-01-08
+**Version:** 0.4.0
+**Date:** 2026-01-10
 **Purpose:** Definitive reference for current capabilities
 
 This document describes what exists and works today. For the long-term vision, see VISION.md. For the full visualization design, see VISUALIZATION.md.
@@ -18,14 +18,15 @@ A complete simulation engine for bilateral exchange in a spatial economy:
 |--------|------------|
 | `bundle.py` | 2-good bundles with arithmetic operations |
 | `preferences.py` | Cobb-Douglas utility with MRS, indifference curves, Marshallian demand |
-| `agent.py` | Agents with private state / observable type separation, optional belief system |
+| `agent.py` | Agents with private state / observable type, InteractionState machine, cooldowns |
 | `grid.py` | NxN toroidal grid, positions, movement, spatial queries |
 | `information.py` | Information environment abstraction (`FullInformation`, `NoisyAlphaInformation`) |
 | `beliefs.py` | Agent memory, type beliefs, price beliefs, Bayesian and heuristic update rules |
 | `bargaining.py` | Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI) with belief-aware surplus |
 | `search.py` | Target evaluation (discounted surplus), movement decisions, belief integration |
-| `matching.py` | Matching protocols (Opportunistic, StableRoommates) with commitment state |
-| `simulation.py` | Four-phase tick loop, `create_simple_economy()` factory with belief support |
+| `actions.py` | Action ABC and types: MoveAction, ProposeAction, AcceptAction, RejectAction, WaitAction |
+| `decisions.py` | DecisionProcedure interface, RationalDecisionProcedure implementation |
+| `simulation.py` | Three-phase tick loop (Perceive-Decide-Execute), `create_simple_economy()` factory |
 
 ### Bargaining Protocols
 
@@ -54,18 +55,33 @@ Four complete implementations with theoretical grounding (O&R = Osborne & Rubins
 - Closed-form solution via golden section search on responder's indifference curve
 - Theory tests verify proposer identity matters and responder is at indifference (1e-6 tolerance)
 
-### Matching Protocols
+### Matching Mechanism (Bilateral Proposal)
 
-**Opportunistic Matching** (`OpportunisticMatchingProtocol`)
-- Default behavior: any co-located pair can trade
-- No commitment phase required
-- Simple, myopic matching
+Matching is handled through the action-based propose/accept/reject system:
 
-**Stable Roommates Matching** (`StableRoommatesMatchingProtocol`) — *DEPRECATED*
-- Irving's algorithm (1985) for stable matching
-- Agents form committed pairs before trading
-- Only committed + co-located pairs can trade
-- **Deprecated**: The current implementation treats matching as something "done to agents" (centralized algorithm) rather than "rules agents operate within" (agent-autonomous decisions). This conflicts with the action-budget tick model being developed. Will be redesigned once the new architecture is finalized. See `docs/current/stablematching-roadmap-thinking.md`.
+**ProposeAction** — Agent initiates trade with adjacent partner
+- Selected during Decide phase based on surplus evaluation
+- Carries a fallback action (what to do if proposal fails)
+- Target must be adjacent (distance ≤ 1)
+
+**Acceptance Logic** — During Execute phase
+- Target evaluates proposal against their opportunity cost
+- Opportunity cost = value of their own chosen action
+- Accept if trade surplus > opportunity cost
+
+**RejectAction** — Proposal declined
+- Proposer receives per-partner cooldown (default: 3 ticks)
+- Proposer executes their fallback action instead
+- Prevents repeated proposals to unwilling partners
+
+**InteractionState** — Agent state machine
+- AVAILABLE: Can propose or accept proposals
+- PROPOSAL_PENDING: (Reserved for future multi-tick negotiation)
+- NEGOTIATING: Trade in progress
+
+This decentralized, agent-autonomous approach replaces the old centralized MatchingProtocol abstraction. The current implementation is ad-hoc and not grounded in matching theory.
+
+**Future work**: Design theory-based matching protocols (stable matching, deferred acceptance) compatible with the action-budget tick model. See §2 Known Limitations.
 
 ### Agent Belief System (Phase 1)
 
@@ -104,7 +120,7 @@ Infrastructure for systematic experiments:
 
 | Module | Capability |
 |--------|------------|
-| `batch.py` | `BatchRunner` for parameter sweeps, bargaining and matching protocol comparisons |
+| `batch.py` | `BatchRunner` for parameter sweeps, bargaining protocol comparisons |
 | `logging/events.py` | Structured event types (`TickRecord`, `TradeEvent`, `SearchDecision`) |
 | `logging/logger.py` | `SimulationLogger` captures full simulation state |
 | `logging/formats.py` | JSON lines format for human-readable logs |
@@ -147,8 +163,6 @@ cd frontend && npm run dev
   - Agent count, grid size, seed
   - Bargaining protocol (Nash/Rubinstein/Asymmetric Nash/TIOLI) with tooltips
   - Bargaining power distribution (Uniform/Gaussian/Bimodal) for Asymmetric Nash
-  - Matching protocol (Opportunistic/StableRoommates†)
-  - †StableRoommates is deprecated pending redesign
   - Perception radius, discount factor, use_beliefs toggle
 - Agent tooltips on hover with detailed state
 - Click-to-select with perception radius overlay
@@ -217,13 +231,19 @@ The original desktop GUI has been archived to `.archived/visualization-dearpygui
 
 ### Test Coverage
 
-720 tests covering all core modules including theory verification, belief system, and bilateral bargaining protocols. Run with: `uv run pytest`
+716 tests covering all core modules including theory verification, belief system, bilateral bargaining protocols, and action-budget model. Run with: `uv run pytest`
 
 ---
 
 ## 2. Known Limitations
 
 ### Architectural
+
+**Matching mechanism not theory-grounded**
+- Current propose/accept/reject system is ad-hoc, not derived from matching theory
+- Classic matching algorithms (stable roommates, deferred acceptance) assume centralized coordination
+- Designing theory-based matching for agent-autonomous action-budget model is non-trivial future work
+- See `microecon/matching.py` for documentation of current approach
 
 **Search uses protocol-specific surplus**
 - Agents evaluate potential partners using the actual bargaining protocol's surplus calculation
@@ -312,15 +332,29 @@ class BargainingProtocol(ABC):
 
 New protocols (TIOLI, posted prices, double auction) implement this interface.
 
-### Simulation Phases (Four-Phase Tick)
+### Simulation Phases (Three-Phase Tick)
 
-Each tick executes in order:
-1. **Evaluate**: Agents observe visible others, compute surplus rankings
-2. **Decide**: Form commitments (committed mode) or select targets (opportunistic)
-3. **Move**: Agents move toward committed partner or selected target
-4. **Exchange**: Execute bargaining (commitment-gated or any co-located)
+Each tick executes in order (per ADR-001):
 
-Pre-tick: Commitment maintenance breaks stale commitments when partners exit perception radius.
+1. **Perceive**: All agents observe frozen state (simultaneous snapshot)
+   - Perception radius and information environment apply
+   - No agent sees another's pending decision
+
+2. **Decide**: All agents select ONE action from available_actions()
+   - DecisionProcedure.choose() executes for each agent
+   - Decisions are simultaneous; no agent observes another's choice
+   - Actions: MoveAction, ProposeAction, WaitAction
+
+3. **Execute**: Conflict resolution and state transitions
+   - Proposals evaluated against target's opportunity cost
+   - Accepted proposals trigger bargaining and trade
+   - Rejected proposals trigger cooldowns and fallback execution
+   - All state changes applied atomically
+
+**Key properties**:
+- Simultaneous decision: All agents decide based on same frozen state
+- Explicit action selection: Agents choose from enumerated action set
+- Transaction costs as ticks: Proposals, rejections, movement all cost time
 
 ---
 
@@ -340,14 +374,6 @@ from microecon.batch import run_comparison
 results = run_comparison(n_agents=10, ticks=100, seeds=range(5))
 for r in results:
     print(f'{r.config.protocol_name}: {r.summary}')
-"
-
-# Run batch comparison (matching protocols)
-uv run python -c "
-from microecon.batch import run_matching_comparison
-results = run_matching_comparison(n_agents=10, ticks=100, seeds=range(5))
-for r in results:
-    print(f'Trades: {r.summary[\"total_trades\"]}, Welfare: {r.summary[\"final_welfare\"]:.2f}')
 "
 
 # Run market emergence analysis
@@ -371,10 +397,10 @@ uv run pytest --cov=microecon
 
 | Vision Goal | Status |
 |-------------|--------|
-| Institutional visibility (swap protocols) | **Implemented** for bargaining and matching |
+| Institutional visibility (swap protocols) | **Implemented** for bargaining; matching via actions (not swappable yet) |
 | Equilibrium benchmarks | Bargaining only; no Walrasian/GE |
 | Information regimes | **Implemented** (FullInformation, NoisyAlphaInformation) |
-| Search/matching mechanisms | **Partial** (Opportunistic implemented; StableRoommates deprecated) |
+| Search/matching mechanisms | **Partial** (bilateral proposal via actions; theory-based matching is future work) |
 | Agent sophistication levels | **Implemented** (belief-enabled vs simple agents, Bayesian vs heuristic updates) |
 | Agent beliefs and learning | **Implemented** (type beliefs, memory, belief updates during trade) |
 | Market emergence metrics | **Implemented** (trade networks, welfare efficiency, spatial clustering) |
@@ -421,14 +447,16 @@ microecon/                   # Core simulation library (Python)
 ├── __init__.py
 ├── bundle.py                # 2-good bundles
 ├── preferences.py           # Utility functions (Cobb-Douglas)
-├── agent.py                 # Agent with private state / observable type
+├── agent.py                 # Agent with private state, InteractionState, cooldowns
 ├── grid.py                  # Spatial grid and positions
 ├── information.py           # Information environments (Full, NoisyAlpha)
 ├── beliefs.py               # Agent memory, type/price beliefs, update rules
-├── bargaining.py            # Bargaining protocols (Nash, Rubinstein)
+├── bargaining.py            # Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI)
 ├── search.py                # Target evaluation and movement
-├── matching.py              # Matching protocols (Opportunistic, StableRoommates)
-├── simulation.py            # Main simulation engine (four-phase tick)
+├── actions.py               # Action ABC: Move, Propose, Accept, Reject, Wait
+├── decisions.py             # DecisionProcedure interface, RationalDecisionProcedure
+├── matching.py              # Documentation only (matching via actions.py)
+├── simulation.py            # Main simulation engine (three-phase tick)
 ├── batch.py                 # BatchRunner for parameter sweeps
 ├── logging/
 │   ├── events.py            # TickRecord, TradeEvent, SearchDecision, BeliefSnapshot
@@ -482,12 +510,16 @@ tests/
 ├── theory/                  # Theory verification tests
 │   ├── test_nash_bargaining.py
 │   ├── test_rubinstein_bargaining.py
-│   ├── test_asymmetric_nash_protocol.py  # Weighted Nash product (26 tests)
-│   ├── test_tioli_bargaining.py          # Take-it-or-leave-it (27 tests)
+│   ├── test_asymmetric_nash_protocol.py  # Weighted Nash product
+│   ├── test_tioli_bargaining.py          # Take-it-or-leave-it
+│   ├── test_action_budget_theory.py      # Action budget model theory verification
+│   ├── test_action_budget_scenarios.py   # Action budget model scenarios
+│   ├── test_action_budget_edge_cases.py  # Action budget model edge cases
 │   ├── test_preferences.py
 │   ├── test_gains_from_trade.py
 │   └── test_pareto_efficiency.py
 ├── test_beliefs.py          # Belief system tests
+├── test_matching.py         # Matching mechanism documentation tests
 └── ...                      # Other test modules
 
 .archived/                   # Archived implementations
@@ -496,5 +528,5 @@ tests/
 
 ---
 
-**Document Version:** 0.3.0
-**Last Updated:** 2026-01-08 (web frontend feature parity complete)
+**Document Version:** 0.4.0
+**Last Updated:** 2026-01-10 (action-budget tick model, propose/accept/reject matching)

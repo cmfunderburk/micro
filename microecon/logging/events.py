@@ -14,21 +14,22 @@ class SimulationConfig:
     """Configuration snapshot for a simulation run.
 
     Captures all institutional settings needed to reproduce and compare runs:
-    - Bargaining protocol (Nash, Rubinstein)
-    - Matching protocol (opportunistic, stable_roommates)
+    - Bargaining protocol (Nash, Rubinstein, Asymmetric Nash, TIOLI)
+    - Matching mechanism (currently: bilateral_proposal via action system)
     - Information environment (full, noisy)
     """
 
     n_agents: int
     grid_size: int
     seed: int
-    protocol_name: str  # "nash" or "rubinstein"
+    protocol_name: str  # "nash", "rubinstein", "asymmetric_nash", "tioli"
     protocol_params: dict[str, Any] = field(default_factory=dict)
     perception_radius: float = 3.0
     discount_factor: float = 0.95
     movement_budget: int = 1
-    # Institutional metadata (LA-1)
-    matching_protocol_name: str = "opportunistic"
+    # Matching mechanism: "bilateral_proposal" = propose/accept/reject action system
+    # (replaces old MatchingProtocol abstraction)
+    matching_protocol_name: str = "bilateral_proposal"
     info_env_name: str = "full_information"
     info_env_params: dict[str, Any] = field(default_factory=dict)
 

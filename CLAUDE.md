@@ -18,14 +18,15 @@ The core simulation infrastructure in `microecon/`:
 |--------|---------|
 | `bundle.py` | `Bundle(x, y)` - 2-good economy representation |
 | `preferences.py` | `CobbDouglas(alpha)` - u(x,y) = x^α * y^(1-α) |
-| `agent.py` | Agent with private state / observable type separation |
+| `agent.py` | Agent with private state / observable type, InteractionState machine, cooldowns |
 | `grid.py` | `Grid(size)`, `Position`, movement, spatial queries |
 | `information.py` | `InformationEnvironment` abstraction (`FullInformation`, `NoisyAlphaInformation`) |
 | `beliefs.py` | Agent beliefs (type beliefs, price beliefs, memory, update rules) |
 | `bargaining.py` | Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI) |
 | `search.py` | Target evaluation (discounted surplus), movement decisions, belief integration |
-| `matching.py` | Matching protocols (Opportunistic; StableRoommates deprecated), commitment state |
-| `simulation.py` | `Simulation` engine with four-phase tick loop, `create_simple_economy()` factory |
+| `actions.py` | Action ABC: MoveAction, ProposeAction, AcceptAction, RejectAction, WaitAction |
+| `decisions.py` | DecisionProcedure interface, RationalDecisionProcedure implementation |
+| `simulation.py` | `Simulation` engine with three-phase tick loop (Perceive-Decide-Execute) |
 | `batch.py` | `BatchRunner` for parameter sweeps and systematic comparisons |
 
 ### Logging & Analysis (Complete)
@@ -71,7 +72,7 @@ The original desktop GUI has been archived to `.archived/visualization-dearpygui
 
 ### Test Coverage
 
-667 tests covering all core modules. Run with: `uv run pytest`
+716 tests covering all core modules. Run with: `uv run pytest`
 
 ## Architecture
 
@@ -81,14 +82,16 @@ microecon/
 │   ├── __init__.py          # Public API exports
 │   ├── bundle.py            # 2-good bundles
 │   ├── preferences.py       # Utility functions (Cobb-Douglas)
-│   ├── agent.py             # Agent, AgentPrivateState, AgentType
+│   ├── agent.py             # Agent, AgentPrivateState, InteractionState, cooldowns
 │   ├── grid.py              # Spatial grid and positions
 │   ├── information.py       # Information environments (Full, NoisyAlpha)
 │   ├── beliefs.py           # Agent beliefs (type beliefs, price beliefs, memory)
 │   ├── bargaining.py        # Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI)
 │   ├── search.py            # Target selection and movement
-│   ├── matching.py          # Matching protocols (Opportunistic; StableRoommates deprecated)
-│   ├── simulation.py        # Main simulation engine (four-phase tick)
+│   ├── actions.py           # Action ABC: Move, Propose, Accept, Reject, Wait
+│   ├── decisions.py         # DecisionProcedure interface, RationalDecisionProcedure
+│   ├── matching.py          # Documentation only (matching via actions.py)
+│   ├── simulation.py        # Main simulation engine (three-phase tick)
 │   ├── batch.py             # BatchRunner for parameter sweeps
 │   ├── logging/             # Event logging infrastructure
 │   ├── analysis/            # Post-hoc analysis utilities
@@ -119,13 +122,24 @@ microecon/
 - `AsymmetricNashBargainingProtocol`: Weighted Nash product using `agent.bargaining_power`. O&R Ch 2.6.
 - `TIOLIBargainingProtocol`: Take-it-or-leave-it (proposer extracts all surplus). O&R §2.8.
 
-**Matching protocol**: `MatchingProtocol` ABC determines how agents form trading pairs:
-- `OpportunisticMatchingProtocol`: Any co-located pair can trade (default, myopic)
-- `StableRoommatesMatchingProtocol`: *Deprecated* — centralized Irving's algorithm conflicts with agent-autonomous action-budget model. See `docs/current/stablematching-roadmap-thinking.md`.
+**Matching mechanism (bilateral proposal)**: Matching is handled through the action-based propose/accept/reject system:
+- `ProposeAction`: Agent initiates trade with adjacent partner
+- Acceptance based on opportunity cost comparison (target's chosen action value)
+- `RejectAction`: Triggers per-partner cooldown, proposer executes fallback
+- This decentralized approach replaces the old centralized MatchingProtocol abstraction
+
+**Decision procedure**: `DecisionProcedure` ABC enables agent sophistication as experimental variable:
+- `RationalDecisionProcedure`: Maximize expected utility from available actions
+- Future: bounded rationality, learning-based procedures
+
+**Three-phase tick model** (per ADR-001):
+1. **Perceive**: All agents observe frozen state (simultaneous snapshot)
+2. **Decide**: All agents select ONE action from available_actions()
+3. **Execute**: Conflict resolution, state transitions, trades
 
 The abstraction enables the core research question: "What difference does the institution make?"
 
-**Search with discounted surplus**: Agents evaluate visible others by computing Nash bargaining surplus, discounted by distance. This couples search meaningfully to exchange - agents pursue opportunities that maximize expected gains from trade.
+**Search with discounted surplus**: Agents evaluate visible others by computing bargaining protocol's surplus, discounted by distance. This couples search meaningfully to exchange - agents pursue opportunities that maximize expected gains from trade.
 
 ## Development Commands
 
@@ -181,7 +195,7 @@ Tests are organized with semantic markers to enable targeted test runs. Running 
 | `bargaining` | Bargaining protocol unit tests | Changes to `bargaining.py` |
 | `beliefs` | Agent memory and learning systems | Changes to `beliefs.py` |
 | `search` | Target evaluation and movement | Changes to `search.py` |
-| `matching` | Matching protocols | Changes to `matching.py` |
+| `matching` | Matching mechanism documentation | Changes to `matching.py` (documentation only) |
 | `simulation` | Simulation engine, batch runner, scenarios | Changes to `simulation.py`, `batch.py`, `scenarios/` |
 | `analysis` | Logging and analysis infrastructure | Changes to `logging/` or `analysis/` |
 | `integration` | Full pipeline tests | Before commits, PRs |
@@ -224,7 +238,7 @@ uv run pytest
 | `bargaining.py` | `uv run pytest -m "bargaining or theory" tests/test_bargaining.py` |
 | `beliefs.py` | `uv run pytest -m beliefs` |
 | `search.py` | `uv run pytest -m search` |
-| `matching.py` | `uv run pytest -m matching` |
+| `actions.py`, `decisions.py` | `uv run pytest -m simulation tests/theory/test_action_budget_*.py` |
 | `simulation.py`, `batch.py` | `uv run pytest -m simulation` |
 | `bundle.py`, `preferences.py`, `agent.py`, `grid.py` | `uv run pytest -m core` |
 | `information.py` | `uv run pytest -m core` |

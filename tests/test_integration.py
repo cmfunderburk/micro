@@ -18,7 +18,6 @@ from microecon.grid import Grid, Position
 from microecon.simulation import Simulation
 from microecon.information import FullInformation, NoisyAlphaInformation
 from microecon.bargaining import NashBargainingProtocol, RubinsteinBargainingProtocol
-from microecon.matching import OpportunisticMatchingProtocol
 from microecon.logging import SimulationLogger, SimulationConfig
 from microecon.batch import BatchRunner
 

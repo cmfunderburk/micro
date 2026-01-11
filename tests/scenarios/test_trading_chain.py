@@ -5,12 +5,13 @@ Test classes:
 - TestTradingChainOpportunisticStage1: Initial state and target selection
 - TestTradingChainOpportunisticStage2: First trade via path crossing (skipped - adjacency changes)
 
-OPPORTUNISTIC (OpportunisticMatchingProtocol - default):
-- No commitments; any adjacent pair can trade
+Matching uses the bilateral_proposal mechanism (propose/accept/reject actions):
+- No commitments; any adjacent pair can propose trades
 - First trade is B-C via path crossing
 
 Historical note: COMMITTED mode tests (using StableRoommatesMatchingProtocol) were
 removed when that matching protocol was deprecated and removed from the codebase.
+The MatchingProtocol abstraction has been replaced by the action-based system.
 """
 
 import pytest
@@ -36,7 +37,7 @@ class TestTradingChainOpportunisticStage1:
     """
     Trading chain scenario Stage 1: Initial state and target selection.
 
-    Uses OPPORTUNISTIC matching mode (OpportunisticMatchingProtocol - default).
+    Uses bilateral_proposal matching (propose/accept/reject actions).
 
     Setup:
         Position:   (0,0)    (5,0)    (10,0)   (15,0)
@@ -157,7 +158,7 @@ class TestTradingChainOpportunisticStage2:
     """
     Trading chain scenario Stage 2: First trade via path crossing.
 
-    Uses OPPORTUNISTIC matching mode (OpportunisticMatchingProtocol).
+    Uses bilateral_proposal matching (propose/accept/reject actions).
 
     Key dynamic:
         - B moves RIGHT toward D (target)

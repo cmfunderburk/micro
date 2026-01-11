@@ -309,7 +309,6 @@ class TestNoisyAlphaWithSimulation:
         from microecon.simulation import Simulation
         from microecon.grid import Grid, Position
         from microecon.bargaining import NashBargainingProtocol
-        from microecon.matching import OpportunisticMatchingProtocol
 
         # Create simulation with noisy information
         env = NoisyAlphaInformation(noise_std=0.1, seed=42)
@@ -341,7 +340,6 @@ class TestNoisyAlphaWithSimulation:
         from microecon.simulation import Simulation
         from microecon.grid import Grid, Position
         from microecon.bargaining import NashBargainingProtocol
-        from microecon.matching import OpportunisticMatchingProtocol
         from microecon.logging import SimulationLogger, SimulationConfig
 
         # Create agents with known alphas

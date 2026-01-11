@@ -1,95 +1,25 @@
 """
 Matching protocols for bilateral exchange.
 
-This module implements matching protocols that determine how agents form
-trading pairs. The current implementation uses opportunistic matching,
-where any adjacent agents can trade without explicit commitment.
+NOTE: The previous MatchingProtocol abstraction (OpportunisticMatchingProtocol,
+StableRoommatesMatchingProtocol) has been removed. Matching is now handled
+through the action-based propose/accept/reject system:
 
-The matching protocol abstraction exists to enable future comparison of
-outcomes under different institutional rules - a core value proposition
-per VISION.md.
+- Agents choose ProposeAction to initiate trades with adjacent partners
+- Targets evaluate proposals against their opportunity cost (value of chosen action)
+- AcceptAction/RejectAction resolve during the Execute phase
+- Cooldowns prevent re-proposing to agents who rejected
 
-Reference: VISION.md (institutional visibility)
+This decentralized, agent-autonomous approach replaces the centralized
+compute_matches() pattern. The current implementation is ad-hoc and not
+grounded in matching theory (stable matching, deferred acceptance, etc.).
+
+FUTURE WORK: Design theory-based matching protocols compatible with the
+action-budget tick model. This is non-trivial because classic matching
+algorithms assume centralized coordination, while the current architecture
+emphasizes agent autonomy.
+
+Reference: ADR-001-TICK-MODEL.md, ADR-003-EXCHANGE-SEQUENCE.md
 """
 
-from __future__ import annotations
-from abc import ABC, abstractmethod
-from typing import Callable, Dict, List, Set, Tuple
-
-from microecon.agent import Agent
-
-
-class MatchingProtocol(ABC):
-    """
-    Abstract base class for matching protocols.
-
-    Matching protocols determine how agents form trading pairs:
-    - Opportunistic: Any adjacent pair can trade (no explicit matching)
-
-    This abstraction enables comparing outcomes under different institutional
-    matching rules, parallel to how BargainingProtocol enables comparing
-    different bargaining rules.
-
-    Usage:
-        protocol = OpportunisticMatchingProtocol()
-
-        # Compute matches among agents (currently a no-op for opportunistic)
-        new_pairs = protocol.compute_matches(agents, visibility, surplus_fn)
-    """
-
-    @property
-    @abstractmethod
-    def requires_commitment(self) -> bool:
-        """
-        Whether trade requires explicit mutual commitment.
-
-        If True: Only committed + adjacent pairs can trade
-        If False: Any adjacent pair can trade (opportunistic)
-        """
-        pass
-
-    @abstractmethod
-    def compute_matches(
-        self,
-        agents: List[Agent],
-        visibility: Dict[str, Set[str]],
-        surplus_fn: Callable[[Agent, Agent], float],
-    ) -> List[Tuple[str, str]]:
-        """
-        Compute committed pairs for this tick.
-
-        Args:
-            agents: Agents to consider for matching
-            visibility: Map of agent_id -> set of visible agent_ids
-            surplus_fn: Function computing bilateral surplus between agents
-
-        Returns:
-            List of (agent_id, agent_id) pairs that form commitments
-        """
-        pass
-
-
-class OpportunisticMatchingProtocol(MatchingProtocol):
-    """
-    Opportunistic matching - no explicit commitment required.
-
-    Any adjacent agents can trade without prior coordination:
-    - No matching phase needed
-    - Trade partner selected via proposal/acceptance during Execute phase
-    - Agents autonomously decide whether to propose and accept
-
-    This is the default (and currently only) matching protocol.
-    """
-
-    @property
-    def requires_commitment(self) -> bool:
-        return False
-
-    def compute_matches(
-        self,
-        agents: List[Agent],
-        visibility: Dict[str, Set[str]],
-        surplus_fn: Callable[[Agent, Agent], float],
-    ) -> List[Tuple[str, str]]:
-        """No explicit matching in opportunistic mode."""
-        return []
+# No exports - matching is handled through actions.py and decisions.py

@@ -67,7 +67,7 @@ def create_test_run(
                         agent1_id=a1,
                         agent2_id=a2,
                         proposer_id=a1,
-                        pre_endowments=((5.0, 5.0), (5.0, 5.0)),
+                        pre_holdings=((5.0, 5.0), (5.0, 5.0)),
                         post_allocations=((6.0, 4.0), (4.0, 6.0)),
                         utilities=(5.5, 5.5),
                         gains=(0.5, 0.5),

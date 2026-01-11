@@ -5,12 +5,18 @@ This module defines the Action ABC and concrete action types for the
 3-phase tick model (Perceive-Decide-Execute). Actions are explicit choices
 that agents make during the Decide phase.
 
-Action types:
+Action types chosen during Decide phase:
 - MoveAction: Move toward a target position
-- ProposeAction: Initiate exchange with co-located agent
-- AcceptAction: Accept a pending proposal
-- RejectAction: Reject a pending proposal
+- ProposeAction: Initiate exchange with adjacent agent
 - WaitAction: Take no action this tick
+
+Coordination actions (evaluated during Execute, not chosen during Decide):
+- AcceptAction: Accept a proposal (trade executes)
+- RejectAction: Reject a proposal (proposer gets cooldown)
+
+Whether an agent accepts a proposal depends on their opportunity cost (the
+value of their chosen action). This handles the coordination constraint that
+both parties must mutually want to trade for it to occur.
 
 Reference: ADR-001-TICK-MODEL.md, ADR-003-EXCHANGE-SEQUENCE.md
 """
@@ -188,7 +194,7 @@ class MoveAction(Action):
 
 class ProposeAction(Action):
     """
-    Propose exchange to a co-located agent.
+    Propose exchange to an adjacent agent.
 
     Initiates the exchange sequence. The proposer attempts to trade with
     the target. If the proposal fails (rejected or not selected), the
@@ -197,7 +203,7 @@ class ProposeAction(Action):
     Preconditions:
     - Agent is in AVAILABLE state
     - Agent not in cooldown for target
-    - Agent and target are co-located
+    - Agent and target are adjacent (Chebyshev distance <= 1)
 
     Effects:
     - If accepted: trade executes, both parties consume action budget
@@ -272,16 +278,13 @@ class AcceptAction(Action):
     """
     Accept a pending proposal from another agent.
 
-    Transitions both agents to NEGOTIATING state to execute bargaining.
+    Note: This action type exists for architectural completeness but is NOT
+    currently enumerated during the Decide phase. In the current same-tick
+    proposal resolution model, acceptance is evaluated as an institutional
+    constraint during Execute (based on opportunity cost), not as an explicit
+    agent action choice.
 
-    Preconditions:
-    - Agent has pending proposal from specified proposer
-    - Agent is in AVAILABLE state (can receive proposals)
-    - Agents are still co-located
-
-    Effects:
-    - Both agents enter NEGOTIATING state
-    - Bargaining protocol executes
+    This class is retained for potential future multi-tick negotiation support.
 
     Reference: ADR-002-INTERACTION-STATE.md
     """
@@ -302,19 +305,8 @@ class AcceptAction(Action):
         return 1
 
     def preconditions(self, agent: Agent, context: ActionContext) -> bool:
-        """Agent must have pending proposal from proposer.
-
-        Note: We do NOT require co-location for Accept. The proposal was
-        valid when made (proposer was co-located then). The target can
-        accept even if they moved since the proposal was made. If accepted,
-        agents will need to move back together before negotiation completes.
-        """
-        # Must have pending proposal from this proposer
-        if not context.has_pending_proposal_from(agent.id, self.proposer_id):
-            return False
-
-        # Co-location NOT required for Accept - see note above
-        return True
+        """Agent must have pending proposal from proposer."""
+        return context.has_pending_proposal_from(agent.id, self.proposer_id)
 
     def describe(self) -> str:
         return f"Accept proposal from {self.proposer_id}"
@@ -323,6 +315,13 @@ class AcceptAction(Action):
 class RejectAction(Action):
     """
     Reject a pending proposal from another agent.
+
+    Note: This action type exists for architectural completeness but is NOT
+    currently enumerated during the Decide phase. In the current same-tick
+    proposal resolution model, rejection happens during Execute when the
+    target's surplus is less than their opportunity cost.
+
+    This class is retained for potential future multi-tick negotiation support.
 
     The proposer returns to AVAILABLE state with a cooldown for this target.
 

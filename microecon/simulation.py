@@ -55,8 +55,8 @@ class TradeEvent:
     agent1_id: str
     agent2_id: str
     outcome: BargainingOutcome
-    pre_endowment_1: tuple[float, float]  # Agent 1's endowment before trade
-    pre_endowment_2: tuple[float, float]  # Agent 2's endowment before trade
+    pre_holdings_1: tuple[float, float]  # Agent 1's holdings before trade
+    pre_holdings_2: tuple[float, float]  # Agent 2's holdings before trade
 
 
 @dataclass
@@ -284,68 +284,9 @@ class Simulation:
         return tick_trades
 
     def _pre_tick_maintenance(self) -> None:
-        """
-        Pre-tick maintenance: tick cooldowns, expire stale proposals/negotiations.
-        """
-        # Tick cooldowns for all agents
+        """Pre-tick maintenance: tick cooldowns."""
         for agent in self.agents:
             agent.interaction_state.tick_cooldowns()
-
-        # Expire proposals that weren't responded to (timeout = 1 tick)
-        # Proposals that existed last tick but target didn't Accept/Reject
-        # Note: In the new model, we track pending proposals and clear them
-        # if not acted upon. For now, we clear all pending proposals at start of tick
-        # and let new proposals be created this tick.
-
-        # Check for adjacency loss in pending proposals
-        # Note: With same-tick proposals, this should rarely trigger
-        expired_proposals = []
-        for target_id, proposer_id in self._pending_proposals.items():
-            proposer = self._agents_by_id.get(proposer_id)
-            target = self._agents_by_id.get(target_id)
-            if proposer is None or target is None:
-                expired_proposals.append(target_id)
-                continue
-
-            # Check if still adjacent (Chebyshev distance <= 1)
-            proposer_pos = self.grid.get_position(proposer)
-            target_pos = self.grid.get_position(target)
-            if proposer_pos is None or target_pos is None:
-                expired_proposals.append(target_id)
-                proposer.interaction_state.enter_available()
-            elif proposer_pos.chebyshev_distance_to(target_pos) > 1:
-                expired_proposals.append(target_id)
-                # Proposer returns to AVAILABLE (no cooldown for adjacency loss)
-                proposer.interaction_state.enter_available()
-
-        for target_id in expired_proposals:
-            del self._pending_proposals[target_id]
-
-        # Check for adjacency loss in negotiating pairs
-        # Note: With same-tick negotiations, this should rarely trigger
-        expired_negotiations = []
-        for pair, exchange_id in list(self._negotiating_pairs.items()):
-            agent_a_id, agent_b_id = pair
-            agent_a = self._agents_by_id.get(agent_a_id)
-            agent_b = self._agents_by_id.get(agent_b_id)
-            if agent_a is None or agent_b is None:
-                expired_negotiations.append(pair)
-                continue
-
-            pos_a = self.grid.get_position(agent_a)
-            pos_b = self.grid.get_position(agent_b)
-            if pos_a is None or pos_b is None:
-                expired_negotiations.append(pair)
-                agent_a.interaction_state.enter_available()
-                agent_b.interaction_state.enter_available()
-            elif pos_a.chebyshev_distance_to(pos_b) > 1:
-                expired_negotiations.append(pair)
-                # Both return to AVAILABLE
-                agent_a.interaction_state.enter_available()
-                agent_b.interaction_state.enter_available()
-
-        for pair in expired_negotiations:
-            del self._negotiating_pairs[pair]
 
     def _build_action_context(self) -> ActionContext:
         """Build frozen ActionContext for precondition checking."""
@@ -465,7 +406,7 @@ class Simulation:
             agent_a.interaction_state.enter_negotiating(pair_list[1], self.tick)
             agent_b.interaction_state.enter_negotiating(pair_list[0], self.tick)
 
-            # Execute trade immediately (negotiation duration = 1)
+            # Execute trade immediately (same-tick resolution)
             trade_event = self._execute_trade(agent_a, agent_b, exchange_id)
             if trade_event:
                 tick_trades.append(trade_event)
@@ -643,8 +584,8 @@ class Simulation:
                 agent1_id=agent1.id,
                 agent2_id=agent2.id,
                 outcome=outcome,
-                pre_endowment_1=pre_holdings1,  # Note: These are now pre-holdings
-                pre_endowment_2=pre_holdings2,
+                pre_holdings_1=pre_holdings1,
+                pre_holdings_2=pre_holdings2,
             )
             self.trades.append(event)
 
@@ -684,7 +625,7 @@ class Simulation:
                 event.agent1_id,
                 event.agent2_id,
                 event.agent1_id,  # proposer_id (simplified)
-                (event.pre_endowment_1, event.pre_endowment_2),
+                (event.pre_holdings_1, event.pre_holdings_2),
                 ((event.outcome.allocation_1.x, event.outcome.allocation_1.y),
                  (event.outcome.allocation_2.x, event.outcome.allocation_2.y)),
                 (event.outcome.utility_1, event.outcome.utility_2),
@@ -775,7 +716,7 @@ class Simulation:
                 agent1_id=a1,
                 agent2_id=a2,
                 proposer_id=proposer,
-                pre_endowments=pre,
+                pre_holdings=pre,
                 post_allocations=post,
                 utilities=utils,
                 gains=gains,

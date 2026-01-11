@@ -18,8 +18,8 @@ export function EdgeworthModal({ trade, open, onOpenChange }: EdgeworthModalProp
 
   // Compute utilities
   const utilityA_before = cobbDouglasUtility(
-    trade.pre_endowment_1[0],
-    trade.pre_endowment_1[1],
+    trade.pre_holdings_1[0],
+    trade.pre_holdings_1[1],
     trade.alpha1
   );
   const utilityA_after = cobbDouglasUtility(
@@ -28,8 +28,8 @@ export function EdgeworthModal({ trade, open, onOpenChange }: EdgeworthModalProp
     trade.alpha1
   );
   const utilityB_before = cobbDouglasUtility(
-    trade.pre_endowment_2[0],
-    trade.pre_endowment_2[1],
+    trade.pre_holdings_2[0],
+    trade.pre_holdings_2[1],
     trade.alpha2
   );
   const utilityB_after = cobbDouglasUtility(
@@ -42,8 +42,8 @@ export function EdgeworthModal({ trade, open, onOpenChange }: EdgeworthModalProp
   const gainB = utilityB_after - utilityB_before;
 
   // Trade amounts
-  const dxA = trade.post_allocation_1[0] - trade.pre_endowment_1[0];
-  const dyA = trade.post_allocation_1[1] - trade.pre_endowment_1[1];
+  const dxA = trade.post_allocation_1[0] - trade.pre_holdings_1[0];
+  const dyA = trade.post_allocation_1[1] - trade.pre_holdings_1[1];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -89,7 +89,7 @@ export function EdgeworthModal({ trade, open, onOpenChange }: EdgeworthModalProp
                 <div className="flex justify-between">
                   <span className="text-zinc-500">Endowment:</span>
                   <span className="font-mono text-zinc-300">
-                    ({trade.pre_endowment_1[0].toFixed(2)}, {trade.pre_endowment_1[1].toFixed(2)})
+                    ({trade.pre_holdings_1[0].toFixed(2)}, {trade.pre_holdings_1[1].toFixed(2)})
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -132,7 +132,7 @@ export function EdgeworthModal({ trade, open, onOpenChange }: EdgeworthModalProp
                 <div className="flex justify-between">
                   <span className="text-zinc-500">Endowment:</span>
                   <span className="font-mono text-zinc-300">
-                    ({trade.pre_endowment_2[0].toFixed(2)}, {trade.pre_endowment_2[1].toFixed(2)})
+                    ({trade.pre_holdings_2[0].toFixed(2)}, {trade.pre_holdings_2[1].toFixed(2)})
                   </span>
                 </div>
                 <div className="flex justify-between">

@@ -23,7 +23,7 @@ from microecon.bargaining import (
     nash_bargaining_solution,
     compute_nash_surplus,
 )
-from microecon.matching import OpportunisticMatchingProtocol, StableRoommatesMatchingProtocol
+from microecon.matching import OpportunisticMatchingProtocol
 from microecon.scenarios import MarketEmergenceConfig, run_market_emergence
 
 pytestmark = pytest.mark.simulation

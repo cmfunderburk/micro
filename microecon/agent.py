@@ -38,11 +38,17 @@ class InteractionState(Enum):
     Possible states in the agent interaction state machine.
 
     State transitions:
-    - AVAILABLE -> PROPOSAL_PENDING: Agent chooses Propose(target) action
-    - AVAILABLE -> NEGOTIATING: Received proposal, chose Accept action
+    - AVAILABLE -> NEGOTIATING: Mutual proposal detected (both agents proposed
+      to each other), or agent receives acceptable proposal during Execute
+    - AVAILABLE -> PROPOSAL_PENDING: Agent proposes, target hasn't responded yet
+      (currently unused: proposals resolve same-tick)
     - PROPOSAL_PENDING -> NEGOTIATING: Target accepted
-    - PROPOSAL_PENDING -> AVAILABLE: Target rejected (+ cooldown), timeout, or co-location lost
-    - NEGOTIATING -> AVAILABLE: Protocol completes or co-location lost
+    - PROPOSAL_PENDING -> AVAILABLE: Target rejected (+ cooldown) or adjacency lost
+    - NEGOTIATING -> AVAILABLE: Trade completes or adjacency lost
+
+    Note: In the current implementation, proposals resolve within the same tick,
+    so PROPOSAL_PENDING is not reached in practice. It is retained as a reserved
+    state for potential future multi-tick negotiation support.
 
     Reference: ADR-002-INTERACTION-STATE.md
     """
@@ -97,7 +103,7 @@ class AgentInteractionState:
         return self.is_available() and target_id not in self.cooldowns
 
     def enter_proposal_pending(self, target_id: str, tick: int) -> None:
-        """Transition to PROPOSAL_PENDING state."""
+        """Transition to PROPOSAL_PENDING state (reserved for future multi-tick negotiation)."""
         self.state = InteractionState.PROPOSAL_PENDING
         self.proposal_target = target_id
         self.proposal_tick = tick

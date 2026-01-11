@@ -29,8 +29,8 @@ export function EdgeworthBox({ trade, width = 350, height = 350 }: EdgeworthBoxP
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Compute total endowments (box dimensions)
-  const totalX = trade.pre_endowment_1[0] + trade.pre_endowment_2[0];
-  const totalY = trade.pre_endowment_1[1] + trade.pre_endowment_2[1];
+  const totalX = trade.pre_holdings_1[0] + trade.pre_holdings_2[0];
+  const totalY = trade.pre_holdings_1[1] + trade.pre_holdings_2[1];
 
   // Box dimensions in pixels
   const boxWidth = width - 2 * MARGIN;
@@ -74,8 +74,8 @@ export function EdgeworthBox({ trade, width = 350, height = 350 }: EdgeworthBoxP
 
     // Compute utilities
     const utilityA_before = cobbDouglasUtility(
-      trade.pre_endowment_1[0],
-      trade.pre_endowment_1[1],
+      trade.pre_holdings_1[0],
+      trade.pre_holdings_1[1],
       trade.alpha1
     );
     const utilityA_after = cobbDouglasUtility(
@@ -84,8 +84,8 @@ export function EdgeworthBox({ trade, width = 350, height = 350 }: EdgeworthBoxP
       trade.alpha1
     );
     const utilityB_before = cobbDouglasUtility(
-      trade.pre_endowment_2[0],
-      trade.pre_endowment_2[1],
+      trade.pre_holdings_2[0],
+      trade.pre_holdings_2[1],
       trade.alpha2
     );
     const utilityB_after = cobbDouglasUtility(
@@ -172,7 +172,7 @@ export function EdgeworthBox({ trade, width = 350, height = 350 }: EdgeworthBoxP
     drawICurveB(utilityB_after, 0.8, 1.5);
 
     // Draw endowment point (orange/yellow)
-    const [endowX, endowY] = toPixel(trade.pre_endowment_1[0], trade.pre_endowment_1[1]);
+    const [endowX, endowY] = toPixel(trade.pre_holdings_1[0], trade.pre_holdings_1[1]);
     ctx.fillStyle = '#fbbf24'; // amber-400
     ctx.strokeStyle = '#fbbf24';
     ctx.lineWidth = 2;

@@ -101,7 +101,7 @@ class TestEventSerialization:
             agent1_id="a1",
             agent2_id="a2",
             proposer_id="a1",
-            pre_endowments=((10.0, 2.0), (2.0, 10.0)),
+            pre_holdings=((10.0, 2.0), (2.0, 10.0)),
             post_allocations=((6.0, 6.0), (6.0, 6.0)),
             utilities=(6.0, 6.0),
             gains=(1.5, 1.5),

@@ -219,9 +219,9 @@ class TradeEvent:
     agent1_id: str
     agent2_id: str
     proposer_id: str  # Critical for Rubinstein comparison
-    pre_endowments: tuple[
+    pre_holdings: tuple[
         tuple[float, float], tuple[float, float]
-    ]  # (agent1, agent2)
+    ]  # (agent1, agent2) holdings before trade
     post_allocations: tuple[
         tuple[float, float], tuple[float, float]
     ]  # (agent1, agent2)
@@ -234,7 +234,7 @@ class TradeEvent:
             "agent1_id": self.agent1_id,
             "agent2_id": self.agent2_id,
             "proposer_id": self.proposer_id,
-            "pre_endowments": [list(e) for e in self.pre_endowments],
+            "pre_holdings": [list(h) for h in self.pre_holdings],
             "post_allocations": [list(a) for a in self.post_allocations],
             "utilities": list(self.utilities),
             "gains": list(self.gains),
@@ -247,7 +247,7 @@ class TradeEvent:
             agent1_id=d["agent1_id"],
             agent2_id=d["agent2_id"],
             proposer_id=d["proposer_id"],
-            pre_endowments=tuple(tuple(e) for e in d["pre_endowments"]),
+            pre_holdings=tuple(tuple(h) for h in d["pre_holdings"]),
             post_allocations=tuple(tuple(a) for a in d["post_allocations"]),
             utilities=tuple(d["utilities"]),
             gains=tuple(d["gains"]),

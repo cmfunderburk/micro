@@ -26,7 +26,6 @@ from microecon.bargaining import (
 )
 from microecon.matching import (
     OpportunisticMatchingProtocol,
-    StableRoommatesMatchingProtocol,
     MatchingProtocol,
 )
 from microecon.logging import SimulationLogger, SimulationConfig
@@ -284,13 +283,6 @@ def compare_protocols(
         config,
         bargaining_protocol=RubinsteinBargainingProtocol(),
         matching_protocol=OpportunisticMatchingProtocol(),
-    )
-
-    # Nash bargaining with stable roommates matching
-    results['nash_stable'] = run_market_emergence(
-        config,
-        bargaining_protocol=NashBargainingProtocol(),
-        matching_protocol=StableRoommatesMatchingProtocol(),
     )
 
     return results

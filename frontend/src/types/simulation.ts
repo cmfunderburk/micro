@@ -50,8 +50,8 @@ export interface Trade {
   agent2_id: string;
   alpha1: number;
   alpha2: number;
-  pre_endowment_1: [number, number];
-  pre_endowment_2: [number, number];
+  pre_holdings_1: [number, number];
+  pre_holdings_2: [number, number];
   post_allocation_1: [number, number];
   post_allocation_2: [number, number];
   gains: [number, number];

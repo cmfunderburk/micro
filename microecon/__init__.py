@@ -34,8 +34,6 @@ from microecon.bargaining import (
 from microecon.matching import (
     MatchingProtocol,
     OpportunisticMatchingProtocol,
-    StableRoommatesMatchingProtocol,
-    CommitmentState,
 )
 from microecon.simulation import Simulation, create_simple_economy
 from microecon.actions import (
@@ -108,8 +106,6 @@ __all__ = [
     # Matching protocols (institutional abstraction)
     "MatchingProtocol",
     "OpportunisticMatchingProtocol",
-    "StableRoommatesMatchingProtocol",
-    "CommitmentState",
     # Simulation
     "Simulation",
     "create_simple_economy",

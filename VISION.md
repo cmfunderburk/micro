@@ -78,6 +78,18 @@ Traditional theory often buries institutional assumptions (frictionless search, 
 
 This is a consequence of the architecture, not its primary purpose. The primary purpose is giving decision theory and game theory computational form.
 
+**Emergent Network Structure**
+
+Agent interactions produce network structure: who trades with whom, who has interacted, who observes whom. This emergent structure is itself an outcome of institutional choices—a dependent variable, not a primitive.
+
+Jackson's *Social and Economic Networks* provides the analytical framework:
+
+- **Descriptive tools**: Degree distributions, clustering coefficients, centrality measures, path lengths—vocabulary for characterizing emergent patterns
+- **Theoretical predictions**: What network structures emerge from strategic behavior? Pairwise stability, efficiency, the tension between them
+- **Implications of structure**: How network topology affects diffusion, learning, and welfare
+
+The research question extends: same agents, different institution → different emergent network → different aggregate properties. Network analysis complements welfare comparisons as a way of understanding institutional effects.
+
 ---
 
 ## 5. Scope
@@ -97,11 +109,11 @@ The practical boundary is complexity: some phenomena require substantial infrast
 ## 6. Document Hierarchy
 
 - **VISION.md** (this document): Identity, methodology, theoretical grounding
-- **theoretical-foundations.md**: Detailed mappings to primary sources (Kreps, O&R, CPT)
+- **theoretical-foundations.md**: Detailed mappings to primary sources (Kreps, O&R, CPT, Jackson)
 - **STATUS.md**: Current implementation state
 - **CLAUDE.md**: Development conventions
 
 ---
 
-**Document Version:** 2.0
-**Updated:** 2026-01-11
+**Document Version:** 2.1
+**Updated:** 2026-01-12

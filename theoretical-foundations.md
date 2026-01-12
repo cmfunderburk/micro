@@ -15,6 +15,7 @@ Reference document mapping canonical microeconomic theory to concepts used in th
 | Osborne & Rubinstein, *Bargaining and Markets* (1990) | **O&R-B** | Bilateral bargaining: axiomatic and strategic approaches |
 | Osborne & Rubinstein, *A Course in Game Theory* (1994) | **O&R-G** | Game theory foundations: Nash, extensive form, repeated games |
 | Jaffe, Minton, Mulligan & Murphy, *Chicago Price Theory* (2019) | **CPT** | Applied price theory: market equilibrium, factor markets, durable goods |
+| Jackson, *Social and Economic Networks* (2008) | **Jackson** | Network formation, network games, diffusion, social learning |
 
 **Note on CPT:** Chicago Price Theory explicitly distinguishes itself from "microeconomics" as typically taught. Where Kreps and O&R provide rigorous theoretical foundations (axiomatic utility, game-theoretic equilibrium), CPT emphasizes the scope and practical capabilities of price-theoretic analysis: market equilibrium, competitive analysis, incidence, and measurement. It complements the formal theory with applied intuition and empirical orientation.
 
@@ -164,6 +165,26 @@ PDF files for primary sources are located in `references/`:
 | `99-bibliography.pdf` | Bibliography |
 | `99-index.pdf` | Index |
 
+### Jackson: Social and Economic Networks
+
+`references/jackson-social-economic-networks/`
+
+| File | Content |
+|------|---------|
+| `01-introduction.pdf` | Ch 1: Introduction |
+| `02-representing-measuring-networks.pdf` | Ch 2: Representing and Measuring Networks |
+| `03-empirical-background.pdf` | Ch 3: Empirical Background on Social and Economic Networks |
+| `04-random-graph-models.pdf` | Ch 4: Random Graph-Based Models of Networks |
+| `05-growing-random-networks.pdf` | Ch 5: Growing Random Networks |
+| `06-strategic-network-formation.pdf` | Ch 6: Strategic Network Formation |
+| `07-diffusion-through-networks.pdf` | Ch 7: Diffusion through Networks |
+| `08-learning-and-networks.pdf` | Ch 8: Learning and Networks |
+| `09-decisions-behavior-games.pdf` | Ch 9: Decisions, Behavior, and Games on Networks |
+| `10-networked-markets.pdf` | Ch 10: Networked Markets |
+| `11-game-theoretic-network-formation.pdf` | Ch 11: Game-Theoretic Modeling of Network Formation |
+| `12-allocation-rules-cooperative-games.pdf` | Ch 12: Allocation Rules, Networks, and Cooperative Games |
+| `13-observing-measuring-social-interaction.pdf` | Ch 13: Observing and Measuring Social Interaction |
+
 ---
 
 ## Chapter Indices
@@ -263,6 +284,41 @@ PDF files for primary sources are located in `references/`:
 | 18 | Technological Progress and Capital-Income Tax Incidence |
 | 19 | Factor-Biased Technological Progress and Factor Shares |
 | 20 | Investments in Health and the Value of a Statistical Life |
+
+### Jackson: Social and Economic Networks
+
+**Part I: Background and Fundamentals**
+
+| Chapter | Title |
+|---------|-------|
+| 1 | Introduction |
+| 2 | Representing and Measuring Networks |
+| 3 | Empirical Background on Social and Economic Networks |
+
+**Part II: Models of Network Formation**
+
+| Chapter | Title |
+|---------|-------|
+| 4 | Random Graph-Based Models of Networks |
+| 5 | Growing Random Networks |
+| 6 | Strategic Network Formation |
+
+**Part III: Implications of Network Structure**
+
+| Chapter | Title |
+|---------|-------|
+| 7 | Diffusion through Networks |
+| 8 | Learning and Networks |
+| 9 | Decisions, Behavior, and Games on Networks |
+| 10 | Networked Markets |
+
+**Part IV: Methods, Tools, and Empirical Analysis**
+
+| Chapter | Title |
+|---------|-------|
+| 11 | Game-Theoretic Modeling of Network Formation |
+| 12 | Allocation Rules, Networks, and Cooperative Games |
+| 13 | Observing and Measuring Social Interaction |
 
 ---
 
@@ -402,6 +458,54 @@ PDF files for primary sources are located in `references/`:
 1. **Gale-Shapley (1962):** Deferred acceptance yields stable matching
 2. **Roth (1982):** DA is strategy-proof for proposing side
 3. **Law of one price:** Under sufficient competition, prices converge
+
+---
+
+### Networks
+
+| Topic | Source | Reference |
+|-------|--------|-----------|
+| Network representation (graphs, adjacency) | Jackson | Ch 2.1 |
+| Degree distributions | Jackson | Ch 2.2, 3.2.3 |
+| Clustering and transitivity | Jackson | Ch 2.2.3, 3.2.2 |
+| Centrality measures | Jackson | Ch 2.2.4 |
+| Small worlds | Jackson | Ch 3.2.1, 4.1.2 |
+| Homophily | Jackson | Ch 3.2.6 |
+| Strength of weak ties | Jackson | Ch 3.2.7 |
+| Random graph models (Erdős-Rényi) | Jackson | Ch 4.1.1 |
+| Configuration model | Jackson | Ch 4.1.4 |
+| Giant components, phase transitions | Jackson | Ch 4.2.2-4.2.4 |
+| Preferential attachment | Jackson | Ch 5.2 |
+| Pairwise stability | Jackson | Ch 6.1 |
+| Efficient networks | Jackson | Ch 6.2 |
+| Stability vs. efficiency tension | Jackson | Ch 6.6 |
+| Diffusion and contagion | Jackson | Ch 7.2 |
+| SIR/SIS models | Jackson | Ch 7.2.3-7.2.5 |
+| Network navigation and search | Jackson | Ch 7.3 |
+| Social learning (DeGroot model) | Jackson | Ch 8.3 |
+| Bayesian learning on networks | Jackson | Ch 8.2 |
+| Graphical games | Jackson | Ch 9.2 |
+| Strategic complements/substitutes | Jackson | Ch 9.3.2 |
+| Network games equilibria | Jackson | Ch 9.3.3, 9.7 |
+| Networked labor markets | Jackson | Ch 10.2 |
+| Bilateral trading on networks | Jackson | Ch 10.3.2 |
+| Myerson value | Jackson | Ch 12.2.1, 12.3.5 |
+| Core in network settings | Jackson | Ch 12.4.2 |
+
+**Key concepts:**
+
+1. **Pairwise Stability:** A network is pairwise stable if no player wants to delete a link, and no pair of players both want to add a link between them. (Jackson Ch 6.1)
+
+2. **Efficiency vs. Stability:** Under general conditions, efficient networks need not be pairwise stable, and pairwise stable networks need not be efficient—network externalities create fundamental tensions. (Jackson Ch 6.6)
+
+3. **DeGroot Learning:** Agents update beliefs by weighted averaging of neighbors' opinions; convergence to consensus depends on network structure (aperiodicity, strong connectedness). (Jackson Ch 8.3)
+
+4. **Graphical Games:** Games where player payoffs depend only on neighbors' actions; network structure determines equilibrium existence and computation. (Jackson Ch 9.2)
+
+**Key theorems:**
+1. **Phase transition (Erdős-Rényi):** Giant component emerges when average degree exceeds 1
+2. **Myerson (1977):** Unique allocation rule satisfying component balance and equal bargaining power
+3. **Jackson-Wolinsky (1996):** No anonymous, component-balanced allocation rule guarantees efficient pairwise stable networks
 
 ---
 

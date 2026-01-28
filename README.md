@@ -1,8 +1,8 @@
 # microecon
 
-Research-first agent-based microeconomics platform that gives canonical theoretical microeconomics computational form.
+Research-first agent-based microeconomics platform that gives canonical theoretical microeconomics computational form. Extremely early-stage development.
 
-## Core Insight
+## Goals
 
 **Institutional visibility**: making economic institutions (bargaining protocols, information structures, search mechanisms) explicit, configurable, and comparable.
 

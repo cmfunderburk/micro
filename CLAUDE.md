@@ -268,7 +268,7 @@ All behavioral rules, bargaining protocols, and institutional mechanisms must ha
 1. **VISION.md** - Authoritative on identity, scope, methodology
 2. **STATUS.md** - Current capabilities and known limitations (what exists today)
 3. **theoretical-foundations.md** - Textbook mappings and derivations
-4. **VISUALIZATION.md** - Full visualization design vision (UI/UX, technology choices, future features)
+4. **docs/current/AGENT-ARCHITECTURE.md** - Authoritative architecture and tick semantics
 5. **CLAUDE.md** - Development guidance and conventions
 
 ## Next Development Directions

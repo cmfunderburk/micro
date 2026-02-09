@@ -62,15 +62,17 @@ Agents with different alpha values and complementary endowments have potential g
 
 ### Protocols
 
-The platform supports swappable institutional rules:
+The platform supports explicit institutional rules:
 
 **Bargaining Protocols**:
 - `NashBargainingProtocol`: Axiomatic solution maximizing Nash product (symmetric, fair)
 - `RubinsteinBargainingProtocol`: Strategic alternating-offers (first-mover advantage, patience matters)
+- `AsymmetricNashBargainingProtocol`: Nash-style solution with agent-specific bargaining power
+- `TIOLIBargainingProtocol`: Take-it-or-leave-it offer structure
 
-**Matching Protocols**:
-- `OpportunisticMatchingProtocol`: Any co-located pair can trade (myopic)
-- `StableRoommatesMatchingProtocol`: Irving's algorithm forms stable pairs (globally optimal)
+**Matching/Clearing**:
+- Matching is currently action-driven and embedded in simulation execution (propose/evaluate/accept-reject flow).
+- A standalone, swappable matching protocol abstraction is planned but not yet implemented.
 
 ### Information Environments
 
@@ -80,10 +82,10 @@ The platform supports swappable institutional rules:
 ### Simulation Loop
 
 Each tick follows four phases:
-1. **Search**: Agents evaluate visible targets and compute expected surplus
-2. **Movement**: Agents move toward best opportunity
-3. **Matching**: Protocol determines trading pairs
-4. **Exchange**: Pairs bargain and trade
+1. **Pre-tick maintenance**: Cooldowns decrement
+2. **Perceive**: Agents evaluate visible targets under the information environment
+3. **Decide**: Agents choose actions (`Move`, `Propose`, `Wait`)
+4. **Execute**: Proposals are resolved, accepted trades bargain and settle, then fallback/movement actions run
 
 ## Examples
 
@@ -178,9 +180,9 @@ microecon/               # Core simulation library (Python)
     grid.py              # Spatial grid and positions
     information.py       # Information environment abstraction
     beliefs.py           # Agent beliefs and learning
-    bargaining.py        # Bargaining protocols (Nash, Rubinstein)
+    bargaining.py        # Bargaining protocols (Nash, Rubinstein, ANash, TIOLI)
     search.py            # Target evaluation and movement
-    matching.py          # Matching protocols
+    matching.py          # Historical note; matching now handled in action execution
     simulation.py        # Main simulation engine
     batch.py             # Parameter sweeps
     logging/             # Run capture and replay
@@ -216,10 +218,11 @@ uv run pytest tests/test_simulation.py -v
 
 ## Documentation
 
-- [VISION.md](VISION.md): Project identity, methodology, research agenda
-- [STATUS.md](STATUS.md): Current capabilities and known limitations
-- [theoretical-foundations.md](theoretical-foundations.md): Textbook mappings and derivations
-- [CLAUDE.md](CLAUDE.md): Development guidance
+- [VISION.md](VISION.md): source-of-truth project identity, scope, and principles
+- [docs/current/AGENT-ARCHITECTURE.md](docs/current/AGENT-ARCHITECTURE.md): source-of-truth architecture and tick semantics
+- [STATUS.md](STATUS.md): capabilities, limitations, and implementation status
+- [theoretical-foundations.md](theoretical-foundations.md): theoretical grounding and mappings
+- [docs/current/README.md](docs/current/README.md): active-doc index and archive pointer
 
 ## Platform Support
 

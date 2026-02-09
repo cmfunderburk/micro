@@ -1,119 +1,103 @@
-# Microecon Platform: Vision
+# Microecon Platform Vision
 
-**Status:** Authoritative foundational document
-**Purpose:** Define the identity, methodology, and theoretical grounding of the platform
+**Status:** Source of truth  
+**Last Updated:** 2026-02-09
 
----
+## 1. Purpose
+Microecon is a research platform for computational microeconomics.
 
-## 1. What This Is
+The project goal is to make institutional assumptions explicit, configurable, and testable in simulation:
+- same agents
+- same endowments
+- same environment
+- different institutional rules
+- different observed outcomes
 
-A research framework and platform for simulating and visualizing economic agents on a spatial grid.
+Core research question:
 
-**Individual decisions** follow decision theory (Kreps I): agents have preferences, face constraints, and optimize. This need not be "pure" rationality—prospect theory, bounded rationality, and learning rules are all mathematically specifiable within this framework.
+**What difference does the institution make?**
 
-**Coordination** follows game theory (Kreps II, O&R): when agents must coordinate with others—bargaining, matching, any N-agent interaction—the interaction is governed by game-theoretic mechanisms with known equilibrium properties.
+## 2. Theoretical Position
+The platform is grounded in three layers:
 
-**Applied orientation** draws from Chicago Price Theory (CPT): while CPT largely takes price-taking and equilibrium as given (not "agent-based" in our sense), it demonstrates the empirical richness of price-theoretic analysis across domains—market equilibrium, factor markets, durable goods, health, addiction, crime. CPT provides guidance for what the general approach can illuminate.
+1. **Decision-theoretic agents**
+- Agents have preferences, constraints, and a decision procedure.
+- Rationality level is a model variable (fully rational, bounded, heuristic, learning).
 
-The platform gives these theoretical foundations computational form through simulation.
+2. **Game-theoretic interaction mechanisms**
+- Coordination and exchange are governed by explicit mechanisms.
+- Mechanisms should map to known theoretical objects where possible.
 
----
+3. **Applied microeconomic interpretation**
+- Results are analyzed in welfare, efficiency, distribution, and network terms.
+- The platform prioritizes interpretable mechanism comparisons over black-box behavior.
 
-## 2. Theoretical Architecture
+## 3. Platform Identity
+This is not a generic ABM sandbox.
 
-### Layer 1: Individual Decision-Making
+It is a mechanism-comparison laboratory for microeconomic institutions, centered on:
+- bargaining rules
+- matching/clearing rules
+- information regimes
+- search frictions and transaction costs
 
-Agents are autonomous decision-makers who optimize subject to constraints. The formal foundations come from decision theory:
+## 4. Current Scope
+Current implemented domain:
+- two-good exchange economy
+- bilateral trade
+- spatial search on discrete grid
+- action-based tick model
+- protocol-comparison workflows via tests, analysis, and web UI
 
-- Preference axioms (completeness, transitivity, continuity)
-- Choice under uncertainty (expected utility, or alternatives like prospect theory)
-- Constrained optimization
+Current implemented institutional flexibility:
+- bargaining: Nash, Rubinstein (BRW mapping), Asymmetric Nash, TIOLI
+- information: full and noisy-alpha observation
+- decision procedure: rational baseline with opportunity-cost acceptance logic
 
-An agent's "type" in game-theoretic terms derives from attributes (preferences, endowments, patience, beliefs) plus the information environment—it is not primitive.
+## 5. Direction of Expansion
+Priority expansion areas:
+1. Make matching/clearing as explicit and swappable as bargaining.
+2. Strengthen benchmark interpretation (e.g., equilibrium/reference comparisons).
+3. Move from finite exchange episodes toward sustained economies (consumption/replenishment loops).
+4. Increase belief/information causality in decisions and acceptance behavior.
 
-### Layer 2: Strategic Interaction
+## 6. Design Principles
+1. **Institutional visibility over hidden assumptions**
+- Rules must be explicit in code and configuration.
 
-When multiple agents interact, coordination problems arise. Game theory provides the analytical tools:
+2. **Comparability by construction**
+- Hold initial conditions fixed across institutional variants.
 
-- **Bargaining**: Nash axiomatic solution, Rubinstein alternating-offers, take-it-or-leave-it
-- **Matching**: Bilateral proposal/acceptance, search with frictions
-- **General mechanisms**: Any N-agent interaction with strategic interdependence
+3. **Theory-linked implementation**
+- Prefer constructs with clear micro/game-theory interpretation.
 
-These mechanisms have known equilibrium characterizations. The platform implements them as configurable modules, enabling comparison: same agents, different coordination rules, different outcomes.
+4. **Determinism and reproducibility**
+- Seeded runs and deterministic tie-breaking where practical.
 
-### Layer 3: Applied Analysis
+5. **Analysis-first instrumentation**
+- Logging and metrics are first-class, not an afterthought.
 
-Chicago Price Theory demonstrates the scope of price-theoretic reasoning:
+6. **Separation of normative docs**
+- Vision and architecture documents define intent and model semantics.
+- Time-stamped reviews/chats are reference artifacts and should be archived.
 
-- Market equilibrium and competitive analysis
-- Factor markets and derived demand
-- Durable goods and intertemporal choice
-- Extensions to "non-market" domains (health, addiction, crime, family)
+## 7. Non-Goals (For Now)
+- Macroeconomic calibration or policy forecasting.
+- High-frequency/continuous-time market microstructure realism.
+- Domain-specific production sectors with heavy empirical calibration.
 
-CPT's role is not to provide rigorous foundations (that's Kreps/O&R) but to show what questions the framework can address and how to reason about empirical phenomena.
+## 8. Success Criteria
+The platform is successful when it can reliably support:
+- controlled institutional A/B comparisons
+- theory-consistent behavior in core mechanisms
+- interpretable, reproducible outputs
+- efficient reorientation for new work without document ambiguity
 
----
+## 9. Documentation Hierarchy
+Primary active documents:
+1. `VISION.md` (this file): identity, scope, and design principles
+2. `docs/current/AGENT-ARCHITECTURE.md`: implemented architecture and invariants
+3. `STATUS.md`: operational capabilities and known limitations
+4. `theoretical-foundations.md`: theory mappings and references
 
-## 3. Spatial Representation
-
-Agents operate on a 2D grid. This representation:
-
-- Makes search costs concrete (movement = ticks)
-- Gives information structure spatial form (visibility radius, local observation)
-- Enables visualization of emergent patterns (clustering, trade networks, market formation)
-
-The grid is the current representation. It may expand to other topologies (networks, continuous space) as research needs evolve. The core decision/game-theoretic architecture is representation-independent.
-
----
-
-## 4. Institutional Visibility
-
-Making coordination mechanisms explicit has a methodological payoff: **institutions become visible and comparable**.
-
-Traditional theory often buries institutional assumptions (frictionless search, costless information, implicit market clearing). By implementing mechanisms as swappable modules, we can ask: *what difference does the institution make?*
-
-- Same preferences and endowments, different bargaining protocol → different surplus division
-- Same agents, different information structure → different equilibrium behavior
-- Same environment, different matching mechanism → different efficiency
-
-This is a consequence of the architecture, not its primary purpose. The primary purpose is giving decision theory and game theory computational form.
-
-**Emergent Network Structure**
-
-Agent interactions produce network structure: who trades with whom, who has interacted, who observes whom. This emergent structure is itself an outcome of institutional choices—a dependent variable, not a primitive.
-
-Jackson's *Social and Economic Networks* provides the analytical framework:
-
-- **Descriptive tools**: Degree distributions, clustering coefficients, centrality measures, path lengths—vocabulary for characterizing emergent patterns
-- **Theoretical predictions**: What network structures emerge from strategic behavior? Pairwise stability, efficiency, the tension between them
-- **Implications of structure**: How network topology affects diffusion, learning, and welfare
-
-The research question extends: same agents, different institution → different emergent network → different aggregate properties. Network analysis complements welfare comparisons as a way of understanding institutional effects.
-
----
-
-## 5. Scope
-
-The platform addresses phenomena tractable within the microeconomic tradition:
-
-- Exchange and bilateral bargaining
-- Search and matching markets
-- Information asymmetry, signaling, screening
-- Production and factor markets
-- Extensions in the Chicago tradition (human capital, health, etc.)
-
-The practical boundary is complexity: some phenomena require substantial infrastructure. The platform grows toward comprehensiveness but remains anchored in the theoretical foundations.
-
----
-
-## 6. Document Hierarchy
-
-- **VISION.md** (this document): Identity, methodology, theoretical grounding
-- **theoretical-foundations.md**: Detailed mappings to primary sources (Kreps, O&R, CPT, Jackson)
-- **STATUS.md**: Current implementation state
-- **CLAUDE.md**: Development conventions
-
----
-
-**Document Version:** 2.1
-**Updated:** 2026-01-12
+Historical, exploratory, and date-stamped docs belong in `.archived/`.

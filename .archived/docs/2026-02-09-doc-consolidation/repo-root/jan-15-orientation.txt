@@ -1,0 +1,110 @@
+
+ ▐▛███▜▌   Claude Code v2.1.7
+▝▜█████▛▘  Opus 4.5 · Claude Max
+  ▘▘ ▝▝    ~/Work/microecon
+
+❯ @docs/current/ I've taken a few days off, and need help getting           
+  reoriented to the work. no code edits this session, let's just take a big 
+  picture review of where we're at and what needs work                      
+  ⎿  Listed directory docs/current/
+
+● Let me read through the key docs to help you get reoriented.
+
+● Read(docs/current/PROJECT-REVIEW-2026-01-10.md)
+  ⎿  Read 223 lines
+
+● Read(docs/current/ROADMAP.md)
+  ⎿  Read 958 lines
+
+● Read(docs/current/IMPLEMENTED-ARCHITECTURE.md)
+  ⎿  Read 300 lines
+
+● Let me also check the current STATUS.md and VISION.md to complete the picture.
+
+● Read(STATUS.md)
+  ⎿  Read 533 lines
+
+● Read(VISION.md)
+  ⎿  Read 120 lines
+
+● Now I have the full picture. Here's your reorientation summary:
+
+  ---
+  Project Status Summary
+
+  What's Built (v0.4.0, as of Jan 10)
+
+  Core Simulation — Complete and working:
+  - 3-phase tick model (Perceive → Decide → Execute)
+  - 4 bargaining protocols: Nash, Rubinstein, Asymmetric Nash, TIOLI
+  - Agent belief system with memory, type beliefs, Bayesian/heuristic updates
+  - Information environments (FullInformation, NoisyAlphaInformation)
+  - Bilateral matching via propose/accept/reject actions
+  - 716 tests including theory verification
+
+  Web Frontend — Feature-complete:
+  - React/Vite + FastAPI/WebSocket
+  - Comparison mode (dual grids, same seed, different protocols)
+  - Replay mode, agent perspective mode, Edgeworth box inspection
+  - Export (PNG/SVG/GIF/CSV/JSON)
+  - Trade network panel, belief visualization
+
+  ---
+  Where the Work Left Off
+
+  The Jan 10 Project Review identified:
+
+  Document Issues (minor cleanup):
+  1. Three docs describe agent architecture with minor inconsistencies (AGENT-ARCHITECTURE.md, ROADMAP.md §2, IMPLEMENTED-ARCHITECTURE.md)
+  2. ROADMAP.md §2.13 describes simpler acceptance rule than what's implemented (implementation uses opportunity-cost comparison, which is correct)
+  3. §7.3 discusses StableRoommates deprecation but it was never implemented
+
+  Recommended Next Steps (from review):
+  Priority: 1
+  Work: Doc consolidation
+  Notes: Delete AGENT-ARCHITECTURE.md, update ROADMAP.md
+  ────────────────────────────────────────
+  Priority: 2
+  Work: Complete Phase A protocols
+  Notes: Kalai-Smorodinsky + Nash Demand Game
+  ────────────────────────────────────────
+  Priority: 3
+  Work: Market emergence analysis
+  Notes: Walrasian benchmarks, emergence metrics
+  ────────────────────────────────────────
+  Priority: Later
+  Work: Phase B (sustained economy)
+  Notes: Metabolism, resource nodes — larger effort
+  ---
+  The Big Picture
+
+  Core research question: "What difference does the institution make?"
+
+  You have infrastructure that lets you:
+  - Run same agents under different bargaining protocols
+  - Compare welfare, efficiency, trade patterns
+  - Visualize side-by-side with comparison mode
+
+  What's missing to complete Phase A:
+  - Kalai-Smorodinsky protocol (alternative fairness concept to Nash)
+  - Nash Demand Game (simultaneous demands, coordination failure possible)
+
+  What's missing for sustained economies (Phase B):
+  - Metabolism (holdings deplete each tick)
+  - Resource nodes (gathering mechanics)
+  - Without these, simulation converges to Pareto-optimal allocation and stops
+
+  ---
+  Quick Decision Points
+
+  1. Doc cleanup first? Minor friction, but not blocking anything
+  2. Add K-S and Nash Demand? Contained scope, extends protocol comparison capability
+  3. Market emergence analysis pipeline? Compute Walrasian equilibrium as benchmark
+  4. Jump to Phase B? Bigger lift but unlocks sustained exchange dynamics
+
+  What direction interests you most?
+
+✻ Baked for 39s
+
+
+

@@ -4,7 +4,7 @@
 **Date:** 2026-01-10
 **Purpose:** Definitive reference for current capabilities
 
-This document describes what exists and works today. For the long-term vision, see VISION.md. For the full visualization design, see VISUALIZATION.md.
+This document describes what exists and works today. For the long-term vision, see VISION.md. For implementation semantics, see docs/current/AGENT-ARCHITECTURE.md.
 
 ---
 
@@ -405,7 +405,7 @@ uv run pytest --cov=microecon
 | Agent beliefs and learning | **Implemented** (type beliefs, memory, belief updates during trade) |
 | Market emergence metrics | **Implemented** (trade networks, welfare efficiency, spatial clustering) |
 
-### vs VISUALIZATION.md
+### vs Archived Visualization Specifications
 
 | Design Element | Status |
 |----------------|--------|

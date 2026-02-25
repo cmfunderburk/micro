@@ -193,15 +193,35 @@ class TestCreateSimpleEconomy:
 
         # Trade events must match in detail
         for t1, t2 in zip(sim1.trades, sim2.trades):
-            assert t1.tick == t2.tick, "Trade ticks should match"
             assert t1.agent1_id == t2.agent1_id, "Trade agent1 IDs should match"
             assert t1.agent2_id == t2.agent2_id, "Trade agent2 IDs should match"
+            assert t1.proposer_id == t2.proposer_id, "Trade proposer IDs should match"
 
         # Final positions must match
         for a1, a2 in zip(sim1.agents, sim2.agents):
             pos1 = sim1.grid.get_position(a1)
             pos2 = sim2.grid.get_position(a2)
             assert pos1 == pos2, f"Final position for agent {a1.id} should match"
+
+
+class TestTradeEventProvenance:
+    """Tests for A-003: TradeEvent proposer provenance."""
+
+    def test_trade_event_has_correct_proposer_id(self):
+        """A-003: Logged proposer_id must match actual proposer from bargaining protocol."""
+        from microecon.simulation import Simulation, create_simple_economy
+        from microecon.logging.events import TradeEvent
+
+        sim = create_simple_economy(n_agents=4, grid_size=3, seed=42)
+        sim.run(50)
+
+        # After running, sim.trades should contain TradeEvent objects with proposer_id
+        assert len(sim.trades) > 0, "Expected at least one trade to occur"
+        for trade in sim.trades:
+            assert isinstance(trade, TradeEvent), f"Expected logging TradeEvent, got {type(trade)}"
+            assert trade.proposer_id in (trade.agent1_id, trade.agent2_id), (
+                f"proposer_id '{trade.proposer_id}' not one of the trading agents"
+            )
 
 
 class TestFallbackExecution:

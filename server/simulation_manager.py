@@ -109,6 +109,7 @@ class SimulationInstance:
     simulation: Simulation
     config: SimulationConfig
     _initial_welfare: float = 0.0
+    _prev_trade_count: int = 0
 
     def get_tick_data(self) -> dict[str, Any]:
         """Get current tick data for this simulation."""
@@ -166,24 +167,23 @@ class SimulationInstance:
 
         trades = []
         agent_by_id = {a.id: a for a in sim.agents}
-        for trade in sim.trades:
-            if trade.tick == sim.tick:
-                agent1 = agent_by_id.get(trade.agent1_id)
-                agent2 = agent_by_id.get(trade.agent2_id)
-                alpha1 = agent1.preferences.alpha if agent1 else 0.5
-                alpha2 = agent2.preferences.alpha if agent2 else 0.5
-                trades.append({
-                    "tick": trade.tick,
-                    "agent1_id": trade.agent1_id,
-                    "agent2_id": trade.agent2_id,
-                    "alpha1": alpha1,
-                    "alpha2": alpha2,
-                    "pre_holdings_1": list(trade.pre_holdings_1),
-                    "pre_holdings_2": list(trade.pre_holdings_2),
-                    "post_allocation_1": [trade.outcome.allocation_1.x, trade.outcome.allocation_1.y],
-                    "post_allocation_2": [trade.outcome.allocation_2.x, trade.outcome.allocation_2.y],
-                    "gains": [trade.outcome.gains_1, trade.outcome.gains_2],
-                })
+        for trade in sim.trades[self._prev_trade_count:]:
+            agent1 = agent_by_id.get(trade.agent1_id)
+            agent2 = agent_by_id.get(trade.agent2_id)
+            alpha1 = agent1.preferences.alpha if agent1 else 0.5
+            alpha2 = agent2.preferences.alpha if agent2 else 0.5
+            trades.append({
+                "tick": sim.tick,
+                "agent1_id": trade.agent1_id,
+                "agent2_id": trade.agent2_id,
+                "alpha1": alpha1,
+                "alpha2": alpha2,
+                "pre_holdings_1": list(trade.pre_holdings[0]),
+                "pre_holdings_2": list(trade.pre_holdings[1]),
+                "post_allocation_1": list(trade.post_allocations[0]),
+                "post_allocation_2": list(trade.post_allocations[1]),
+                "gains": list(trade.gains),
+            })
 
         return {
             "sim_id": self.sim_id,
@@ -330,6 +330,7 @@ class SimulationManager:
     tick_callbacks: list[Callable[[dict[str, Any]], None]] = field(default_factory=list)
     _run_task: asyncio.Task | None = field(default=None, repr=False)
     _initial_welfare: float = 0.0
+    _prev_trade_count: int = 0
 
     # Multi-simulation support for comparison mode
     _simulations: dict[str, SimulationInstance] = field(default_factory=dict)
@@ -406,12 +407,14 @@ class SimulationManager:
         if self.comparison_mode:
             all_trades = []
             for inst in self._simulations.values():
+                inst._prev_trade_count = len(inst.simulation.trades)
                 trades = inst.simulation.step()
                 all_trades.extend(trades)
             return all_trades
         else:
             if self.simulation is None:
                 self.create_simulation()
+            self._prev_trade_count = len(self.simulation.trades)
             return self.simulation.step()
 
     def start(self) -> None:
@@ -493,24 +496,23 @@ class SimulationManager:
         trades = []
         # Build agent lookup for alpha values
         agent_by_id = {a.id: a for a in sim.agents}
-        for trade in sim.trades:
-            if trade.tick == sim.tick:
-                agent1 = agent_by_id.get(trade.agent1_id)
-                agent2 = agent_by_id.get(trade.agent2_id)
-                alpha1 = agent1.preferences.alpha if agent1 else 0.5
-                alpha2 = agent2.preferences.alpha if agent2 else 0.5
-                trades.append({
-                    "tick": trade.tick,
-                    "agent1_id": trade.agent1_id,
-                    "agent2_id": trade.agent2_id,
-                    "alpha1": alpha1,
-                    "alpha2": alpha2,
-                    "pre_holdings_1": list(trade.pre_holdings_1),
-                    "pre_holdings_2": list(trade.pre_holdings_2),
-                    "post_allocation_1": [trade.outcome.allocation_1.x, trade.outcome.allocation_1.y],
-                    "post_allocation_2": [trade.outcome.allocation_2.x, trade.outcome.allocation_2.y],
-                    "gains": [trade.outcome.gains_1, trade.outcome.gains_2],
-                })
+        for trade in sim.trades[self._prev_trade_count:]:
+            agent1 = agent_by_id.get(trade.agent1_id)
+            agent2 = agent_by_id.get(trade.agent2_id)
+            alpha1 = agent1.preferences.alpha if agent1 else 0.5
+            alpha2 = agent2.preferences.alpha if agent2 else 0.5
+            trades.append({
+                "tick": sim.tick,
+                "agent1_id": trade.agent1_id,
+                "agent2_id": trade.agent2_id,
+                "alpha1": alpha1,
+                "alpha2": alpha2,
+                "pre_holdings_1": list(trade.pre_holdings[0]),
+                "pre_holdings_2": list(trade.pre_holdings[1]),
+                "post_allocation_1": list(trade.post_allocations[0]),
+                "post_allocation_2": list(trade.post_allocations[1]),
+                "gains": list(trade.gains),
+            })
 
         return {
             "tick": sim.tick,

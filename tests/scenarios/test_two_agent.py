@@ -204,7 +204,7 @@ class TestTwoAgentSymmetricScenario:
                 break
 
         assert len(sim.trades) == 1
-        assert sim.trades[0].outcome.trade_occurred
+        assert sim.trades[0].trade_occurred
 
     def test_allocation_matches_nash_solution(self, scenario):
         """Post-trade allocations should be (6, 6) for each."""
@@ -598,7 +598,7 @@ class TestTwoAgentAsymmetricScenario:
 
         trade = sim.trades[0]
         # Gains should be equal (mirror symmetry property)
-        assert trade.outcome.gains_1 == pytest.approx(trade.outcome.gains_2, rel=0.01)
+        assert trade.gains[0] == pytest.approx(trade.gains[1], rel=0.01)
 
     def test_pareto_efficiency(self, scenario):
         """Post-trade allocation should have equal MRS = 1.0."""
@@ -870,7 +870,7 @@ class TestRubinsteinProtocol:
 
         # Proposer (agent_a as initiator) should get more
         trade = trades[0]
-        assert trade.outcome.gains_1 > trade.outcome.gains_2
+        assert trade.gains[0] > trade.gains[1]
 
     def test_rubinstein_vs_nash_different_outcomes(self):
         """Rubinstein and Nash should produce different surplus distributions."""

@@ -19,6 +19,7 @@ from microecon.bundle import Bundle
 from microecon.grid import Grid, Position
 from microecon.information import InformationEnvironment, FullInformation
 from microecon.beliefs import record_trade_observation
+from microecon.logging.events import TradeEvent
 from microecon.bargaining import (
     BargainingOutcome,
     BargainingProtocol,
@@ -46,17 +47,6 @@ from microecon.decisions import (
 
 if TYPE_CHECKING:
     from microecon.logging import SimulationLogger
-
-
-@dataclass
-class TradeEvent:
-    """Record of a trade that occurred."""
-    tick: int
-    agent1_id: str
-    agent2_id: str
-    outcome: BargainingOutcome
-    pre_holdings_1: tuple[float, float]  # Agent 1's holdings before trade
-    pre_holdings_2: tuple[float, float]  # Agent 2's holdings before trade
 
 
 @dataclass
@@ -272,11 +262,10 @@ class Simulation:
 
         # Log the complete tick record
         if self.logger is not None:
-            trade_events_data = self._build_trade_events_data(tick_trades)
             self._log_tick(
                 search_decisions_data,
                 movement_events_data,
-                trade_events_data,
+                tick_trades,
                 [],  # No commitment events in new model
                 [],  # No commitment events in new model
             )
@@ -580,12 +569,17 @@ class Simulation:
 
         if outcome.trade_occurred:
             event = TradeEvent(
-                tick=self.tick,
                 agent1_id=agent1.id,
                 agent2_id=agent2.id,
-                outcome=outcome,
-                pre_holdings_1=pre_holdings1,
-                pre_holdings_2=pre_holdings2,
+                proposer_id=proposer.id,
+                pre_holdings=(pre_holdings1, pre_holdings2),
+                post_allocations=(
+                    (outcome.allocation_1.x, outcome.allocation_1.y),
+                    (outcome.allocation_2.x, outcome.allocation_2.y),
+                ),
+                utilities=(outcome.utility_1, outcome.utility_2),
+                gains=(outcome.gains_1, outcome.gains_2),
+                trade_occurred=outcome.trade_occurred,
             )
             self.trades.append(event)
 
@@ -614,31 +608,11 @@ class Simulation:
 
         return None
 
-    def _build_trade_events_data(
-        self,
-        tick_trades: list[TradeEvent],
-    ) -> list[tuple]:
-        """Build trade events data for logging."""
-        trade_events_data = []
-        for event in tick_trades:
-            trade_events_data.append((
-                event.agent1_id,
-                event.agent2_id,
-                event.agent1_id,  # proposer_id (simplified)
-                (event.pre_holdings_1, event.pre_holdings_2),
-                ((event.outcome.allocation_1.x, event.outcome.allocation_1.y),
-                 (event.outcome.allocation_2.x, event.outcome.allocation_2.y)),
-                (event.outcome.utility_1, event.outcome.utility_2),
-                (event.outcome.gains_1, event.outcome.gains_2),
-                event.outcome.trade_occurred,
-            ))
-        return trade_events_data
-
     def _log_tick(
         self,
         search_decisions_data: list,
         movement_events_data: list,
-        trade_events_data: list,
+        trade_events: list[TradeEvent],
         commitments_formed_data: list[tuple[str, str]],
         commitments_broken_data: list[tuple[str, str, str]],
     ) -> None:
@@ -651,7 +625,6 @@ class Simulation:
             create_search_decision,
             create_target_evaluation,
             create_movement_event,
-            create_trade_event,
             create_tick_record,
             TargetEvaluation,
         )
@@ -710,20 +683,8 @@ class Simulation:
             for agent_id, from_pos, to_pos, target_id, reason in movement_events_data
         ]
 
-        # Create trade events
-        trades = [
-            create_trade_event(
-                agent1_id=a1,
-                agent2_id=a2,
-                proposer_id=proposer,
-                pre_holdings=pre,
-                post_allocations=post,
-                utilities=utils,
-                gains=gains,
-                trade_occurred=occurred,
-            )
-            for a1, a2, proposer, pre, post, utils, gains, occurred in trade_events_data
-        ]
+        # Trade events are already canonical TradeEvent objects
+        trades = trade_events
 
         # Create commitment events
         commitments_formed = [
@@ -811,7 +772,7 @@ class Simulation:
     def welfare_gains(self) -> float:
         """Compute total gains from trade (sum of all trade surpluses)."""
         return sum(
-            trade.outcome.gains_1 + trade.outcome.gains_2
+            trade.gains[0] + trade.gains[1]
             for trade in self.trades
         )
 

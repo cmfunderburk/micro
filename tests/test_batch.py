@@ -197,6 +197,21 @@ class TestRunComparison:
                 assert r.log_path is not None
 
 
+def test_batch_run_does_not_mutate_global_rng():
+    """A-005: Batch runs must not mutate global random state."""
+    import random
+
+    state_before = random.getstate()
+
+    runner = BatchRunner(
+        base_config={"n_agents": 4, "grid_size": 5, "seed": 42},
+    )
+    runner.run(ticks=5)
+
+    state_after = random.getstate()
+    assert state_before == state_after, "BatchRunner mutated global random state"
+
+
 class TestBatchRunnerParameterCombinations:
     """Test complex parameter combinations."""
 

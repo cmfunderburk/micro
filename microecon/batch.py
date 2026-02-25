@@ -9,8 +9,6 @@ from datetime import datetime
 from itertools import product
 from pathlib import Path
 from typing import Any, Iterator
-import random
-
 from microecon.simulation import Simulation, create_simple_economy
 from microecon.grid import Grid
 from microecon.information import (
@@ -129,9 +127,6 @@ class BatchRunner:
         bargaining_protocol = config.get("protocol", NashBargainingProtocol())
 
         # Create simulation using factory function but inject logger
-        if seed is not None:
-            random.seed(seed)
-
         sim = create_simple_economy(
             n_agents=n_agents,
             grid_size=grid_size,

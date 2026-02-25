@@ -786,6 +786,7 @@ def create_simple_economy(
     bargaining_protocol: Optional[BargainingProtocol] = None,
     decision_procedure: Optional[DecisionProcedure] = None,
     use_beliefs: bool = False,
+    info_env: Optional[InformationEnvironment] = None,
 ) -> Simulation:
     """
     Create a simple economy with heterogeneous agents.
@@ -806,6 +807,7 @@ def create_simple_economy(
         bargaining_protocol: Protocol for bilateral bargaining (default: Nash)
         decision_procedure: Procedure for agent action selection (default: Rational)
         use_beliefs: Enable belief system for agents (default: False)
+        info_env: Information environment (default: FullInformation)
 
     Returns:
         Configured Simulation ready to run
@@ -815,7 +817,7 @@ def create_simple_economy(
 
     sim = Simulation(
         grid=Grid(grid_size),
-        info_env=FullInformation(),
+        info_env=info_env or FullInformation(),
         bargaining_protocol=bargaining_protocol or NashBargainingProtocol(),
         decision_procedure=decision_procedure or RationalDecisionProcedure(),
         _rng=rng,

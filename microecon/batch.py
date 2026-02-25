@@ -126,6 +126,7 @@ class BatchRunner:
         discount_factor = config.get("discount_factor", 0.95)
         seed = config.get("seed")
         bargaining_protocol = config.get("protocol", NashBargainingProtocol())
+        info_env = config.get("info_env")
 
         # Create simulation using factory function but inject logger
         sim = create_simple_economy(
@@ -135,6 +136,7 @@ class BatchRunner:
             discount_factor=discount_factor,
             seed=seed,
             bargaining_protocol=bargaining_protocol,
+            info_env=info_env,
         )
 
         # Inject logger

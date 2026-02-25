@@ -9,6 +9,7 @@ from datetime import datetime
 from itertools import product
 from pathlib import Path
 from typing import Any, Iterator
+
 from microecon.simulation import Simulation, create_simple_economy
 from microecon.grid import Grid
 from microecon.information import (

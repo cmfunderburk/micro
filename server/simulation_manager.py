@@ -48,6 +48,9 @@ class SimulationConfig:
     # Bargaining power distribution (only used with asymmetric_nash)
     # Options: "uniform", "gaussian", "bimodal"
     bargaining_power_distribution: str = "uniform"
+    # Information environment configuration
+    info_env_name: str = "full"  # "full" or "noisy_alpha"
+    info_env_params: dict[str, Any] = field(default_factory=dict)
     # Optional: specific agents for scenario mode (overrides n_agents if provided)
     agents: list[AgentSpec] | None = None
 
@@ -61,6 +64,8 @@ class SimulationConfig:
             "bargaining_protocol": self.bargaining_protocol,
             "use_beliefs": self.use_beliefs,
             "bargaining_power_distribution": self.bargaining_power_distribution,
+            "info_env_name": self.info_env_name,
+            "info_env_params": self.info_env_params,
         }
         if self.agents is not None:
             result["agents"] = [
@@ -96,6 +101,8 @@ class SimulationConfig:
             bargaining_protocol=d.get("bargaining_protocol", "nash"),
             use_beliefs=d.get("use_beliefs", False),
             bargaining_power_distribution=d.get("bargaining_power_distribution", "uniform"),
+            info_env_name=d.get("info_env_name", "full"),
+            info_env_params=d.get("info_env_params", {}),
             agents=agents,
         )
 
@@ -236,13 +243,21 @@ def _generate_bargaining_powers(
     return powers
 
 
+def _create_info_env(name: str, params: dict[str, Any]) -> "InformationEnvironment":
+    """Create an InformationEnvironment from name and params."""
+    from microecon.information import FullInformation, NoisyAlphaInformation
+
+    if name == "noisy_alpha":
+        return NoisyAlphaInformation(noise_std=params.get("noise_std", 0.1))
+    return FullInformation()
+
+
 def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
     """Create a Simulation from a SimulationConfig."""
     from microecon.grid import Grid, Position
     from microecon.agent import Agent, AgentPrivateState
     from microecon.preferences import CobbDouglas
     from microecon.bundle import Bundle
-    from microecon.information import FullInformation
 
     # Select bargaining protocol
     if config.bargaining_protocol == "rubinstein":
@@ -265,12 +280,15 @@ def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
             config.seed,
         )
 
+    # Create the configured information environment
+    info_env = _create_info_env(config.info_env_name, config.info_env_params)
+
     # If agents are specified (scenario mode), use them directly
     if config.agents is not None:
         grid = Grid(config.grid_size)
         sim = Simulation(
             grid=grid,
-            info_env=FullInformation(),
+            info_env=info_env,
             bargaining_protocol=bargaining,
         )
 
@@ -304,6 +322,7 @@ def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
         seed=config.seed,
         bargaining_protocol=bargaining,
         use_beliefs=config.use_beliefs,
+        info_env=info_env,
     )
 
     # Assign bargaining powers if using asymmetric_nash

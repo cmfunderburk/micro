@@ -74,6 +74,8 @@ export interface SimulationConfig {
   // matching_protocol removed - agents now use DecisionProcedure
   bargaining_power_distribution?: "uniform" | "gaussian" | "bimodal";
   use_beliefs: boolean;
+  info_env_name?: string;
+  info_env_params?: Record<string, number>;
 }
 
 export interface TickData {

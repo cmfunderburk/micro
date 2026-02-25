@@ -28,6 +28,8 @@ class ConfigRequest(BaseModel):
     bargaining_protocol: str = "nash"
     # matching_protocol removed - agents now use DecisionProcedure
     use_beliefs: bool = False
+    info_env_name: str = "full"
+    info_env_params: dict[str, Any] = {}
 
 
 class SpeedRequest(BaseModel):
@@ -101,6 +103,8 @@ async def set_config(config: ConfigRequest) -> dict[str, Any]:
         seed=config.seed,
         bargaining_protocol=config.bargaining_protocol,
         use_beliefs=config.use_beliefs,
+        info_env_name=config.info_env_name,
+        info_env_params=config.info_env_params,
     )
     manager.create_simulation(new_config)
     return manager.config.to_dict()

@@ -25,6 +25,8 @@ interface FormConfig {
   // matching_protocol removed - agents now use DecisionProcedure
   bargaining_power_distribution: 'uniform' | 'gaussian' | 'bimodal';
   use_beliefs: boolean;
+  info_env_name: 'full' | 'noisy_alpha';
+  info_env_params: Record<string, number>;
 }
 
 // Protocol display configuration with labels and tooltips
@@ -57,6 +59,19 @@ const POWER_DISTRIBUTIONS = [
   { value: 'bimodal' as const, label: 'Bimodal (0.5 and 1.5)' },
 ] as const;
 
+const INFO_ENVIRONMENTS = [
+  {
+    value: 'full' as const,
+    label: 'Full Information',
+    tooltip: 'Agents observe true preferences and holdings of others within perception radius.',
+  },
+  {
+    value: 'noisy_alpha' as const,
+    label: 'Noisy Alpha',
+    tooltip: 'Agents observe holdings but receive noisy estimates of counterparty preferences.',
+  },
+] as const;
+
 export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProps) {
   const config = useSimulationStore((state) => state.config);
 
@@ -69,6 +84,8 @@ export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProp
     bargaining_protocol: 'nash',
     bargaining_power_distribution: 'uniform',
     use_beliefs: false,
+    info_env_name: 'full',
+    info_env_params: {},
   });
 
   // Sync form with current config when modal opens
@@ -83,6 +100,8 @@ export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProp
         bargaining_protocol: config.bargaining_protocol as FormConfig['bargaining_protocol'],
         bargaining_power_distribution: (config.bargaining_power_distribution || 'uniform') as FormConfig['bargaining_power_distribution'],
         use_beliefs: config.use_beliefs,
+        info_env_name: (config.info_env_name || 'full') as FormConfig['info_env_name'],
+        info_env_params: config.info_env_params || {},
       });
     }
   }, [open, config]);
@@ -242,6 +261,56 @@ export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProp
               </div>
             </label>
           </div>
+
+          {/* Information Environment */}
+          <div>
+            <label className="text-sm text-zinc-400 block mb-2">Information Environment</label>
+            <div className="grid grid-cols-2 gap-2">
+              {INFO_ENVIRONMENTS.map((env) => (
+                <Button
+                  key={env.value}
+                  variant={formConfig.info_env_name === env.value ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFormConfig({
+                    ...formConfig,
+                    info_env_name: env.value,
+                    info_env_params: env.value === 'noisy_alpha'
+                      ? { noise_std: formConfig.info_env_params.noise_std ?? 0.1 }
+                      : {},
+                  })}
+                  className="text-xs"
+                  title={env.tooltip}
+                >
+                  {env.label}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-zinc-500 mt-1">
+              {INFO_ENVIRONMENTS.find(e => e.value === formConfig.info_env_name)?.tooltip}
+            </p>
+          </div>
+
+          {/* Noise Std (only for noisy_alpha) */}
+          {formConfig.info_env_name === 'noisy_alpha' && (
+            <div>
+              <label className="text-sm text-zinc-400 block mb-1">
+                Noise Std: {(formConfig.info_env_params.noise_std ?? 0.1).toFixed(2)}
+              </label>
+              <Slider
+                value={[formConfig.info_env_params.noise_std ?? 0.1]}
+                onValueChange={([v]) => setFormConfig({
+                  ...formConfig,
+                  info_env_params: { ...formConfig.info_env_params, noise_std: v },
+                })}
+                min={0.01}
+                max={0.5}
+                step={0.01}
+              />
+              <p className="text-xs text-zinc-500 mt-1">
+                Standard deviation of Gaussian noise added to observed alpha
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2">

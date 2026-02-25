@@ -16,26 +16,30 @@ interface EdgeworthModalProps {
 export function EdgeworthModal({ trade, open, onOpenChange }: EdgeworthModalProps) {
   if (!trade) return null;
 
+  // Resolve alpha values (optional on replay path, always present on live path)
+  const alpha1 = trade.alpha1 ?? 0.5;
+  const alpha2 = trade.alpha2 ?? 0.5;
+
   // Compute utilities
   const utilityA_before = cobbDouglasUtility(
     trade.pre_holdings_1[0],
     trade.pre_holdings_1[1],
-    trade.alpha1
+    alpha1
   );
   const utilityA_after = cobbDouglasUtility(
     trade.post_allocation_1[0],
     trade.post_allocation_1[1],
-    trade.alpha1
+    alpha1
   );
   const utilityB_before = cobbDouglasUtility(
     trade.pre_holdings_2[0],
     trade.pre_holdings_2[1],
-    trade.alpha2
+    alpha2
   );
   const utilityB_after = cobbDouglasUtility(
     trade.post_allocation_2[0],
     trade.post_allocation_2[1],
-    trade.alpha2
+    alpha2
   );
 
   const gainA = utilityA_after - utilityA_before;
@@ -80,7 +84,7 @@ export function EdgeworthModal({ trade, open, onOpenChange }: EdgeworthModalProp
             {/* Agent A */}
             <div className="bg-zinc-800 rounded-lg p-3">
               <div className="text-blue-400 font-semibold mb-2">
-                Agent A (α = {trade.alpha1.toFixed(2)})
+                Agent A (α = {alpha1.toFixed(2)})
               </div>
               <div className="text-zinc-400 text-xs mb-1">
                 ID: ...{trade.agent1_id.slice(-8)}
@@ -123,7 +127,7 @@ export function EdgeworthModal({ trade, open, onOpenChange }: EdgeworthModalProp
             {/* Agent B */}
             <div className="bg-zinc-800 rounded-lg p-3">
               <div className="text-orange-400 font-semibold mb-2">
-                Agent B (α = {trade.alpha2.toFixed(2)})
+                Agent B (α = {alpha2.toFixed(2)})
               </div>
               <div className="text-zinc-400 text-xs mb-1">
                 ID: ...{trade.agent2_id.slice(-8)}

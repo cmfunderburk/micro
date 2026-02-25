@@ -1,0 +1,184 @@
+"""Integration tests for replay loader endpoint (A-001)."""
+
+import json
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from microecon.simulation import create_simple_economy
+from microecon.logging import SimulationLogger, SimulationConfig, JSONLinesFormat
+
+
+@pytest.fixture
+def run_dir():
+    """Create a real simulation run and return its directory."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / "test_run"
+
+        config = SimulationConfig(
+            n_agents=4,
+            grid_size=5,
+            seed=42,
+            protocol_name="nash",
+        )
+        logger = SimulationLogger(
+            config=config,
+            output_path=output_path,
+            log_format=JSONLinesFormat(),
+        )
+
+        sim = create_simple_economy(n_agents=4, grid_size=5, seed=42)
+        sim.logger = logger
+        sim.run(10)
+        logger.finalize()
+
+        yield output_path
+
+
+def test_replay_loads_logged_run(run_dir):
+    """Replay loader must successfully parse runs from SimulationLogger."""
+    config_file = run_dir / "config.json"
+    ticks_file = run_dir / "ticks.jsonl"
+
+    assert config_file.exists()
+    assert ticks_file.exists()
+
+    with open(config_file) as f:
+        config = json.load(f)
+
+    ticks = []
+    with open(ticks_file) as f:
+        for line in f:
+            tick_data = json.loads(line)
+            ticks.append(tick_data)
+
+    assert len(ticks) == 10
+
+    # Verify the actual field names match what AgentSnapshot.to_dict() produces
+    first_tick = ticks[0]
+    assert "agent_snapshots" in first_tick
+    agent = first_tick["agent_snapshots"][0]
+    assert "agent_id" in agent
+    assert "endowment" in agent  # list [x, y], not endowment_x/endowment_y
+    assert isinstance(agent["endowment"], list)
+    assert len(agent["endowment"]) == 2
+
+    # Verify trade field names match TradeEvent.to_dict()
+    ticks_with_trades = [t for t in ticks if t["trades"]]
+    if ticks_with_trades:
+        trade = ticks_with_trades[0]["trades"][0]
+        assert "agent1_id" in trade  # not agent_1_id
+        assert "proposer_id" in trade
+        assert "pre_holdings" in trade
+        assert "post_allocations" in trade
+
+    # Verify belief_snapshots field exists
+    assert "belief_snapshots" in first_tick
+
+
+def test_replay_transform_uses_correct_fields(run_dir):
+    """The route transform must not crash on real logged data.
+
+    This exercises the exact same field access patterns as the load_run
+    endpoint in server/routes.py, so any field name mismatch will raise
+    a KeyError here.
+    """
+    config_file = run_dir / "config.json"
+    ticks_file = run_dir / "ticks.jsonl"
+
+    with open(config_file) as f:
+        config = json.load(f)
+
+    ticks = []
+    with open(ticks_file) as f:
+        for line in f:
+            tick_data = json.loads(line)
+
+            # --- replicate the route transform logic ---
+
+            # Build belief map from belief_snapshots
+            beliefs = {}
+            for bs in tick_data.get("belief_snapshots", []):
+                beliefs[bs["agent_id"]] = {
+                    "type_beliefs": [
+                        {
+                            "target_id": tb["target_agent_id"],
+                            "believed_alpha": tb["believed_alpha"],
+                            "confidence": tb["confidence"],
+                            "n_interactions": tb["n_interactions"],
+                        }
+                        for tb in bs.get("type_beliefs", [])
+                    ],
+                    "price_belief": {
+                        "mean": bs["price_belief"]["mean"],
+                        "variance": bs["price_belief"]["variance"],
+                        "n_observations": bs["price_belief"]["n_observations"],
+                    } if bs.get("price_belief") else None,
+                    "n_trades_in_memory": bs.get("n_trades_in_memory", 0),
+                }
+
+            transformed = {
+                "tick": tick_data["tick"],
+                "agents": [
+                    {
+                        "id": agent["agent_id"],
+                        "position": agent["position"],
+                        "endowment": agent["endowment"],
+                        "alpha": agent["alpha"],
+                        "utility": agent["utility"],
+                        "perception_radius": agent.get("perception_radius", 7.0),
+                        "discount_factor": agent.get("discount_factor", 0.95),
+                        "has_beliefs": agent.get("has_beliefs", False),
+                    }
+                    for agent in tick_data.get("agent_snapshots", [])
+                ],
+                "trades": [
+                    {
+                        "tick": tick_data["tick"],
+                        "agent1_id": trade["agent1_id"],
+                        "agent2_id": trade["agent2_id"],
+                        "proposer_id": trade.get("proposer_id"),
+                        "pre_holdings_1": trade["pre_holdings"][0],
+                        "pre_holdings_2": trade["pre_holdings"][1],
+                        "post_allocation_1": trade["post_allocations"][0],
+                        "post_allocation_2": trade["post_allocations"][1],
+                        "gains": trade["gains"],
+                    }
+                    for trade in tick_data.get("trades", [])
+                ],
+                "metrics": {
+                    "total_welfare": tick_data.get("total_welfare", 0),
+                    "welfare_gains": tick_data.get("total_welfare", 0)
+                    - config.get("initial_welfare", 0),
+                    "cumulative_trades": tick_data.get("cumulative_trades", 0),
+                },
+                "beliefs": beliefs,
+            }
+            ticks.append(transformed)
+
+    assert len(ticks) == 10
+
+    # Verify shape of transformed data
+    for t in ticks:
+        assert "tick" in t
+        assert "agents" in t
+        assert "trades" in t
+        assert "metrics" in t
+        assert "beliefs" in t
+
+        for agent in t["agents"]:
+            assert "id" in agent
+            assert "endowment" in agent
+            assert isinstance(agent["endowment"], list)
+            assert len(agent["endowment"]) == 2
+
+        for trade in t["trades"]:
+            assert "agent1_id" in trade
+            assert "agent2_id" in trade
+            assert "proposer_id" in trade
+            assert "pre_holdings_1" in trade
+            assert "pre_holdings_2" in trade
+            assert "post_allocation_1" in trade
+            assert "post_allocation_2" in trade
+            assert "gains" in trade

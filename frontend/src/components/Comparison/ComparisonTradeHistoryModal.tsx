@@ -14,10 +14,12 @@ import type { Trade } from '@/types/simulation';
 
 // Compute utility gains from trade allocations
 function computeTradeGains(trade: Trade): { gainA: number; gainB: number; total: number } {
-  const utilityA_before = cobbDouglasUtility(trade.pre_holdings_1[0], trade.pre_holdings_1[1], trade.alpha1);
-  const utilityA_after = cobbDouglasUtility(trade.post_allocation_1[0], trade.post_allocation_1[1], trade.alpha1);
-  const utilityB_before = cobbDouglasUtility(trade.pre_holdings_2[0], trade.pre_holdings_2[1], trade.alpha2);
-  const utilityB_after = cobbDouglasUtility(trade.post_allocation_2[0], trade.post_allocation_2[1], trade.alpha2);
+  const alpha1 = trade.alpha1 ?? 0.5;
+  const alpha2 = trade.alpha2 ?? 0.5;
+  const utilityA_before = cobbDouglasUtility(trade.pre_holdings_1[0], trade.pre_holdings_1[1], alpha1);
+  const utilityA_after = cobbDouglasUtility(trade.post_allocation_1[0], trade.post_allocation_1[1], alpha1);
+  const utilityB_before = cobbDouglasUtility(trade.pre_holdings_2[0], trade.pre_holdings_2[1], alpha2);
+  const utilityB_after = cobbDouglasUtility(trade.post_allocation_2[0], trade.post_allocation_2[1], alpha2);
   const gainA = utilityA_after - utilityA_before;
   const gainB = utilityB_after - utilityB_before;
   return { gainA, gainB, total: gainA + gainB };

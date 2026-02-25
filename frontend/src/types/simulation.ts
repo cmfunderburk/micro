@@ -48,8 +48,9 @@ export interface Trade {
   tick: number;
   agent1_id: string;
   agent2_id: string;
-  alpha1: number;
-  alpha2: number;
+  proposer_id?: string;
+  alpha1?: number;  // Present on live WebSocket path, absent on replay path
+  alpha2?: number;  // Present on live WebSocket path, absent on replay path
   pre_holdings_1: [number, number];
   pre_holdings_2: [number, number];
   post_allocation_1: [number, number];

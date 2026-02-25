@@ -212,6 +212,27 @@ async def load_run(run_name: str) -> dict[str, Any]:
         with open(ticks_file) as f:
             for line in f:
                 tick_data = json.loads(line)
+                # Build belief map from belief_snapshots
+                beliefs = {}
+                for bs in tick_data.get("belief_snapshots", []):
+                    beliefs[bs["agent_id"]] = {
+                        "type_beliefs": [
+                            {
+                                "target_id": tb["target_agent_id"],
+                                "believed_alpha": tb["believed_alpha"],
+                                "confidence": tb["confidence"],
+                                "n_interactions": tb["n_interactions"],
+                            }
+                            for tb in bs.get("type_beliefs", [])
+                        ],
+                        "price_belief": {
+                            "mean": bs["price_belief"]["mean"],
+                            "variance": bs["price_belief"]["variance"],
+                            "n_observations": bs["price_belief"]["n_observations"],
+                        } if bs.get("price_belief") else None,
+                        "n_trades_in_memory": bs.get("n_trades_in_memory", 0),
+                    }
+
                 # Transform to frontend format
                 ticks.append({
                     "tick": tick_data["tick"],
@@ -219,7 +240,7 @@ async def load_run(run_name: str) -> dict[str, Any]:
                         {
                             "id": agent["agent_id"],
                             "position": agent["position"],
-                            "endowment": [agent["endowment_x"], agent["endowment_y"]],
+                            "endowment": agent["endowment"],
                             "alpha": agent["alpha"],
                             "utility": agent["utility"],
                             "perception_radius": agent.get("perception_radius", 7.0),
@@ -230,16 +251,15 @@ async def load_run(run_name: str) -> dict[str, Any]:
                     ],
                     "trades": [
                         {
-                            "tick": trade["tick"],
-                            "agent1_id": trade["agent_1_id"],
-                            "agent2_id": trade["agent_2_id"],
-                            "alpha1": trade.get("alpha_1", 0.5),
-                            "alpha2": trade.get("alpha_2", 0.5),
-                            "pre_holdings_1": trade.get("pre_holdings_1", trade.get("pre_endowment_1", [0, 0])),
-                            "pre_holdings_2": trade.get("pre_holdings_2", trade.get("pre_endowment_2", [0, 0])),
-                            "post_allocation_1": [trade["allocation_1_x"], trade["allocation_1_y"]],
-                            "post_allocation_2": [trade["allocation_2_x"], trade["allocation_2_y"]],
-                            "gains": [trade.get("gain_1", 0), trade.get("gain_2", 0)],
+                            "tick": tick_data["tick"],
+                            "agent1_id": trade["agent1_id"],
+                            "agent2_id": trade["agent2_id"],
+                            "proposer_id": trade.get("proposer_id"),
+                            "pre_holdings_1": trade["pre_holdings"][0],
+                            "pre_holdings_2": trade["pre_holdings"][1],
+                            "post_allocation_1": trade["post_allocations"][0],
+                            "post_allocation_2": trade["post_allocations"][1],
+                            "gains": trade["gains"],
                         }
                         for trade in tick_data.get("trades", [])
                     ],
@@ -248,7 +268,7 @@ async def load_run(run_name: str) -> dict[str, Any]:
                         "welfare_gains": tick_data.get("total_welfare", 0) - config.get("initial_welfare", 0),
                         "cumulative_trades": tick_data.get("cumulative_trades", 0),
                     },
-                    "beliefs": {},  # Beliefs not stored in standard format yet
+                    "beliefs": beliefs,
                 })
 
         return {

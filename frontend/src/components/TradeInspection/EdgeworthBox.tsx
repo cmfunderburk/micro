@@ -72,32 +72,36 @@ export function EdgeworthBox({ trade, width = 350, height = 350 }: EdgeworthBoxP
     ctx.fillStyle = '#fb923c'; // orange-400
     ctx.fillText('Agent B', MARGIN + boxWidth / 2, 14);
 
+    // Resolve alpha values (optional on replay path, always present on live path)
+    const alpha1 = trade.alpha1 ?? 0.5;
+    const alpha2 = trade.alpha2 ?? 0.5;
+
     // Compute utilities
     const utilityA_before = cobbDouglasUtility(
       trade.pre_holdings_1[0],
       trade.pre_holdings_1[1],
-      trade.alpha1
+      alpha1
     );
     const utilityA_after = cobbDouglasUtility(
       trade.post_allocation_1[0],
       trade.post_allocation_1[1],
-      trade.alpha1
+      alpha1
     );
     const utilityB_before = cobbDouglasUtility(
       trade.pre_holdings_2[0],
       trade.pre_holdings_2[1],
-      trade.alpha2
+      alpha2
     );
     const utilityB_after = cobbDouglasUtility(
       trade.post_allocation_2[0],
       trade.post_allocation_2[1],
-      trade.alpha2
+      alpha2
     );
 
     // Draw contract curve
     const contractPoints = computeContractCurve(
-      trade.alpha1,
-      trade.alpha2,
+      alpha1,
+      alpha2,
       totalX,
       totalY,
       40
@@ -117,7 +121,7 @@ export function EdgeworthBox({ trade, width = 350, height = 350 }: EdgeworthBoxP
 
     // Draw indifference curves for Agent A (blue)
     const drawICurveA = (utility: number, alpha: number, lineWidth: number) => {
-      const points = computeIndifferenceCurve(trade.alpha1, utility, 0.01 * totalX, 0.99 * totalX, 40);
+      const points = computeIndifferenceCurve(alpha1, utility, 0.01 * totalX, 0.99 * totalX, 40);
       if (points.length < 2) return;
 
       ctx.strokeStyle = `rgba(96, 165, 250, ${alpha})`; // blue-400
@@ -140,7 +144,7 @@ export function EdgeworthBox({ trade, width = 350, height = 350 }: EdgeworthBoxP
     // Draw indifference curves for Agent B (orange)
     // B's coordinates need to be transformed: (x_B, y_B) -> (totalX - x_B, totalY - y_B)
     const drawICurveB = (utility: number, alpha: number, lineWidth: number) => {
-      const points = computeIndifferenceCurve(trade.alpha2, utility, 0.01 * totalX, 0.99 * totalX, 40);
+      const points = computeIndifferenceCurve(alpha2, utility, 0.01 * totalX, 0.99 * totalX, 40);
       if (points.length < 2) return;
 
       ctx.strokeStyle = `rgba(251, 146, 60, ${alpha})`; // orange-400

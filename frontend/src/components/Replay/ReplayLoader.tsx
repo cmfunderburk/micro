@@ -4,7 +4,7 @@
  * Lists available saved runs and allows loading them for replay.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { useReplayStore } from '@/store/replayStore';
 import {
@@ -27,14 +27,7 @@ export function ReplayLoader() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch available runs when dialog opens
-  useEffect(() => {
-    if (open) {
-      fetchRuns();
-    }
-  }, [open]);
-
-  const fetchRuns = async () => {
+  const fetchRuns = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -50,7 +43,14 @@ export function ReplayLoader() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [setAvailableRuns]);
+
+  // Fetch available runs when dialog opens
+  useEffect(() => {
+    if (open) {
+      fetchRuns();
+    }
+  }, [open, fetchRuns]);
 
   const handleLoadRun = async (runName: string) => {
     setLoading(true);

@@ -91,6 +91,7 @@ export function ConfigModal({ open, onOpenChange, sendCommand }: ConfigModalProp
   // Sync form with current config when modal opens
   useEffect(() => {
     if (open && config) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Sync form state from external config on modal open
       setFormConfig({
         n_agents: config.n_agents,
         grid_size: config.grid_size,

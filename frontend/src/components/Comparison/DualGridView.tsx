@@ -39,6 +39,7 @@ function ComparisonGridCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
   const tradeAnimationsRef = useRef<Map<string, { trade: Trade; startTime: number }>>(new Map());
+  const renderRef = useRef<(() => void) | undefined>(undefined);
 
   const cellSize = Math.min(width, height) / gridSize;
   const agentRadius = cellSize * 0.35;
@@ -112,9 +113,13 @@ function ComparisonGridCanvas({
     }
 
     if (tradeAnimationsRef.current.size > 0) {
-      animationRef.current = requestAnimationFrame(render);
+      animationRef.current = requestAnimationFrame(() => renderRef.current?.());
     }
   }, [agents, gridSize, cellSize, width, height, agentRadius]);
+
+  useEffect(() => {
+    renderRef.current = render;
+  }, [render]);
 
   useEffect(() => {
     render();

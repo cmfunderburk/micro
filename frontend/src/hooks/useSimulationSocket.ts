@@ -25,6 +25,7 @@ export function useSimulationSocket() {
   const ws = useRef<WebSocket | null>(null);
   const reconnectTimeout = useRef<number | null>(null);
   const shouldReconnect = useRef(true);
+  const connectRef = useRef<(() => void) | undefined>(undefined);
 
   const setConnected = useSimulationStore((state) => state.setConnected);
   const setRunning = useSimulationStore((state) => state.setRunning);
@@ -61,7 +62,7 @@ export function useSimulationSocket() {
       if (shouldReconnect.current) {
         reconnectTimeout.current = window.setTimeout(() => {
           console.log('Attempting to reconnect...');
-          connect();
+          connectRef.current?.();
         }, 2000);
       }
     };
@@ -195,6 +196,10 @@ export function useSimulationSocket() {
     };
   }, [setConnected, setRunning, setSpeed, setConfig, updateTickData, setComparisonMode, initComparison, updateComparisonTick]);
 
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
+
   const disconnect = useCallback(() => {
     // Prevent reconnection when intentionally disconnecting
     shouldReconnect.current = false;
@@ -223,7 +228,6 @@ export function useSimulationSocket() {
   }, [connect, disconnect]);
 
   return {
-    connected: ws.current?.readyState === WebSocket.OPEN,
     sendCommand,
     reconnect: connect,
   };

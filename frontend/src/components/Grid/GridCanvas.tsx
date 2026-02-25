@@ -23,6 +23,7 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
   const tradeAnimationsRef = useRef<Map<string, { trade: Trade; startTime: number }>>(new Map());
+  const renderRef = useRef<(() => void) | undefined>(undefined);
 
   const agents = useSimulationStore((state) => state.agents);
   const gridSize = useSimulationStore((state) => state.gridSize);
@@ -438,7 +439,7 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
 
     // Continue animation loop if there are active trade animations
     if (tradeAnimationsRef.current.size > 0) {
-      animationRef.current = requestAnimationFrame(render);
+      animationRef.current = requestAnimationFrame(() => renderRef.current?.());
     }
   }, [
     agents,
@@ -462,6 +463,10 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
     showGroundTruth,
     isVisibleFromPerspective,
   ]);
+
+  useEffect(() => {
+    renderRef.current = render;
+  }, [render]);
 
   // Start render loop
   useEffect(() => {

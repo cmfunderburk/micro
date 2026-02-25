@@ -260,7 +260,7 @@ export function TradeNetwork({
   // Force re-render on layout change
   useEffect(() => {
     renderFull();
-  }, [layout, width, height]);
+  }, [layout, width, height, renderFull]);
 
   return (
     <svg

@@ -1,5 +1,18 @@
 /**
- * Types for simulation data received from the backend.
+ * Presentation types for simulation data received from the backend.
+ *
+ * These types describe the ADAPTER OUTPUT — what the frontend actually receives
+ * from the live WebSocket and replay API. They differ from the canonical schema
+ * (see canonical.ts) in field names and derived fields:
+ *
+ * Adapter mappings:
+ *   canonical AgentSnapshot.agent_id  → Agent.id
+ *   canonical AgentSnapshot.endowment → Agent.endowment (current holdings, not initial)
+ *   canonical TradeEvent.pre_holdings[0] → Trade.pre_holdings_1
+ *   canonical TradeEvent.post_allocations[0] → Trade.post_allocation_1
+ *   Trade.alpha1, Trade.alpha2 — derived from AgentSnapshot.alpha (not in canonical TradeEvent)
+ *
+ * See docs/contracts/schema-v1.md for the full contract specification.
  */
 
 // Agent interaction state (from 3-phase tick model)

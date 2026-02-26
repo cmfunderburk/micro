@@ -121,6 +121,23 @@ def test_replay_config_includes_schema_version(run_dir):
     assert config["schema_version"] == "1.0"
 
 
+def test_replay_rejects_unsupported_schema_version(run_dir):
+    """Replay load path must reject runs with unsupported future schema versions."""
+    from microecon.logging.formats import _validate_schema_version
+
+    # Tamper with config to simulate a future version
+    config_file = run_dir / "config.json"
+    with open(config_file) as f:
+        config = json.load(f)
+    config["schema_version"] = "99.0"
+    with open(config_file, "w") as f:
+        json.dump(config, f)
+
+    # The same validation call that routes.py now makes
+    with pytest.raises(ValueError, match="Unsupported schema version"):
+        _validate_schema_version(config.get("schema_version", "0.0"))
+
+
 def test_replay_transform_uses_correct_fields(run_dir):
     """The route transform must not crash on real logged data.
 

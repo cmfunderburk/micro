@@ -209,8 +209,16 @@ async def load_run(run_name: str) -> dict[str, Any]:
     try:
         import json
 
+        from microecon.logging.formats import _validate_schema_version
+
         with open(config_file) as f:
             config = json.load(f)
+
+        # Enforce N/N-1 compatibility policy on the replay path
+        try:
+            _validate_schema_version(config.get("schema_version", "0.0"))
+        except ValueError as ve:
+            raise HTTPException(status_code=422, detail=str(ve))
 
         ticks = []
         with open(ticks_file) as f:

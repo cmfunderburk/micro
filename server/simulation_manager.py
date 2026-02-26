@@ -106,6 +106,31 @@ class SimulationConfig:
             agents=agents,
         )
 
+    def to_logging_config(self) -> "LoggingSimulationConfig":
+        """Convert server config to logging config for run persistence.
+
+        The server config captures user intent (what to create).
+        The logging config captures what was created (for reproducibility).
+        """
+        from microecon.logging.events import SimulationConfig as LoggingSimulationConfig
+
+        if self.seed is None:
+            raise ValueError(
+                "Cannot convert to logging config without a seed. "
+                "Assign a seed before persisting."
+            )
+
+        return LoggingSimulationConfig(
+            n_agents=self.n_agents,
+            grid_size=self.grid_size,
+            seed=self.seed,
+            protocol_name=self.bargaining_protocol,
+            perception_radius=self.perception_radius,
+            discount_factor=self.discount_factor,
+            info_env_name=self.info_env_name,
+            info_env_params=self.info_env_params,
+        )
+
 
 @dataclass
 class SimulationInstance:

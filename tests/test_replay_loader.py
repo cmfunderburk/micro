@@ -112,6 +112,15 @@ def test_replay_trades_include_alpha_from_agent_snapshots(run_dir):
             # (create_simple_economy distributes alphas)
 
 
+def test_replay_config_includes_schema_version(run_dir):
+    """Persisted config.json must include schema_version."""
+    config_file = run_dir / "config.json"
+    with open(config_file) as f:
+        config = json.load(f)
+    assert "schema_version" in config
+    assert config["schema_version"] == "1.0"
+
+
 def test_replay_transform_uses_correct_fields(run_dir):
     """The route transform must not crash on real logged data.
 

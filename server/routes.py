@@ -286,6 +286,7 @@ async def load_run(run_name: str) -> dict[str, Any]:
         return {
             "name": run_name,
             "config": config,
+            "schema_version": config.get("schema_version", "0.0"),
             "ticks": ticks,
             "n_ticks": len(ticks),
         }

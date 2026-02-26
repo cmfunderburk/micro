@@ -637,7 +637,7 @@ class Simulation:
                 agent_snapshots.append(create_agent_snapshot(
                     agent_id=agent.id,
                     position=(pos.row, pos.col),
-                    endowment=(agent.endowment.x, agent.endowment.y),
+                    endowment=(agent.holdings.x, agent.holdings.y),
                     alpha=agent.preferences.alpha,
                     utility=agent.utility(),
                     has_beliefs=agent.has_beliefs,

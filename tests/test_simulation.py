@@ -204,6 +204,73 @@ class TestCreateSimpleEconomy:
             assert pos1 == pos2, f"Final position for agent {a1.id} should match"
 
 
+class TestSnapshotHoldings:
+    """Snapshots must reflect current holdings, not immutable endowment."""
+
+    def test_snapshot_reflects_post_trade_holdings(self):
+        """After a trade, agent snapshot endowment must differ from initial."""
+        import json
+        import tempfile
+        from pathlib import Path
+        from microecon.simulation import create_simple_economy
+        from microecon.logging import SimulationLogger, SimulationConfig, JSONLinesFormat
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test_run"
+            config = SimulationConfig(
+                n_agents=4, grid_size=3, seed=42, protocol_name="nash",
+            )
+            logger = SimulationLogger(
+                config=config,
+                output_path=output_path,
+                log_format=JSONLinesFormat(),
+            )
+            sim = create_simple_economy(n_agents=4, grid_size=3, seed=42)
+            sim.logger = logger
+            sim.run(50)
+            logger.finalize()
+
+            # Read logged ticks
+            ticks = []
+            with open(output_path / "ticks.jsonl") as f:
+                for line in f:
+                    ticks.append(json.loads(line))
+
+            # Find ticks with trades
+            ticks_with_trades = [t for t in ticks if t["trades"]]
+            assert len(ticks_with_trades) > 0, "Need at least one trade to test"
+
+            # For each trade, at least one agent's snapshot endowment on the
+            # NEXT tick should differ from their initial endowment (tick 0)
+            tick0_endowments = {
+                a["agent_id"]: tuple(a["endowment"])
+                for a in ticks[0]["agent_snapshots"]
+            }
+
+            # Check the tick AFTER the first trade
+            first_trade_tick = ticks_with_trades[0]["tick"]
+            later_ticks = [t for t in ticks if t["tick"] > first_trade_tick]
+            assert len(later_ticks) > 0, "Need a tick after the first trade"
+
+            later_endowments = {
+                a["agent_id"]: tuple(a["endowment"])
+                for a in later_ticks[0]["agent_snapshots"]
+            }
+
+            # At least one trading agent must have different holdings
+            trade = ticks_with_trades[0]["trades"][0]
+            a1, a2 = trade["agent1_id"], trade["agent2_id"]
+            changed = (
+                later_endowments[a1] != tick0_endowments[a1]
+                or later_endowments[a2] != tick0_endowments[a2]
+            )
+            assert changed, (
+                f"After trade, snapshot holdings should differ from initial endowment. "
+                f"Agent {a1}: {tick0_endowments[a1]} -> {later_endowments[a1]}, "
+                f"Agent {a2}: {tick0_endowments[a2]} -> {later_endowments[a2]}"
+            )
+
+
 class TestTradeEventProvenance:
     """Tests for A-003: TradeEvent proposer provenance."""
 

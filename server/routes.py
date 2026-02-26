@@ -237,6 +237,12 @@ async def load_run(run_name: str) -> dict[str, Any]:
                         "n_trades_in_memory": bs.get("n_trades_in_memory", 0),
                     }
 
+                # Build agent alpha lookup for trade enrichment
+                alpha_by_id = {
+                    agent["agent_id"]: agent["alpha"]
+                    for agent in tick_data.get("agent_snapshots", [])
+                }
+
                 # Transform to frontend format
                 ticks.append({
                     "tick": tick_data["tick"],
@@ -259,6 +265,8 @@ async def load_run(run_name: str) -> dict[str, Any]:
                             "agent1_id": trade["agent1_id"],
                             "agent2_id": trade["agent2_id"],
                             "proposer_id": trade.get("proposer_id"),
+                            "alpha1": alpha_by_id.get(trade["agent1_id"], 0.5),
+                            "alpha2": alpha_by_id.get(trade["agent2_id"], 0.5),
                             "pre_holdings_1": trade["pre_holdings"][0],
                             "pre_holdings_2": trade["pre_holdings"][1],
                             "post_allocation_1": trade["post_allocations"][0],

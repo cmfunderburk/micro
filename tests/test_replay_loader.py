@@ -77,6 +77,41 @@ def test_replay_loads_logged_run(run_dir):
     assert "belief_snapshots" in first_tick
 
 
+def test_replay_trades_include_alpha_from_agent_snapshots(run_dir):
+    """Replay trades must include alpha1/alpha2 from agent snapshots, not fall back to 0.5."""
+    ticks_file = run_dir / "ticks.jsonl"
+
+    with open(ticks_file) as f:
+        tick_records = [json.loads(line) for line in f]
+
+    ticks_with_trades = [t for t in tick_records if t["trades"]]
+    if not ticks_with_trades:
+        pytest.skip("No trades in test run")
+
+    for tick_data in ticks_with_trades:
+        # Build alpha lookup from agent snapshots (same as routes.py transform)
+        alpha_by_id = {
+            agent["agent_id"]: agent["alpha"]
+            for agent in tick_data.get("agent_snapshots", [])
+        }
+
+        for trade in tick_data["trades"]:
+            a1_id = trade["agent1_id"]
+            a2_id = trade["agent2_id"]
+
+            # Both agents must be in the snapshot
+            assert a1_id in alpha_by_id, f"agent1 {a1_id} missing from snapshots"
+            assert a2_id in alpha_by_id, f"agent2 {a2_id} missing from snapshots"
+
+            # Alpha must not be the generic 0.5 fallback (agents have varied alphas)
+            alpha1 = alpha_by_id[a1_id]
+            alpha2 = alpha_by_id[a2_id]
+            assert isinstance(alpha1, float)
+            assert isinstance(alpha2, float)
+            # At least one agent should have a non-0.5 alpha in a 4-agent economy
+            # (create_simple_economy distributes alphas)
+
+
 def test_replay_transform_uses_correct_fields(run_dir):
     """The route transform must not crash on real logged data.
 
@@ -96,6 +131,12 @@ def test_replay_transform_uses_correct_fields(run_dir):
             tick_data = json.loads(line)
 
             # --- replicate the route transform logic ---
+
+            # Build agent alpha lookup for trade enrichment
+            alpha_by_id = {
+                agent["agent_id"]: agent["alpha"]
+                for agent in tick_data.get("agent_snapshots", [])
+            }
 
             # Build belief map from belief_snapshots
             beliefs = {}
@@ -139,6 +180,8 @@ def test_replay_transform_uses_correct_fields(run_dir):
                         "agent1_id": trade["agent1_id"],
                         "agent2_id": trade["agent2_id"],
                         "proposer_id": trade.get("proposer_id"),
+                        "alpha1": alpha_by_id.get(trade["agent1_id"], 0.5),
+                        "alpha2": alpha_by_id.get(trade["agent2_id"], 0.5),
                         "pre_holdings_1": trade["pre_holdings"][0],
                         "pre_holdings_2": trade["pre_holdings"][1],
                         "post_allocation_1": trade["post_allocations"][0],
@@ -177,6 +220,8 @@ def test_replay_transform_uses_correct_fields(run_dir):
             assert "agent1_id" in trade
             assert "agent2_id" in trade
             assert "proposer_id" in trade
+            assert "alpha1" in trade
+            assert "alpha2" in trade
             assert "pre_holdings_1" in trade
             assert "pre_holdings_2" in trade
             assert "post_allocation_1" in trade

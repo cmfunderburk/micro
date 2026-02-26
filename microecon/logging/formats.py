@@ -15,6 +15,8 @@ from .events import SCHEMA_VERSION, RunSummary, SimulationConfig, TickRecord
 if TYPE_CHECKING:
     from .logger import RunData
 
+# When bumping SCHEMA_VERSION, update to {N-1, N}.
+# Currently: 0.0 (pre-versioning) and 1.0 (current).
 _SUPPORTED_VERSIONS = {"0.0", SCHEMA_VERSION}
 
 

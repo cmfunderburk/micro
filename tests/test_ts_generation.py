@@ -4,8 +4,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-import pytest
-
 # Load the script as a module via importlib
 _script_path = Path(__file__).resolve().parent.parent / "scripts" / "generate_ts_types.py"
 _spec = importlib.util.spec_from_file_location("generate_ts_types", _script_path)

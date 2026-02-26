@@ -362,3 +362,70 @@ class TestRunData:
 
         assert len(trajectory) == 5
         assert all(s.agent_id == agent_id for s in trajectory)
+
+
+class TestSchemaVersionValidation:
+    """Test version validation when loading runs from disk."""
+
+    def test_load_current_version(self):
+        """A run written with the current schema version loads successfully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir)
+            fmt = JSONLinesFormat()
+
+            config = SimulationConfig(
+                n_agents=4, grid_size=5, seed=42, protocol_name="nash"
+            )
+            fmt.write_config(config, path)
+
+            # Write minimal ticks file so read_run doesn't fail
+            (path / "ticks.jsonl").touch()
+
+            loaded = fmt.read_run(path)
+            assert loaded.config.schema_version == "1.0"
+            assert loaded.config.schema_version == SCHEMA_VERSION
+
+    def test_load_pre_versioning_run(self):
+        """Pre-versioning config (no schema_version key) loads with version '0.0'."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir)
+
+            # Manually write a config.json WITHOUT schema_version
+            config_dict = {
+                "n_agents": 4,
+                "grid_size": 5,
+                "seed": 42,
+                "protocol_name": "nash",
+            }
+            with open(path / "config.json", "w") as f:
+                json.dump(config_dict, f)
+
+            # Write minimal ticks file
+            (path / "ticks.jsonl").touch()
+
+            fmt = JSONLinesFormat()
+            loaded = fmt.read_run(path)
+            assert loaded.config.schema_version == "0.0"
+
+    def test_load_future_version_raises(self):
+        """Loading a run with an unsupported future version raises ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir)
+
+            # Manually write config.json with a future schema_version
+            config_dict = {
+                "n_agents": 4,
+                "grid_size": 5,
+                "seed": 42,
+                "protocol_name": "nash",
+                "schema_version": "99.0",
+            }
+            with open(path / "config.json", "w") as f:
+                json.dump(config_dict, f)
+
+            # Write minimal ticks file
+            (path / "ticks.jsonl").touch()
+
+            fmt = JSONLinesFormat()
+            with pytest.raises(ValueError, match="Unsupported schema version"):
+                fmt.read_run(path)

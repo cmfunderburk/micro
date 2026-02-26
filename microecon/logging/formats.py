@@ -10,10 +10,26 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .events import RunSummary, SimulationConfig, TickRecord
+from .events import SCHEMA_VERSION, RunSummary, SimulationConfig, TickRecord
 
 if TYPE_CHECKING:
     from .logger import RunData
+
+_SUPPORTED_VERSIONS = {"0.0", SCHEMA_VERSION}
+
+
+def _validate_schema_version(version: str) -> None:
+    """Validate that a schema version is supported.
+
+    Supports current version and one prior (N and N-1 policy).
+    Pre-versioning runs have version "0.0".
+    """
+    if version not in _SUPPORTED_VERSIONS:
+        raise ValueError(
+            f"Unsupported schema version: {version!r}. "
+            f"Supported versions: {sorted(_SUPPORTED_VERSIONS)}. "
+            f"This run may have been created by a newer version of microecon."
+        )
 
 
 class LogFormat(ABC):
@@ -87,6 +103,8 @@ class JSONLinesFormat(LogFormat):
         config_path = path / self.CONFIG_FILE
         with open(config_path) as f:
             config = SimulationConfig.from_dict(json.load(f))
+
+        _validate_schema_version(config.schema_version)
 
         # Read ticks
         ticks_path = path / self.TICKS_FILE

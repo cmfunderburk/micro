@@ -8,6 +8,8 @@ All fields use primitive types (int, float, str, tuple) for JSON serialization.
 from dataclasses import dataclass, field
 from typing import Any
 
+SCHEMA_VERSION = "1.0"
+
 
 @dataclass(frozen=True)
 class SimulationConfig:
@@ -32,6 +34,7 @@ class SimulationConfig:
     matching_protocol_name: str = "bilateral_proposal"
     info_env_name: str = "full_information"
     info_env_params: dict[str, Any] = field(default_factory=dict)
+    schema_version: str = SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -46,6 +49,7 @@ class SimulationConfig:
             "matching_protocol_name": self.matching_protocol_name,
             "info_env_name": self.info_env_name,
             "info_env_params": self.info_env_params,
+            "schema_version": self.schema_version,
         }
 
     @classmethod
@@ -62,6 +66,7 @@ class SimulationConfig:
             matching_protocol_name=d.get("matching_protocol_name", "opportunistic"),
             info_env_name=d.get("info_env_name", "full_information"),
             info_env_params=d.get("info_env_params", {}),
+            schema_version=d.get("schema_version", "0.0"),
         )
 
 

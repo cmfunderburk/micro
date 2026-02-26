@@ -10,6 +10,7 @@ from microecon.logging import (
     AgentSnapshot,
     MovementEvent,
     RunSummary,
+    SCHEMA_VERSION,
     SearchDecision,
     SimulationConfig,
     TargetEvaluation,
@@ -126,6 +127,44 @@ class TestEventSerialization:
         d = record.to_dict()
         restored = TickRecord.from_dict(d)
         assert restored == record
+
+    def test_simulation_config_includes_schema_version(self):
+        """to_dict() must include schema_version = SCHEMA_VERSION ("1.0")."""
+        config = SimulationConfig(
+            n_agents=10,
+            grid_size=15,
+            seed=42,
+            protocol_name="nash",
+        )
+        d = config.to_dict()
+        assert "schema_version" in d
+        assert d["schema_version"] == "1.0"
+        assert d["schema_version"] == SCHEMA_VERSION
+
+    def test_simulation_config_from_dict_without_schema_version(self):
+        """Pre-versioning dicts (no schema_version key) should get '0.0'."""
+        d = {
+            "n_agents": 10,
+            "grid_size": 15,
+            "seed": 42,
+            "protocol_name": "nash",
+        }
+        config = SimulationConfig.from_dict(d)
+        assert config.schema_version == "0.0"
+
+    def test_simulation_config_roundtrip_preserves_schema_version(self):
+        """Roundtrip through to_dict/from_dict must preserve schema_version."""
+        config = SimulationConfig(
+            n_agents=10,
+            grid_size=15,
+            seed=42,
+            protocol_name="nash",
+            schema_version="2.5",
+        )
+        d = config.to_dict()
+        restored = SimulationConfig.from_dict(d)
+        assert restored.schema_version == "2.5"
+        assert restored == config
 
 
 class TestSimulationLogger:

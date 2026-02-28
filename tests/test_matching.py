@@ -205,9 +205,12 @@ class TestBilateralProposalMatching:
             RationalDecisionProcedure(),
             NashBargainingProtocol(),
         )
-        # One should trade, the other should be non-selected
+        # First proposer in iteration order should trade, the other is non-selected
         assert len(result.trades) == 1
+        assert result.trades[0].proposer_id == "a1"
+        assert result.trades[0].target_id == "a2"
         assert len(result.non_selections) == 1
+        assert result.non_selections[0] == "a3"
 
     def test_no_agent_matched_twice(self):
         """An agent that already traded cannot be matched again."""

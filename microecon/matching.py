@@ -87,3 +87,137 @@ class MatchingProtocol(ABC):
             MatchResult with trades, rejections, and non-selections
         """
         ...
+
+
+class BilateralProposalMatching(MatchingProtocol):
+    """Default bilateral proposal matching -- extracts current _execute_actions behavior.
+
+    Resolution order:
+    1. Detect mutual proposals (A->B and B->A) -- fast-track to trade
+    2. Evaluate non-mutual proposals -- target accepts/rejects based on opportunity cost
+    3. Handle conflicts -- first-responder advantage for same target
+
+    This is a pure extraction of the matching logic from simulation.py into a protocol.
+    """
+
+    def resolve(
+        self,
+        propose_actions: dict[str, "ProposeAction"],
+        agents: dict[str, "Agent"],
+        positions: dict[str, "Position"],
+        decision_procedure: "DecisionProcedure",
+        bargaining_protocol: "BargainingProtocol",
+    ) -> MatchResult:
+        if not propose_actions:
+            return MatchResult(trades=(), rejections=(), non_selections=())
+
+        trades: list[TradeOutcome] = []
+        rejections: list[Rejection] = []
+        non_selections: list[str] = []
+        traded_this_tick: set[str] = set()
+
+        # Step 1: Detect and resolve mutual proposals
+        mutual_proposals: set[frozenset[str]] = set()
+        for proposer_id, action in propose_actions.items():
+            target_action = propose_actions.get(action.target_id)
+            if target_action and target_action.target_id == proposer_id:
+                mutual_proposals.add(frozenset([proposer_id, action.target_id]))
+
+        processed_mutual: set[str] = set()
+        for pair in sorted(mutual_proposals, key=lambda p: sorted(p)):
+            pair_list = sorted(pair)
+            if pair_list[0] in processed_mutual or pair_list[1] in processed_mutual:
+                continue
+
+            a_id, b_id = pair_list
+            if a_id not in agents or b_id not in agents:
+                continue
+
+            pos_a = positions.get(a_id)
+            pos_b = positions.get(b_id)
+            if pos_a is None or pos_b is None:
+                continue
+            if pos_a.chebyshev_distance_to(pos_b) > 1:
+                continue
+
+            # Mutual match: use sorted order for deterministic proposer assignment
+            trades.append(TradeOutcome(proposer_id=a_id, target_id=b_id))
+            processed_mutual.add(a_id)
+            processed_mutual.add(b_id)
+            traded_this_tick.add(a_id)
+            traded_this_tick.add(b_id)
+
+        # Step 2: Evaluate non-mutual proposals
+        # Build decision context for proposal evaluation
+        from microecon.actions import ActionContext
+        from microecon.decisions import DecisionContext
+
+        action_context = ActionContext(
+            current_tick=0,
+            agent_positions=positions,
+            agent_interaction_states={},
+            co_located_agents={},
+            adjacent_agents={},
+            pending_proposals={},
+        )
+        decision_context = DecisionContext(
+            action_context=action_context,
+            visible_agents=agents,  # Full visibility for evaluation (ADR-005)
+            bargaining_protocol=bargaining_protocol,
+            agent_positions=positions,
+        )
+
+        responded_targets: set[str] = set()
+
+        for proposer_id, action in propose_actions.items():
+            if proposer_id in processed_mutual:
+                continue
+            if proposer_id in traded_this_tick:
+                continue
+
+            target_id = action.target_id
+            proposer = agents.get(proposer_id)
+            target = agents.get(target_id)
+            if proposer is None or target is None:
+                continue
+
+            # Target already responded to another proposal
+            if target_id in responded_targets:
+                non_selections.append(proposer_id)
+                continue
+
+            # Target already traded (from mutual proposal)
+            if target_id in traded_this_tick:
+                non_selections.append(proposer_id)
+                continue
+
+            # Check adjacency
+            proposer_pos = positions.get(proposer_id)
+            target_pos = positions.get(target_id)
+            if proposer_pos is None or target_pos is None:
+                continue
+            if proposer_pos.chebyshev_distance_to(target_pos) > 1:
+                continue
+
+            # Target evaluates proposal
+            accept = decision_procedure.evaluate_proposal(
+                target, proposer, decision_context
+            )
+            responded_targets.add(target_id)
+
+            if accept:
+                trades.append(TradeOutcome(proposer_id=proposer_id, target_id=target_id))
+                traded_this_tick.add(proposer_id)
+                traded_this_tick.add(target_id)
+            else:
+                rejections.append(Rejection(
+                    proposer_id=proposer_id,
+                    target_id=target_id,
+                    cooldown_ticks=3,
+                ))
+
+        return MatchResult(
+            trades=tuple(trades),
+            rejections=tuple(rejections),
+            non_selections=tuple(non_selections),
+        )

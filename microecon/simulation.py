@@ -685,6 +685,7 @@ def create_simple_economy(
     seed: Optional[int] = None,
     bargaining_protocol: Optional[BargainingProtocol] = None,
     decision_procedure: Optional[DecisionProcedure] = None,
+    matching_protocol: Optional[MatchingProtocol] = None,
     use_beliefs: bool = False,
     info_env: Optional[InformationEnvironment] = None,
 ) -> Simulation:
@@ -706,6 +707,7 @@ def create_simple_economy(
         seed: Random seed for reproducibility
         bargaining_protocol: Protocol for bilateral bargaining (default: Nash)
         decision_procedure: Procedure for agent action selection (default: Rational)
+        matching_protocol: Protocol for matching proposals (default: BilateralProposalMatching)
         use_beliefs: Enable belief system for agents (default: False)
         info_env: Information environment (default: FullInformation)
 
@@ -720,6 +722,7 @@ def create_simple_economy(
         info_env=info_env or FullInformation(),
         bargaining_protocol=bargaining_protocol or NashBargainingProtocol(),
         decision_procedure=decision_procedure or RationalDecisionProcedure(),
+        matching_protocol=matching_protocol or BilateralProposalMatching(),
         _rng=rng,
     )
 

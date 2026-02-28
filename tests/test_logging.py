@@ -166,14 +166,16 @@ class TestEventSerialization:
         assert restored.schema_version == "2.5"
         assert restored == config
 
-    def test_simulation_config_includes_run_id(self):
+    def test_simulation_config_has_run_id_field(self):
+        """SimulationConfig includes run_id in serialization (default empty)."""
         config = SimulationConfig(
             n_agents=10, grid_size=15, seed=42, protocol_name="nash",
         )
         d = config.to_dict()
         assert "run_id" in d
         assert isinstance(d["run_id"], str)
-        assert len(d["run_id"]) > 0
+        # Default is empty; SimulationLogger (Task 2) populates UUID
+        assert d["run_id"] == ""
 
     def test_simulation_config_run_id_roundtrip(self):
         config = SimulationConfig(

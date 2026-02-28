@@ -7,7 +7,6 @@ All fields use primitive types (int, float, str, tuple) for JSON serialization.
 
 from dataclasses import dataclass, field
 from typing import Any
-from uuid import uuid4
 
 SCHEMA_VERSION = "1.0"
 
@@ -36,7 +35,7 @@ class SimulationConfig:
     info_env_name: str = "full_information"
     info_env_params: dict[str, Any] = field(default_factory=dict)
     schema_version: str = SCHEMA_VERSION
-    run_id: str = field(default_factory=lambda: str(uuid4()))
+    run_id: str = ""
     manifest_id: str | None = None
     treatment_arm: str | None = None
 

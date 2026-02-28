@@ -16,6 +16,9 @@ export interface SimulationConfig {
   info_env_name?: string;
   info_env_params?: Record<string, unknown>;
   schema_version?: string;
+  run_id?: string;
+  manifest_id?: string | null;
+  treatment_arm?: string | null;
 }
 
 export interface AgentSnapshot {

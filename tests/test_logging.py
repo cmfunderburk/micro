@@ -196,6 +196,36 @@ class TestEventSerialization:
         assert config.run_id == ""
 
 
+class TestRunIdGeneration:
+    """Test that SimulationLogger generates run_id when not provided."""
+
+    def test_logger_generates_run_id(self):
+        config = SimulationConfig(
+            n_agents=4, grid_size=5, seed=42, protocol_name="nash",
+        )
+        logger = SimulationLogger(config)
+        assert logger.config.run_id != ""
+        # Should be a valid UUID4
+        import uuid
+        uuid.UUID(logger.config.run_id, version=4)
+
+    def test_logger_preserves_provided_run_id(self):
+        config = SimulationConfig(
+            n_agents=4, grid_size=5, seed=42, protocol_name="nash",
+            run_id="my-custom-id",
+        )
+        logger = SimulationLogger(config)
+        assert logger.config.run_id == "my-custom-id"
+
+    def test_logger_generates_unique_run_ids(self):
+        config = SimulationConfig(
+            n_agents=4, grid_size=5, seed=42, protocol_name="nash",
+        )
+        logger1 = SimulationLogger(config)
+        logger2 = SimulationLogger(config)
+        assert logger1.config.run_id != logger2.config.run_id
+
+
 class TestSimulationLogger:
     """Test SimulationLogger functionality."""
 

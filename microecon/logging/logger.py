@@ -4,6 +4,7 @@ The logger hooks into the simulation loop to capture all decisions
 and state changes, enabling replay and analysis.
 """
 
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -92,6 +93,12 @@ class SimulationLogger:
             output_path: If provided, write ticks to this directory as they occur
             log_format: Format for writing logs (default: JSONLinesFormat)
         """
+        # Generate run_id if not provided (SimulationConfig is frozen, so create a new instance)
+        if not config.run_id:
+            config_dict = config.to_dict()
+            config_dict["run_id"] = str(uuid.uuid4())
+            config = SimulationConfig.from_dict(config_dict)
+
         self.config = config
         self.output_path = output_path
         self.log_format = log_format

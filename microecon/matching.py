@@ -221,3 +221,75 @@ class BilateralProposalMatching(MatchingProtocol):
             rejections=tuple(rejections),
             non_selections=tuple(non_selections),
         )
+
+
+class CentralizedClearingMatching(MatchingProtocol):
+    """Centralized welfare-maximizing matching.
+
+    A centralized auctioneer collects all proposals, computes bilateral surplus
+    for each adjacent proposer-target pair, and greedily assigns matches by
+    descending surplus (each agent matched at most once).
+
+    Key differences from BilateralProposalMatching:
+    - No rejections (unmatched = non-selected, no cooldowns)
+    - Welfare-maximizing (highest surplus pairs matched first)
+    - Simultaneous resolution (no first-responder advantage)
+
+    This is a stub demonstrating the MatchingProtocol interface.
+    """
+
+    def resolve(
+        self,
+        propose_actions: dict[str, "ProposeAction"],
+        agents: dict[str, "Agent"],
+        positions: dict[str, "Position"],
+        decision_procedure: "DecisionProcedure",
+        bargaining_protocol: "BargainingProtocol",
+    ) -> MatchResult:
+        if not propose_actions:
+            return MatchResult(trades=(), rejections=(), non_selections=())
+
+        # Compute surplus for each valid proposal (adjacent pairs only)
+        scored_proposals: list[tuple[float, str, str]] = []
+        for proposer_id, action in propose_actions.items():
+            target_id = action.target_id
+            proposer = agents.get(proposer_id)
+            target = agents.get(target_id)
+            if proposer is None or target is None:
+                continue
+
+            pos_p = positions.get(proposer_id)
+            pos_t = positions.get(target_id)
+            if pos_p is None or pos_t is None:
+                continue
+            if pos_p.chebyshev_distance_to(pos_t) > 1:
+                continue
+
+            surplus = bargaining_protocol.compute_expected_surplus(proposer, target)
+            if surplus > 0:
+                scored_proposals.append((surplus, proposer_id, target_id))
+
+        # Sort by surplus descending, then by proposer_id for determinism
+        scored_proposals.sort(key=lambda x: (-x[0], x[1]))
+
+        # Greedy matching: assign highest surplus pairs first
+        trades: list[TradeOutcome] = []
+        matched: set[str] = set()
+
+        for surplus, proposer_id, target_id in scored_proposals:
+            if proposer_id in matched or target_id in matched:
+                continue
+            trades.append(TradeOutcome(proposer_id=proposer_id, target_id=target_id))
+            matched.add(proposer_id)
+            matched.add(target_id)
+
+        # All unmatched proposers are non-selected (no rejections in centralized clearing)
+        non_selections = tuple(
+            pid for pid in propose_actions if pid not in matched
+        )
+
+        return MatchResult(
+            trades=tuple(trades),
+            rejections=(),  # Centralized clearing never rejects
+            non_selections=non_selections,
+        )

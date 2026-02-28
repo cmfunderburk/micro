@@ -10,6 +10,7 @@ import pytest
 
 from microecon.matching import (
     BilateralProposalMatching,
+    CentralizedClearingMatching,
     MatchingProtocol,
     MatchResult,
 )
@@ -24,6 +25,7 @@ pytestmark = pytest.mark.contract
 
 ALL_PROTOCOLS = [
     BilateralProposalMatching(),
+    CentralizedClearingMatching(),
 ]
 
 

@@ -4,6 +4,7 @@ import pytest
 
 from microecon.matching import (
     BilateralProposalMatching,
+    CentralizedClearingMatching,
     MatchingProtocol,
     MatchResult,
     TradeOutcome,
@@ -256,3 +257,99 @@ class TestBilateralProposalMatching:
         """BilateralProposalMatching implements MatchingProtocol."""
         protocol = BilateralProposalMatching()
         assert isinstance(protocol, MatchingProtocol)
+
+
+# =============================================================================
+# CentralizedClearingMatching Tests (A-206)
+# =============================================================================
+
+
+class TestCentralizedClearingMatching:
+    """Tests for centralized clearing matching protocol."""
+
+    def test_single_pair_matched(self):
+        """Single proposal with surplus -> trade."""
+        grid = Grid(5)
+        a1 = _make_agent("a1", alpha=0.2)
+        a2 = _make_agent("a2", alpha=0.8)
+        pos = _setup_pair(grid, a1, a2, Position(0, 0), Position(0, 1))
+
+        proposals = {"a1": ProposeAction(target_id="a2")}
+        agents = {"a1": a1, "a2": a2}
+
+        protocol = CentralizedClearingMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        assert len(result.trades) == 1
+        assert len(result.rejections) == 0  # Centralized clearing doesn't reject
+
+    def test_welfare_maximizing_match(self):
+        """When multiple matches possible, picks highest surplus."""
+        grid = Grid(5)
+        a1 = _make_agent("a1", alpha=0.1)   # Very different alpha
+        a2 = _make_agent("a2", alpha=0.9)   # Very different alpha -> high surplus
+        a3 = _make_agent("a3", alpha=0.45)  # Similar alpha -> low surplus
+        grid.place_agent(a1, Position(0, 0))
+        grid.place_agent(a2, Position(0, 1))
+        grid.place_agent(a3, Position(1, 0))
+        pos = {"a1": Position(0, 0), "a2": Position(0, 1), "a3": Position(1, 0)}
+
+        # Both a1 and a3 propose to a2, a2 is adjacent to both
+        proposals = {
+            "a1": ProposeAction(target_id="a2"),
+            "a3": ProposeAction(target_id="a2"),
+        }
+        agents = {"a1": a1, "a2": a2, "a3": a3}
+
+        protocol = CentralizedClearingMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        # Should pick a1-a2 (higher surplus) over a3-a2
+        assert len(result.trades) == 1
+        assert result.trades[0].proposer_id == "a1"
+        assert result.trades[0].target_id == "a2"
+        assert "a3" in result.non_selections
+
+    def test_no_rejections_only_non_selections(self):
+        """Centralized clearing never rejects -- unmatched are non-selected."""
+        grid = Grid(5)
+        a1 = _make_agent("a1", alpha=0.45)
+        a2 = _make_agent("a2", alpha=0.55)
+        pos = _setup_pair(grid, a1, a2, Position(0, 0), Position(0, 1))
+
+        proposals = {"a1": ProposeAction(target_id="a2")}
+        agents = {"a1": a1, "a2": a2}
+
+        protocol = CentralizedClearingMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        # Either trades or non-selects, never rejects
+        assert len(result.rejections) == 0
+
+    def test_non_adjacent_not_matched(self):
+        """Only adjacent pairs can be matched."""
+        grid = Grid(10)
+        a1 = _make_agent("a1", alpha=0.2)
+        a2 = _make_agent("a2", alpha=0.8)
+        pos = _setup_pair(grid, a1, a2, Position(0, 0), Position(5, 5))
+
+        proposals = {"a1": ProposeAction(target_id="a2")}
+        agents = {"a1": a1, "a2": a2}
+
+        protocol = CentralizedClearingMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        assert len(result.trades) == 0
+        assert "a1" in result.non_selections

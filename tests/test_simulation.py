@@ -461,6 +461,7 @@ class TestProposalEvaluationVisibility:
         # The key assertion: trades should still occur and be welfare-improving,
         # because proposal evaluation uses true preferences (not noisy).
         # Under full visibility for evaluation, gains should always be non-negative.
+        assert len(sim.trades) > 0, "No trades occurred — test is vacuous"
         for trade in sim.trades:
             assert trade.gains[0] >= -1e-10, \
                 f"Agent 1 had negative gain {trade.gains[0]} — proposal evaluation may be using noisy info"

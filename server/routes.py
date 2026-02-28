@@ -299,6 +299,8 @@ async def load_run(run_name: str) -> dict[str, Any]:
             "n_ticks": len(ticks),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load run: {str(e)}")
 

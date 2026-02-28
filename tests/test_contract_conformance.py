@@ -379,6 +379,104 @@ class TestReplayAPIConformance:
         assert replay_data["config"]["run_id"] != ""
 
 
+class TestReplayRouteIntegration:
+    """Exercise the actual replay route handler to catch transform regressions.
+
+    Unlike TestReplayAPIConformance (which checks raw persisted data shape),
+    these tests call server.routes.load_run directly and verify the transformed output.
+    """
+
+    @pytest.fixture
+    def persisted_run(self, monkeypatch):
+        """Create a persisted run, monkeypatch RUNS_DIR, yield run_name."""
+        import server.routes as routes_mod
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_name = "test_run"
+            output_path = Path(tmpdir) / run_name
+            config = SimulationConfig(
+                n_agents=4, grid_size=5, seed=42, protocol_name="nash",
+            )
+            logger = SimulationLogger(
+                config=config, output_path=output_path, log_format=JSONLinesFormat(),
+            )
+            sim = create_simple_economy(n_agents=4, grid_size=5, seed=42)
+            sim.logger = logger
+            sim.run(15)
+            logger.finalize()
+            monkeypatch.setattr(routes_mod, "RUNS_DIR", Path(tmpdir))
+            yield Path(tmpdir), run_name
+
+    def _call_route(self, run_name: str):
+        """Call the async route handler synchronously."""
+        import asyncio
+        import server.routes as routes_mod
+        return asyncio.run(routes_mod.load_run(run_name))
+
+    def test_route_returns_transformed_agents(self, persisted_run):
+        """Route handler renames agent_id -> id and includes all presentation fields."""
+        _, run_name = persisted_run
+        result = self._call_route(run_name)
+        assert "ticks" in result
+        assert len(result["ticks"]) == 15
+        for tick in result["ticks"]:
+            assert "agents" in tick
+            for agent in tick["agents"]:
+                # Route renames agent_id -> id
+                assert "id" in agent
+                assert "agent_id" not in agent
+                assert "position" in agent
+                assert "endowment" in agent
+                assert "alpha" in agent
+                assert "utility" in agent
+
+    def test_route_returns_transformed_trades(self, persisted_run):
+        """Route handler unpacks pre_holdings/post_allocations tuples."""
+        _, run_name = persisted_run
+        result = self._call_route(run_name)
+        trades_found = False
+        for tick in result["ticks"]:
+            for trade in tick["trades"]:
+                trades_found = True
+                # Route unpacks tuples and derives alpha
+                assert "pre_holdings_1" in trade
+                assert "pre_holdings_2" in trade
+                assert "post_allocation_1" in trade
+                assert "post_allocation_2" in trade
+                assert "alpha1" in trade
+                assert "alpha2" in trade
+                assert "proposer_id" in trade
+                # Should NOT have raw canonical fields
+                assert "pre_holdings" not in trade
+                assert "post_allocations" not in trade
+        assert trades_found, "No trades in 15 ticks — test needs more ticks"
+
+    def test_route_returns_422_for_unsupported_schema(self, persisted_run):
+        """Unsupported schema version returns 422, not 500."""
+        from fastapi import HTTPException
+        tmpdir, run_name = persisted_run
+
+        # Tamper config to use future schema version
+        config_file = tmpdir / run_name / "config.json"
+        with open(config_file) as f:
+            config = json.load(f)
+        config["schema_version"] = "99.0"
+        with open(config_file, "w") as f:
+            json.dump(config, f)
+
+        with pytest.raises(HTTPException) as exc_info:
+            self._call_route(run_name)
+        assert exc_info.value.status_code == 422
+
+    def test_route_returns_beliefs_map(self, persisted_run):
+        """Route handler transforms belief_snapshots array into beliefs map."""
+        _, run_name = persisted_run
+        result = self._call_route(run_name)
+        for tick in result["ticks"]:
+            assert "beliefs" in tick
+            assert isinstance(tick["beliefs"], dict)
+
+
 # =========================================================================
 # Level 4: Live WebSocket payload conformance
 # =========================================================================

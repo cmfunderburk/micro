@@ -40,7 +40,10 @@ def _run_simulation(seed: int, protocol: str = "nash", n_agents: int = 6,
     bargaining = protocols[protocol]()
 
     if info_env == "noisy_alpha":
-        ie = NoisyAlphaInformation(noise_std=(info_env_params or {}).get("noise_std", 0.1))
+        ie = NoisyAlphaInformation(
+            noise_std=(info_env_params or {}).get("noise_std", 0.1),
+            seed=seed,
+        )
     else:
         ie = FullInformation()
 
@@ -87,8 +90,19 @@ def _assert_ticks_equal(ticks_a: list[TickRecord], ticks_b: list[TickRecord]) ->
                 f"Tick {i}: agent ID mismatch"
             assert sa.position == sb.position, \
                 f"Tick {i}, agent {sa.agent_id}: position mismatch"
+            for ea, eb in zip(sa.endowment, sb.endowment):
+                assert abs(ea - eb) < FLOAT_TOL, \
+                    f"Tick {i}, agent {sa.agent_id}: endowment mismatch"
+            assert abs(sa.alpha - sb.alpha) < FLOAT_TOL, \
+                f"Tick {i}, agent {sa.agent_id}: alpha mismatch"
             assert abs(sa.utility - sb.utility) < FLOAT_TOL, \
                 f"Tick {i}, agent {sa.agent_id}: utility mismatch"
+            assert sa.has_beliefs == sb.has_beliefs, \
+                f"Tick {i}, agent {sa.agent_id}: has_beliefs mismatch"
+            assert sa.n_trades_in_memory == sb.n_trades_in_memory, \
+                f"Tick {i}, agent {sa.agent_id}: n_trades_in_memory mismatch"
+            assert sa.n_type_beliefs == sb.n_type_beliefs, \
+                f"Tick {i}, agent {sa.agent_id}: n_type_beliefs mismatch"
 
         # Trades
         assert len(ta.trades) == len(tb.trades), \
@@ -108,6 +122,56 @@ def _assert_ticks_equal(ticks_a: list[TickRecord], ticks_b: list[TickRecord]) ->
             assert ma.agent_id == mb.agent_id
             assert ma.from_pos == mb.from_pos
             assert ma.to_pos == mb.to_pos
+
+        # Search decisions
+        assert len(ta.search_decisions) == len(tb.search_decisions), \
+            f"Tick {i}: search decision count mismatch"
+        for sda, sdb in zip(ta.search_decisions, tb.search_decisions):
+            assert sda.agent_id == sdb.agent_id
+            assert sda.position == sdb.position
+            assert sda.visible_agents == sdb.visible_agents
+            assert sda.chosen_target_id == sdb.chosen_target_id
+            if sda.chosen_value is not None and sdb.chosen_value is not None:
+                assert abs(sda.chosen_value - sdb.chosen_value) < FLOAT_TOL
+            else:
+                assert sda.chosen_value == sdb.chosen_value
+            assert len(sda.evaluations) == len(sdb.evaluations)
+            for eva, evb in zip(sda.evaluations, sdb.evaluations):
+                assert eva.target_id == evb.target_id
+                assert abs(eva.expected_surplus - evb.expected_surplus) < FLOAT_TOL
+                assert abs(eva.discounted_value - evb.discounted_value) < FLOAT_TOL
+
+        # Commitments
+        assert len(ta.commitments_formed) == len(tb.commitments_formed), \
+            f"Tick {i}: commitments_formed count mismatch"
+        for ca, cb in zip(ta.commitments_formed, tb.commitments_formed):
+            assert ca.agent_a == cb.agent_a
+            assert ca.agent_b == cb.agent_b
+
+        assert len(ta.commitments_broken) == len(tb.commitments_broken), \
+            f"Tick {i}: commitments_broken count mismatch"
+        for ca, cb in zip(ta.commitments_broken, tb.commitments_broken):
+            assert ca.agent_a == cb.agent_a
+            assert ca.agent_b == cb.agent_b
+            assert ca.reason == cb.reason
+
+        # Belief snapshots
+        assert len(ta.belief_snapshots) == len(tb.belief_snapshots), \
+            f"Tick {i}: belief_snapshots count mismatch"
+        for bsa, bsb in zip(ta.belief_snapshots, tb.belief_snapshots):
+            assert bsa.agent_id == bsb.agent_id
+            assert len(bsa.type_beliefs) == len(bsb.type_beliefs)
+            for tba, tbb in zip(bsa.type_beliefs, bsb.type_beliefs):
+                assert tba.target_agent_id == tbb.target_agent_id
+                assert abs(tba.believed_alpha - tbb.believed_alpha) < FLOAT_TOL
+                assert abs(tba.confidence - tbb.confidence) < FLOAT_TOL
+                assert tba.n_interactions == tbb.n_interactions
+            if bsa.price_belief is not None and bsb.price_belief is not None:
+                assert abs(bsa.price_belief.mean - bsb.price_belief.mean) < FLOAT_TOL
+                assert abs(bsa.price_belief.variance - bsb.price_belief.variance) < FLOAT_TOL
+                assert bsa.price_belief.n_observations == bsb.price_belief.n_observations
+            else:
+                assert bsa.price_belief == bsb.price_belief
 
 
 class TestDeterminismGate:

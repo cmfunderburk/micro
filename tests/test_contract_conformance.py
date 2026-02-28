@@ -172,3 +172,110 @@ class TestCanonicalRoundTrip:
             ),
         )
         assert TickRecord.from_dict(original.to_dict()) == original
+
+
+# =========================================================================
+# Level 2: Persist -> Load conformance
+# =========================================================================
+
+class TestPersistLoadConformance:
+    """Persisting via SimulationLogger and loading via load_run() must be lossless."""
+
+    def _run_and_persist(self, tmpdir: Path, n_ticks: int = 10, seed: int = 42,
+                         protocol: str = "nash", use_beliefs: bool = False) -> RunData:
+        """Helper: run a simulation and persist it."""
+        output_path = tmpdir / "test_run"
+        config = SimulationConfig(
+            n_agents=4, grid_size=5, seed=seed, protocol_name=protocol,
+        )
+        logger = SimulationLogger(
+            config=config, output_path=output_path, log_format=JSONLinesFormat(),
+        )
+        sim = create_simple_economy(
+            n_agents=4, grid_size=5, seed=seed, use_beliefs=use_beliefs,
+        )
+        sim.logger = logger
+        sim.run(n_ticks)
+        return logger.finalize()
+
+    def test_config_survives_persist_load(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original = self._run_and_persist(Path(tmpdir))
+            loaded = load_run(Path(tmpdir) / "test_run")
+            assert loaded.config.n_agents == original.config.n_agents
+            assert loaded.config.grid_size == original.config.grid_size
+            assert loaded.config.seed == original.config.seed
+            assert loaded.config.protocol_name == original.config.protocol_name
+            assert loaded.config.schema_version == original.config.schema_version
+            assert loaded.config.run_id == original.config.run_id
+
+    def test_tick_count_matches(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original = self._run_and_persist(Path(tmpdir), n_ticks=10)
+            loaded = load_run(Path(tmpdir) / "test_run")
+            assert len(loaded.ticks) == len(original.ticks) == 10
+
+    def test_agent_snapshots_survive(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original = self._run_and_persist(Path(tmpdir), n_ticks=5)
+            loaded = load_run(Path(tmpdir) / "test_run")
+            for orig_tick, loaded_tick in zip(original.ticks, loaded.ticks):
+                assert len(loaded_tick.agent_snapshots) == len(orig_tick.agent_snapshots)
+                for orig_snap, loaded_snap in zip(
+                    orig_tick.agent_snapshots, loaded_tick.agent_snapshots
+                ):
+                    assert loaded_snap.agent_id == orig_snap.agent_id
+                    assert loaded_snap.position == orig_snap.position
+                    assert loaded_snap.alpha == orig_snap.alpha
+                    assert abs(loaded_snap.utility - orig_snap.utility) < 1e-10
+
+    def test_trades_survive(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original = self._run_and_persist(Path(tmpdir), n_ticks=20)
+            loaded = load_run(Path(tmpdir) / "test_run")
+            for orig_tick, loaded_tick in zip(original.ticks, loaded.ticks):
+                assert len(loaded_tick.trades) == len(orig_tick.trades)
+                for orig_trade, loaded_trade in zip(
+                    orig_tick.trades, loaded_tick.trades
+                ):
+                    assert loaded_trade.agent1_id == orig_trade.agent1_id
+                    assert loaded_trade.agent2_id == orig_trade.agent2_id
+                    assert loaded_trade.proposer_id == orig_trade.proposer_id
+                    assert loaded_trade.trade_occurred == orig_trade.trade_occurred
+
+    def test_welfare_survives(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original = self._run_and_persist(Path(tmpdir), n_ticks=10)
+            loaded = load_run(Path(tmpdir) / "test_run")
+            for orig_tick, loaded_tick in zip(original.ticks, loaded.ticks):
+                assert abs(loaded_tick.total_welfare - orig_tick.total_welfare) < 1e-10
+                assert loaded_tick.cumulative_trades == orig_tick.cumulative_trades
+
+    def test_summary_survives(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original = self._run_and_persist(Path(tmpdir), n_ticks=10)
+            loaded = load_run(Path(tmpdir) / "test_run")
+            assert loaded.summary is not None
+            assert original.summary is not None
+            assert loaded.summary.total_ticks == original.summary.total_ticks
+            assert loaded.summary.total_trades == original.summary.total_trades
+            assert abs(loaded.summary.final_welfare - original.summary.final_welfare) < 1e-10
+
+    def test_schema_version_persisted(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._run_and_persist(Path(tmpdir))
+            config_file = Path(tmpdir) / "test_run" / "config.json"
+            with open(config_file) as f:
+                raw = json.load(f)
+            assert "schema_version" in raw
+            assert raw["schema_version"] == "1.0"
+
+    def test_run_id_persisted(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original = self._run_and_persist(Path(tmpdir))
+            config_file = Path(tmpdir) / "test_run" / "config.json"
+            with open(config_file) as f:
+                raw = json.load(f)
+            assert "run_id" in raw
+            assert raw["run_id"] == original.config.run_id
+            assert raw["run_id"] != ""

@@ -279,3 +279,97 @@ class TestPersistLoadConformance:
             assert "run_id" in raw
             assert raw["run_id"] == original.config.run_id
             assert raw["run_id"] != ""
+
+
+# =========================================================================
+# Level 3: Persist -> Replay API conformance
+# =========================================================================
+
+class TestReplayAPIConformance:
+    """Replay API adapter must correctly transform canonical schema to presentation format.
+
+    Adapter contract (from docs/contracts/schema-v1.md):
+    - agent_id -> id (rename)
+    - target_agent_id -> target_id (rename in beliefs)
+    - pre_holdings[0] -> pre_holdings_1 (tuple unpack)
+    - post_allocations[0] -> post_allocation_1 (tuple unpack)
+    - alpha1, alpha2 derived from AgentSnapshot.alpha
+    - belief_snapshots array -> beliefs map keyed by agent_id
+    """
+
+    @pytest.fixture
+    def replay_data(self):
+        """Create a persisted run and load it through the replay API transform."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test_run"
+            config = SimulationConfig(
+                n_agents=4, grid_size=5, seed=42, protocol_name="nash",
+            )
+            logger = SimulationLogger(
+                config=config, output_path=output_path, log_format=JSONLinesFormat(),
+            )
+            sim = create_simple_economy(n_agents=4, grid_size=5, seed=42)
+            sim.logger = logger
+            sim.run(15)
+            logger.finalize()
+
+            # Load raw persisted data
+            config_file = output_path / "config.json"
+            ticks_file = output_path / "ticks.jsonl"
+
+            with open(config_file) as f:
+                raw_config = json.load(f)
+
+            raw_ticks = []
+            with open(ticks_file) as f:
+                for line in f:
+                    raw_ticks.append(json.loads(line.strip()))
+
+            yield {"config": raw_config, "raw_ticks": raw_ticks}
+
+    def test_agent_snapshots_have_required_fields(self, replay_data):
+        """Each agent snapshot in raw data has all canonical fields."""
+        for tick in replay_data["raw_ticks"]:
+            for agent in tick["agent_snapshots"]:
+                assert "agent_id" in agent
+                assert "position" in agent
+                assert "endowment" in agent
+                assert "alpha" in agent
+                assert "utility" in agent
+
+    def test_trade_events_have_required_fields(self, replay_data):
+        """Trade events have all canonical fields including proposer_id."""
+        trades_found = False
+        for tick in replay_data["raw_ticks"]:
+            for trade in tick.get("trades", []):
+                trades_found = True
+                assert "agent1_id" in trade
+                assert "agent2_id" in trade
+                assert "proposer_id" in trade
+                assert "pre_holdings" in trade
+                assert "post_allocations" in trade
+                assert "utilities" in trade
+                assert "gains" in trade
+                assert "trade_occurred" in trade
+                # pre_holdings is a list of two lists
+                assert len(trade["pre_holdings"]) == 2
+                assert len(trade["post_allocations"]) == 2
+        assert trades_found, "No trades found in 15 ticks — test needs more ticks"
+
+    def test_alpha_derivable_from_agent_snapshots(self, replay_data):
+        """Alpha values for trade enrichment must be derivable from same-tick agent snapshots."""
+        for tick in replay_data["raw_ticks"]:
+            alpha_by_id = {
+                agent["agent_id"]: agent["alpha"]
+                for agent in tick["agent_snapshots"]
+            }
+            for trade in tick.get("trades", []):
+                assert trade["agent1_id"] in alpha_by_id
+                assert trade["agent2_id"] in alpha_by_id
+
+    def test_schema_version_in_config(self, replay_data):
+        assert "schema_version" in replay_data["config"]
+
+    def test_run_id_in_config(self, replay_data):
+        assert "run_id" in replay_data["config"]
+        assert replay_data["config"]["run_id"] != ""

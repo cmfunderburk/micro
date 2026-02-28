@@ -166,6 +166,33 @@ class TestEventSerialization:
         assert restored.schema_version == "2.5"
         assert restored == config
 
+    def test_simulation_config_includes_run_id(self):
+        config = SimulationConfig(
+            n_agents=10, grid_size=15, seed=42, protocol_name="nash",
+        )
+        d = config.to_dict()
+        assert "run_id" in d
+        assert isinstance(d["run_id"], str)
+        assert len(d["run_id"]) > 0
+
+    def test_simulation_config_run_id_roundtrip(self):
+        config = SimulationConfig(
+            n_agents=10, grid_size=15, seed=42, protocol_name="nash",
+            run_id="test-run-id-123",
+        )
+        d = config.to_dict()
+        restored = SimulationConfig.from_dict(d)
+        assert restored.run_id == "test-run-id-123"
+
+    def test_simulation_config_without_run_id_gets_empty(self):
+        """Pre-A-104 configs without run_id load with empty string."""
+        d = {
+            "n_agents": 10, "grid_size": 15, "seed": 42,
+            "protocol_name": "nash",
+        }
+        config = SimulationConfig.from_dict(d)
+        assert config.run_id == ""
+
 
 class TestSimulationLogger:
     """Test SimulationLogger functionality."""

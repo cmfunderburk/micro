@@ -35,6 +35,10 @@ from microecon.logging import (
     load_run,
 )
 from microecon.simulation import create_simple_economy
+from server.simulation_manager import (
+    SimulationConfig as ServerConfig,
+    SimulationManager,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -373,3 +377,75 @@ class TestReplayAPIConformance:
     def test_run_id_in_config(self, replay_data):
         assert "run_id" in replay_data["config"]
         assert replay_data["config"]["run_id"] != ""
+
+
+# =========================================================================
+# Level 4: Live WebSocket payload conformance
+# =========================================================================
+
+
+class TestLivePayloadConformance:
+    """Live WebSocket payload must contain all fields frontend expects.
+
+    The live payload is built from Simulation objects (not persisted data).
+    It includes presentation-only fields (interaction_state, bargaining_power)
+    not in the canonical schema.
+    """
+
+    def _get_live_payload(self, protocol: str = "nash", n_ticks: int = 5) -> dict:
+        """Create a simulation, run ticks, return tick data payload."""
+        mgr = SimulationManager()
+        config = ServerConfig(
+            n_agents=4, grid_size=5, seed=42,
+            bargaining_protocol=protocol,
+        )
+        mgr.create_simulation(config)
+        for _ in range(n_ticks):
+            mgr.step()
+        return mgr.get_tick_data()
+
+    def test_tick_data_has_required_keys(self):
+        payload = self._get_live_payload()
+        assert "tick" in payload
+        assert "agents" in payload
+        assert "trades" in payload
+        assert "metrics" in payload
+        assert "beliefs" in payload
+
+    def test_agent_has_required_fields(self):
+        payload = self._get_live_payload()
+        assert len(payload["agents"]) > 0
+        agent = payload["agents"][0]
+        # Presentation fields
+        assert "id" in agent
+        assert "position" in agent
+        assert "endowment" in agent
+        assert "alpha" in agent
+        assert "utility" in agent
+        # Live-only fields (not in canonical schema)
+        assert "interaction_state" in agent
+        assert "bargaining_power" in agent
+        assert "perception_radius" in agent
+        assert "discount_factor" in agent
+
+    def test_metrics_has_required_fields(self):
+        payload = self._get_live_payload()
+        metrics = payload["metrics"]
+        assert "total_welfare" in metrics
+        assert "welfare_gains" in metrics
+        assert "cumulative_trades" in metrics
+
+    def test_trade_has_required_fields(self):
+        """Run enough ticks to get trades, then verify fields."""
+        payload = self._get_live_payload(n_ticks=30)
+        if payload["trades"]:
+            trade = payload["trades"][0]
+            assert "agent1_id" in trade
+            assert "agent2_id" in trade
+            assert "alpha1" in trade
+            assert "alpha2" in trade
+            assert "pre_holdings_1" in trade
+            assert "pre_holdings_2" in trade
+            assert "post_allocation_1" in trade
+            assert "post_allocation_2" in trade
+            assert "gains" in trade

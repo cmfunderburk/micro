@@ -286,3 +286,43 @@ class TestBatchRunnerParameterCombinations:
         assert ("rubinstein", 1, 5.0) in configs
         assert ("rubinstein", 2, 3.0) in configs
         assert ("rubinstein", 2, 5.0) in configs
+
+
+class TestBatchRunnerMatchingProtocol:
+    """Test BatchRunner matching_protocol support."""
+
+    def test_matching_protocol_passed_to_simulation(self):
+        """matching_protocol in config is used by the simulation."""
+        from microecon.matching import BilateralProposalMatching, CentralizedClearingMatching
+
+        runner = BatchRunner(
+            base_config={"n_agents": 4, "grid_size": 5, "seed": 42},
+            variations={"matching_protocol": [
+                BilateralProposalMatching(),
+                CentralizedClearingMatching(),
+            ]},
+            keep_in_memory=True,
+        )
+        results = runner.run(ticks=5)
+        assert len(results) == 2
+        assert results[0].config.matching_protocol_name == "bilateral_proposal"
+        assert results[1].config.matching_protocol_name == "centralized_clearing"
+
+    def test_matching_protocol_in_run_name(self):
+        """Run name includes matching protocol name."""
+        from microecon.matching import CentralizedClearingMatching
+
+        runner = BatchRunner(
+            base_config={"n_agents": 4, "grid_size": 5, "seed": 42},
+            variations={"matching_protocol": [
+                CentralizedClearingMatching(),
+            ]},
+            keep_in_memory=True,
+            output_dir=None,
+        )
+        run_name = runner._generate_run_name(
+            {"seed": 42, "matching_protocol": CentralizedClearingMatching(),
+             "protocol": NashBargainingProtocol()},
+            0,
+        )
+        assert "centralized_clearing" in run_name

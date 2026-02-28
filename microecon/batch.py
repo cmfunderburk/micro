@@ -17,6 +17,11 @@ from microecon.information import (
     FullInformation,
     NoisyAlphaInformation,
 )
+from microecon.matching import (
+    MatchingProtocol,
+    BilateralProposalMatching,
+    CentralizedClearingMatching,
+)
 from microecon.bargaining import (
     BargainingProtocol,
     NashBargainingProtocol,
@@ -73,6 +78,16 @@ def _get_info_env_params(info_env: InformationEnvironment) -> dict[str, Any]:
     return {}
 
 
+def _get_matching_protocol_name(protocol: MatchingProtocol) -> str:
+    """Get a string name for a matching protocol."""
+    if isinstance(protocol, BilateralProposalMatching):
+        return "bilateral_proposal"
+    elif isinstance(protocol, CentralizedClearingMatching):
+        return "centralized_clearing"
+    else:
+        return protocol.__class__.__name__.lower()
+
+
 @dataclass
 class BatchRunner:
     """Run multiple simulations with parameter variations.
@@ -127,6 +142,7 @@ class BatchRunner:
         seed = config.get("seed")
         bargaining_protocol = config.get("protocol", NashBargainingProtocol())
         info_env = config.get("info_env")
+        matching_protocol = config.get("matching_protocol")
 
         # Create simulation using factory function but inject logger
         sim = create_simple_economy(
@@ -137,6 +153,7 @@ class BatchRunner:
             seed=seed,
             bargaining_protocol=bargaining_protocol,
             info_env=info_env,
+            matching_protocol=matching_protocol,
         )
 
         # Inject logger
@@ -150,6 +167,7 @@ class BatchRunner:
         """Convert config dict to SimulationConfig dataclass."""
         protocol = config.get("protocol", NashBargainingProtocol())
         info_env = config.get("info_env", FullInformation())
+        matching = config.get("matching_protocol", BilateralProposalMatching())
         return SimulationConfig(
             n_agents=config.get("n_agents", 10),
             grid_size=config.get("grid_size", 10),
@@ -159,7 +177,7 @@ class BatchRunner:
             perception_radius=config.get("perception_radius", 7.0),
             discount_factor=config.get("discount_factor", 0.95),
             movement_budget=config.get("movement_budget", 1),
-            # matching_protocol_name defaults to "bilateral_proposal" in SimulationConfig
+            matching_protocol_name=_get_matching_protocol_name(matching),
             info_env_name=_get_info_env_name(info_env),
             info_env_params=_get_info_env_params(info_env),
         )
@@ -173,7 +191,11 @@ class BatchRunner:
         bargaining = config.get("protocol", NashBargainingProtocol())
         bargaining_name = _get_protocol_name(bargaining)
 
-        return f"run_{timestamp}_seed{seed}_{bargaining_name}_{index:04d}"
+        # Include matching protocol
+        matching = config.get("matching_protocol", BilateralProposalMatching())
+        matching_name = _get_matching_protocol_name(matching)
+
+        return f"run_{timestamp}_seed{seed}_{bargaining_name}_{matching_name}_{index:04d}"
 
     def _run_single(
         self, config: dict[str, Any], ticks: int, index: int

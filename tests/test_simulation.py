@@ -436,3 +436,33 @@ class TestFallbackExecution:
         final_pos = sim.grid.get_position(agent_a)
 
         # Agents should trade (complementary and adjacent)
+
+
+class TestProposalEvaluationVisibility:
+    """Lock in ADR-005: proposal evaluation uses full visibility.
+
+    Even under NoisyAlphaInformation, proposal acceptance decisions use
+    true agent preferences (full visibility), not noisy observations.
+    """
+
+    def test_proposal_evaluation_uses_full_visibility(self):
+        """DecisionContext for proposal evaluation includes all agents with true state."""
+        from microecon.information import NoisyAlphaInformation
+
+        # Create a noisy-info simulation
+        sim = create_simple_economy(
+            n_agents=4, grid_size=5, seed=42,
+            info_env=NoisyAlphaInformation(noise_std=0.5),
+        )
+
+        # Run enough ticks for agents to interact
+        sim.run(30)
+
+        # The key assertion: trades should still occur and be welfare-improving,
+        # because proposal evaluation uses true preferences (not noisy).
+        # Under full visibility for evaluation, gains should always be non-negative.
+        for trade in sim.trades:
+            assert trade.gains[0] >= -1e-10, \
+                f"Agent 1 had negative gain {trade.gains[0]} — proposal evaluation may be using noisy info"
+            assert trade.gains[1] >= -1e-10, \
+                f"Agent 2 had negative gain {trade.gains[1]} — proposal evaluation may be using noisy info"

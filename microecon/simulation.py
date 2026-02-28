@@ -44,6 +44,11 @@ from microecon.decisions import (
     DecisionContext,
     RationalDecisionProcedure,
 )
+from microecon.matching import (
+    BilateralProposalMatching,
+    MatchingProtocol,
+    MatchResult,
+)
 
 if TYPE_CHECKING:
     from microecon.logging import SimulationLogger
@@ -88,6 +93,7 @@ class Simulation:
     info_env: InformationEnvironment = field(default_factory=FullInformation)
     bargaining_protocol: BargainingProtocol = field(default_factory=NashBargainingProtocol)
     decision_procedure: DecisionProcedure = field(default_factory=RationalDecisionProcedure)
+    matching_protocol: MatchingProtocol = field(default_factory=BilateralProposalMatching)
     agents: list[Agent] = field(default_factory=list)
     tick: int = 0
     trades: list[TradeEvent] = field(default_factory=list)
@@ -343,204 +349,98 @@ class Simulation:
                 move_actions[agent_id] = action
             elif isinstance(action, ProposeAction):
                 propose_actions[agent_id] = action
-            # WaitAction requires no execution
-            # AcceptAction/RejectAction are not chosen during Decide phase
-            # (proposal responses happen immediately in Execute phase)
 
-        # Track agents that traded this tick (they don't also move)
+        # Track agents that traded this tick
         traded_this_tick: set[str] = set()
 
         # =====================================================================
-        # Step 1: Conflict resolution for proposals
+        # Step 1-2: Matching protocol resolves proposals
         # =====================================================================
-        # Group proposals by target
-        proposals_by_target: dict[str, list[str]] = {}
-        for proposer_id, action in propose_actions.items():
-            target_id = action.target_id
-            if target_id not in proposals_by_target:
-                proposals_by_target[target_id] = []
-            proposals_by_target[target_id].append(proposer_id)
-
-        # Check for mutual proposals
-        mutual_proposals: set[frozenset[str]] = set()
-        for proposer_id, action in propose_actions.items():
-            target_id = action.target_id
-            # Check if target also proposed to proposer
-            target_action = propose_actions.get(target_id)
-            if target_action and target_action.target_id == proposer_id:
-                mutual_proposals.add(frozenset([proposer_id, target_id]))
-
-        # Process mutual proposals (skip PROPOSAL_PENDING, go straight to NEGOTIATING)
-        processed_mutual = set()
-        for pair in mutual_proposals:
-            pair_list = sorted(pair)
-            if pair_list[0] in processed_mutual or pair_list[1] in processed_mutual:
-                continue
-
-            agent_a = self._agents_by_id.get(pair_list[0])
-            agent_b = self._agents_by_id.get(pair_list[1])
-            if agent_a is None or agent_b is None:
-                continue
-
-            # Verify adjacent (Chebyshev distance <= 1)
-            pos_a = self.grid.get_position(agent_a)
-            pos_b = self.grid.get_position(agent_b)
-            if pos_a is None or pos_b is None:
-                continue
-            if pos_a.chebyshev_distance_to(pos_b) > 1:
-                continue
-
-            # Mutual interest: both enter NEGOTIATING directly
-            exchange_id = propose_actions[pair_list[0]].exchange_id
-            agent_a.interaction_state.enter_negotiating(pair_list[1], self.tick)
-            agent_b.interaction_state.enter_negotiating(pair_list[0], self.tick)
-
-            # Execute trade immediately (same-tick resolution)
-            trade_event = self._execute_trade(agent_a, agent_b, exchange_id)
-            if trade_event:
-                tick_trades.append(trade_event)
-
-            # Both return to AVAILABLE
-            agent_a.interaction_state.enter_available()
-            agent_b.interaction_state.enter_available()
-
-            processed_mutual.add(pair_list[0])
-            processed_mutual.add(pair_list[1])
-            traded_this_tick.add(pair_list[0])
-            traded_this_tick.add(pair_list[1])
-
-        # =====================================================================
-        # Step 2: Process non-mutual proposals with same-tick accept/reject
-        # =====================================================================
-        # For non-mutual proposals, the target immediately decides whether to
-        # accept or reject. This avoids the timing problem where targets move
-        # away before they can respond to a proposal.
-
-        # Build decision context for proposal evaluation
-        action_context = self._build_action_context()
-        decision_context = DecisionContext(
-            action_context=action_context,
-            visible_agents={a.id: a for a in self.agents},  # Full visibility for evaluation
+        match_result = self.matching_protocol.resolve(
+            propose_actions=propose_actions,
+            agents=self._agents_by_id,
+            positions={a.id: self.grid.get_position(a) for a in self.agents
+                       if self.grid.get_position(a) is not None},
+            decision_procedure=self.decision_procedure,
             bargaining_protocol=self.bargaining_protocol,
-            agent_positions=action_context.agent_positions,
         )
 
-        # Track targets that have already responded to a proposal this tick
-        responded_targets: set[str] = set()
-
-        # Track proposers with failed proposals (for fallback execution)
-        # rejected_proposers: explicit rejection -> cooldown + fallback
-        # non_selected_proposers: implicit non-selection -> fallback only
-        rejected_proposers: dict[str, ProposeAction] = {}
-        non_selected_proposers: dict[str, ProposeAction] = {}
-
-        for proposer_id, action in propose_actions.items():
-            if proposer_id in processed_mutual:
-                continue
-            if proposer_id in traded_this_tick:
-                continue
-
-            proposer = self._agents_by_id.get(proposer_id)
-            target = self._agents_by_id.get(action.target_id)
+        # Execute matched trades
+        for trade_outcome in match_result.trades:
+            proposer = self._agents_by_id.get(trade_outcome.proposer_id)
+            target = self._agents_by_id.get(trade_outcome.target_id)
             if proposer is None or target is None:
                 continue
 
-            # Target must not have already responded to another proposal
-            if action.target_id in responded_targets:
-                # Implicit non-selection: target accepted another proposal
-                # Proposer executes fallback, NO cooldown added
-                non_selected_proposers[proposer_id] = action
-                continue
-
-            # Target must not have traded already (from mutual proposal)
-            if action.target_id in traded_this_tick:
-                # Implicit non-selection: target was in mutual proposal
-                # Proposer executes fallback, NO cooldown added
-                non_selected_proposers[proposer_id] = action
-                continue
-
-            # Check adjacency (Chebyshev distance <= 1)
-            proposer_pos = self.grid.get_position(proposer)
-            target_pos = self.grid.get_position(target)
-            if proposer_pos is None or target_pos is None:
-                continue
-            if proposer_pos.chebyshev_distance_to(target_pos) > 1:
-                continue
-
-            # Target immediately decides whether to accept
-            # This uses the target's decision procedure
-            accept = self.decision_procedure.evaluate_proposal(
-                target, proposer, decision_context
-            )
-
-            responded_targets.add(action.target_id)
-
-            if accept:
-                # Trade executes immediately
-                exchange_id = action.exchange_id
-                proposer.interaction_state.enter_negotiating(action.target_id, self.tick)
-                target.interaction_state.enter_negotiating(proposer_id, self.tick)
-
-                trade_event = self._execute_trade(proposer, target, exchange_id)
-                if trade_event:
-                    tick_trades.append(trade_event)
-
-                proposer.interaction_state.enter_available()
-                target.interaction_state.enter_available()
-
-                traded_this_tick.add(proposer_id)
-                traded_this_tick.add(action.target_id)
+            exchange_id = propose_actions.get(trade_outcome.proposer_id)
+            if exchange_id is not None:
+                exchange_id = exchange_id.exchange_id
             else:
-                # Explicit rejection: proposer gets cooldown for this target
-                proposer.interaction_state.enter_available(add_cooldown_for=action.target_id)
-                rejected_proposers[proposer_id] = action
+                exchange_id = propose_actions.get(trade_outcome.target_id, ProposeAction(target_id="")).exchange_id
+
+            proposer.interaction_state.enter_negotiating(trade_outcome.target_id, self.tick)
+            target.interaction_state.enter_negotiating(trade_outcome.proposer_id, self.tick)
+
+            trade_event = self._execute_trade(proposer, target, exchange_id)
+            if trade_event:
+                tick_trades.append(trade_event)
+
+            proposer.interaction_state.enter_available()
+            target.interaction_state.enter_available()
+
+            traded_this_tick.add(trade_outcome.proposer_id)
+            traded_this_tick.add(trade_outcome.target_id)
+
+        # Apply cooldowns from rejections
+        for rejection in match_result.rejections:
+            proposer = self._agents_by_id.get(rejection.proposer_id)
+            if proposer is not None:
+                proposer.interaction_state.enter_available(
+                    add_cooldown_for=rejection.target_id,
+                    cooldown_duration=rejection.cooldown_ticks,
+                )
+
+        # Build set of all failed proposers for fallback execution
+        rejected_proposers = {r.proposer_id for r in match_result.rejections}
+        non_selected_proposers = set(match_result.non_selections)
+        all_failed_proposers = rejected_proposers | non_selected_proposers
 
         # =====================================================================
         # Step 3: Execute fallback actions for failed proposals
         # =====================================================================
-        # Per AGENT-ARCHITECTURE.md 7.2: failed proposals trigger fallback execution
-        # - Explicit rejection: cooldown already added above, now execute fallback
-        # - Implicit non-selection: no cooldown, just execute fallback
-
-        all_failed_proposers = {**rejected_proposers, **non_selected_proposers}
-
-        for proposer_id, action in all_failed_proposers.items():
+        for proposer_id in all_failed_proposers:
             proposer = self._agents_by_id.get(proposer_id)
             if proposer is None:
                 continue
 
-            # Execute fallback if present
+            action = propose_actions.get(proposer_id)
+            if action is None:
+                continue
+
             fallback = action.fallback
             if fallback is None:
                 continue
 
             if isinstance(fallback, MoveAction):
-                # Execute movement toward fallback target
                 if proposer.interaction_state.is_available():
                     self.grid.move_toward(
                         proposer,
                         fallback.target_position,
                         steps=proposer.movement_budget
                     )
-            # WaitAction: no action needed
 
         # =====================================================================
         # Step 4: Execute movement actions
         # =====================================================================
         for agent_id, action in move_actions.items():
-            # Skip agents that traded this tick
             if agent_id in traded_this_tick:
                 continue
-
-            # Skip agents that already moved via fallback
             if agent_id in all_failed_proposers:
                 continue
 
             agent = self._agents_by_id.get(agent_id)
             if agent is None:
                 continue
-
-            # Can only move if available
             if not agent.interaction_state.is_available():
                 continue
 

@@ -46,6 +46,20 @@ class TestServerToLoggingConfigConversion:
         logging_config = server_config.to_logging_config()
         assert logging_config.schema_version == SCHEMA_VERSION
 
+    def test_run_id_not_in_server_config(self):
+        """Server config doesn't have run_id — logger generates it."""
+        server_config = ServerConfig(seed=42)
+        logging_config = server_config.to_logging_config()
+        # run_id should be empty (logger will generate it)
+        assert logging_config.run_id == ""
+
+    def test_manifest_fields_default_none(self):
+        """Manifest fields default to None (reserved for Gate B)."""
+        server_config = ServerConfig(seed=42)
+        logging_config = server_config.to_logging_config()
+        assert logging_config.manifest_id is None
+        assert logging_config.treatment_arm is None
+
     def test_seed_none_raises(self):
         """Logging config requires a seed; conversion should raise if missing."""
         server_config = ServerConfig(seed=None)

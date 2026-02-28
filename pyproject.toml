@@ -30,6 +30,8 @@ markers = [
     "simulation: Simulation engine and batch runner (run when simulation.py or batch.py changes)",
     "analysis: Logging and analysis infrastructure (run when logging/ or analysis/ changes)",
     "integration: Full pipeline tests (run before commits, slower)",
+    "contract: Schema contract conformance tests (run when events.py, routes.py, or simulation_manager.py changes)",
+    "determinism: Deterministic rerun equivalence tests (run when simulation.py or batch.py changes)",
 ]
 
 [build-system]

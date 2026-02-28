@@ -30,13 +30,14 @@ class MatchingProtocol(ABC):
         positions: dict[str, Position],
         decision_procedure: DecisionProcedure,
         bargaining_protocol: BargainingProtocol,
+        action_context: ActionContext | None = None,
     ) -> MatchResult: ...
 
 @dataclass(frozen=True)
 class MatchResult:
     trades: tuple[TradeOutcome, ...]
     rejections: tuple[Rejection, ...]
-    non_selections: tuple[str, ...]
+    non_selections: tuple[str, ...]  # covers ALL unmatched proposers
 ```
 
 ## Extraction Boundary
@@ -61,6 +62,7 @@ class MatchResult:
 - Only adjacent pairs matched (for spatial protocols)
 - MatchResult is pure data — no side effects
 - Protocol does not mutate agents or grid state
+- MatchResult covers all proposers: every proposer_id appears in exactly one of trades, rejections, or non_selections
 
 ## Determinism
 

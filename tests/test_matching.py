@@ -132,6 +132,8 @@ class TestBilateralProposalMatching:
             NashBargainingProtocol(),
         )
         assert len(result.trades) == 0
+        # Non-adjacent mutual proposers should appear in non_selections
+        assert set(result.non_selections) == {"a1", "a2"}
 
     def test_accepted_proposal(self):
         """Non-mutual proposal where target accepts -> trade."""

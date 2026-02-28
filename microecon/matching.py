@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from microecon.actions import ProposeAction
+    from microecon.actions import ActionContext, ProposeAction
     from microecon.agent import Agent
     from microecon.bargaining import BargainingProtocol
     from microecon.decisions import DecisionProcedure
@@ -73,6 +73,7 @@ class MatchingProtocol(ABC):
         positions: dict[str, "Position"],
         decision_procedure: "DecisionProcedure",
         bargaining_protocol: "BargainingProtocol",
+        action_context: "ActionContext | None" = None,
     ) -> MatchResult:
         """Resolve all proposals for this tick.
 
@@ -82,6 +83,7 @@ class MatchingProtocol(ABC):
             positions: Map of agent_id -> Position (current positions)
             decision_procedure: For evaluating proposal acceptance
             bargaining_protocol: For computing surplus
+            action_context: Simulation execution context (tick, adjacency, etc.)
 
         Returns:
             MatchResult with trades, rejections, and non-selections
@@ -107,6 +109,7 @@ class BilateralProposalMatching(MatchingProtocol):
         positions: dict[str, "Position"],
         decision_procedure: "DecisionProcedure",
         bargaining_protocol: "BargainingProtocol",
+        action_context: "ActionContext | None" = None,
     ) -> MatchResult:
         if not propose_actions:
             return MatchResult(trades=(), rejections=(), non_selections=())
@@ -127,17 +130,23 @@ class BilateralProposalMatching(MatchingProtocol):
         for pair in sorted(mutual_proposals, key=lambda p: sorted(p)):
             pair_list = sorted(pair)
             if pair_list[0] in processed_mutual or pair_list[1] in processed_mutual:
+                non_selections.extend(
+                    pid for pid in pair_list if pid not in processed_mutual
+                )
                 continue
 
             a_id, b_id = pair_list
             if a_id not in agents or b_id not in agents:
+                non_selections.extend(pid for pid in pair_list if pid in propose_actions)
                 continue
 
             pos_a = positions.get(a_id)
             pos_b = positions.get(b_id)
             if pos_a is None or pos_b is None:
+                non_selections.extend(pid for pid in pair_list if pid in propose_actions)
                 continue
             if pos_a.chebyshev_distance_to(pos_b) > 1:
+                non_selections.extend(pid for pid in pair_list if pid in propose_actions)
                 continue
 
             # Mutual match: use sorted order for deterministic proposer assignment
@@ -148,18 +157,19 @@ class BilateralProposalMatching(MatchingProtocol):
             traded_this_tick.add(b_id)
 
         # Step 2: Evaluate non-mutual proposals
-        # Build decision context for proposal evaluation
-        from microecon.actions import ActionContext
+        # Use real action_context if provided, otherwise build a minimal one
+        from microecon.actions import ActionContext as _ActionContext
         from microecon.decisions import DecisionContext
 
-        action_context = ActionContext(
-            current_tick=0,
-            agent_positions=positions,
-            agent_interaction_states={},
-            co_located_agents={},
-            adjacent_agents={},
-            pending_proposals={},
-        )
+        if action_context is None:
+            action_context = _ActionContext(
+                current_tick=0,
+                agent_positions=positions,
+                agent_interaction_states={},
+                co_located_agents={},
+                adjacent_agents={},
+                pending_proposals={},
+            )
         decision_context = DecisionContext(
             action_context=action_context,
             visible_agents=agents,  # Full visibility for evaluation (ADR-005)
@@ -179,6 +189,7 @@ class BilateralProposalMatching(MatchingProtocol):
             proposer = agents.get(proposer_id)
             target = agents.get(target_id)
             if proposer is None or target is None:
+                non_selections.append(proposer_id)
                 continue
 
             # Target already responded to another proposal
@@ -195,8 +206,10 @@ class BilateralProposalMatching(MatchingProtocol):
             proposer_pos = positions.get(proposer_id)
             target_pos = positions.get(target_id)
             if proposer_pos is None or target_pos is None:
+                non_selections.append(proposer_id)
                 continue
             if proposer_pos.chebyshev_distance_to(target_pos) > 1:
+                non_selections.append(proposer_id)
                 continue
 
             # Target evaluates proposal
@@ -245,12 +258,14 @@ class CentralizedClearingMatching(MatchingProtocol):
         positions: dict[str, "Position"],
         decision_procedure: "DecisionProcedure",
         bargaining_protocol: "BargainingProtocol",
+        action_context: "ActionContext | None" = None,
     ) -> MatchResult:
         if not propose_actions:
             return MatchResult(trades=(), rejections=(), non_selections=())
 
         # Compute surplus for each valid proposal (adjacent pairs only)
         scored_proposals: list[tuple[float, str, str]] = []
+        eligible: set[str] = set()
         for proposer_id, action in propose_actions.items():
             target_id = action.target_id
             proposer = agents.get(proposer_id)
@@ -268,6 +283,7 @@ class CentralizedClearingMatching(MatchingProtocol):
             surplus = bargaining_protocol.compute_expected_surplus(proposer, target)
             if surplus > 0:
                 scored_proposals.append((surplus, proposer_id, target_id))
+                eligible.add(proposer_id)
 
         # Sort by surplus descending, then by proposer_id for determinism
         scored_proposals.sort(key=lambda x: (-x[0], x[1]))

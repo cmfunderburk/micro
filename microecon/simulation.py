@@ -356,6 +356,7 @@ class Simulation:
         # =====================================================================
         # Step 1-2: Matching protocol resolves proposals
         # =====================================================================
+        action_context = self._build_action_context()
         match_result = self.matching_protocol.resolve(
             propose_actions=propose_actions,
             agents=self._agents_by_id,
@@ -363,6 +364,7 @@ class Simulation:
                        if self.grid.get_position(a) is not None},
             decision_procedure=self.decision_procedure,
             bargaining_protocol=self.bargaining_protocol,
+            action_context=action_context,
         )
 
         # Execute matched trades
@@ -372,11 +374,13 @@ class Simulation:
             if proposer is None or target is None:
                 continue
 
-            exchange_id = propose_actions.get(trade_outcome.proposer_id)
-            if exchange_id is not None:
-                exchange_id = exchange_id.exchange_id
-            else:
-                exchange_id = propose_actions.get(trade_outcome.target_id, ProposeAction(target_id="")).exchange_id
+            # Proposer must be in propose_actions — use the proposer's exchange_id,
+            # or fall back to target's for mutual proposals where sorted order
+            # assigned proposer_id to the lexicographically first agent.
+            propose_action = propose_actions.get(trade_outcome.proposer_id)
+            if propose_action is None:
+                propose_action = propose_actions[trade_outcome.target_id]
+            exchange_id = propose_action.exchange_id
 
             proposer.interaction_state.enter_negotiating(trade_outcome.target_id, self.tick)
             target.interaction_state.enter_negotiating(trade_outcome.proposer_id, self.tick)

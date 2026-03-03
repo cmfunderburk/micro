@@ -157,3 +157,33 @@ class TestCatalogService:
         assert "y" in agent
         assert "utility" in agent
         assert "alpha" in agent
+
+    def test_comparison_report(self, client):
+        manifest_id, _ = _create_and_run_experiment(client)
+        resp = client.get(f"/api/catalog/compare/{manifest_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["manifest_id"] == manifest_id
+        assert len(data["treatments"]) == 2
+        assert len(data["pairwise_comparisons"]) == 1  # 2 arms = 1 pair
+
+        comparison = data["pairwise_comparisons"][0]
+        assert "arm_a" in comparison
+        assert "arm_b" in comparison
+        assert "final_welfare" in comparison["metrics"]
+        assert "total_trades" in comparison["metrics"]
+        assert "welfare_gain" in comparison["metrics"]
+
+        # Check metric structure
+        fw = comparison["metrics"]["final_welfare"]
+        assert "arm_a_mean" in fw
+        assert "arm_b_mean" in fw
+        assert "difference" in fw
+        assert "effect_size" in fw
+        assert "arm_a_values" in fw
+        assert "arm_b_values" in fw
+
+    def test_comparison_report_not_found(self, client):
+        resp = client.get("/api/catalog/compare/nonexistent")
+        assert resp.status_code == 404

@@ -32,6 +32,7 @@ from .timeseries import (
 from .distributions import (
     ComparisonResult,
     compare_groups,
+    compare_values,
     compare_final_welfare,
     compare_total_trades,
     compare_welfare_gain,
@@ -95,6 +96,7 @@ __all__ = [
     # Distributions
     "ComparisonResult",
     "compare_groups",
+    "compare_values",
     "compare_final_welfare",
     "compare_total_trades",
     "compare_welfare_gain",

@@ -222,6 +222,48 @@ def compare_welfare_gain(
     )
 
 
+def compare_values(
+    values_a: list[float],
+    values_b: list[float],
+    metric_name: str,
+    group_a_name: str = "Group A",
+    group_b_name: str = "Group B",
+) -> ComparisonResult:
+    """Compare pre-extracted metric values between two groups.
+
+    Like compare_groups() but operates on raw values instead of RunData.
+    Used by the catalog comparison endpoint which extracts values from SQLite.
+
+    Args:
+        values_a: Metric values for first group
+        values_b: Metric values for second group
+        metric_name: Name of the metric being compared
+        group_a_name: Label for first group
+        group_b_name: Label for second group
+
+    Returns:
+        ComparisonResult with statistics
+    """
+    mean_a = _mean(values_a)
+    mean_b = _mean(values_b)
+    std_a = _std(values_a)
+    std_b = _std(values_b)
+
+    return ComparisonResult(
+        metric=metric_name,
+        group_a_name=group_a_name,
+        group_b_name=group_b_name,
+        group_a_values=values_a,
+        group_b_values=values_b,
+        group_a_mean=mean_a,
+        group_b_mean=mean_b,
+        group_a_std=std_a,
+        group_b_std=std_b,
+        difference=mean_b - mean_a,
+        effect_size=_cohens_d(values_a, values_b),
+    )
+
+
 def compare_protocols(
     runs: list[RunData],
     protocol_a: str = "nash",

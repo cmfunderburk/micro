@@ -8,11 +8,14 @@ Design doc: docs/plans/2026-03-02-b-e1-manifest-orchestrator-design.md
 """
 
 import json
+from collections import defaultdict
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from microecon.analysis.distributions import compare_values
 from microecon.logging.parquet import read_run_parquet
 from server.database import get_connection
 
@@ -258,4 +261,79 @@ async def get_replay(run_id: str) -> dict[str, Any]:
         "schema_version": config_dict.get("schema_version", "1.0"),
         "ticks": replay_ticks,
         "n_ticks": len(replay_ticks),
+    }
+
+
+@catalog_router.get("/catalog/compare/{manifest_id}")
+async def compare_treatments(manifest_id: str) -> dict[str, Any]:
+    """Pairwise comparison report across treatment arms for a manifest.
+
+    Extracts summary metric values from SQLite (no Parquet read needed)
+    and generates statistical comparisons for all treatment arm pairs.
+    """
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT treatment_arm, summary FROM runs "
+            "WHERE manifest_id = ? AND status = 'completed' AND summary IS NOT NULL",
+            (manifest_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail="No completed runs found for manifest",
+        )
+
+    # Group summary values by treatment arm
+    arm_values: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        arm = row["treatment_arm"]
+        summary = json.loads(row["summary"])
+        arm_values[arm].append(summary)
+
+    treatments = sorted(arm_values.keys())
+    runs_per_arm = {arm: len(summaries) for arm, summaries in arm_values.items()}
+
+    # Metrics to compare
+    metric_keys = ["final_welfare", "total_trades", "welfare_gain"]
+
+    # Generate pairwise comparisons for all treatment arm pairs
+    pairwise_comparisons: list[dict[str, Any]] = []
+    for arm_a, arm_b in combinations(treatments, 2):
+        metrics: dict[str, Any] = {}
+        for metric_key in metric_keys:
+            values_a = [s[metric_key] for s in arm_values[arm_a]]
+            values_b = [s[metric_key] for s in arm_values[arm_b]]
+
+            result = compare_values(
+                values_a=values_a,
+                values_b=values_b,
+                metric_name=metric_key,
+                group_a_name=arm_a,
+                group_b_name=arm_b,
+            )
+
+            metrics[metric_key] = {
+                "arm_a_mean": result.group_a_mean,
+                "arm_b_mean": result.group_b_mean,
+                "difference": result.difference,
+                "effect_size": result.effect_size,
+                "arm_a_values": result.group_a_values,
+                "arm_b_values": result.group_b_values,
+            }
+
+        pairwise_comparisons.append({
+            "arm_a": arm_a,
+            "arm_b": arm_b,
+            "metrics": metrics,
+        })
+
+    return {
+        "manifest_id": manifest_id,
+        "treatments": treatments,
+        "runs_per_arm": runs_per_arm,
+        "pairwise_comparisons": pairwise_comparisons,
     }

@@ -23,6 +23,7 @@ from microecon.analysis import (
     compare_final_welfare,
     compare_total_trades,
     compare_protocols,
+    compare_values,
     final_welfare,
     total_trades,
     # Tracking
@@ -222,6 +223,24 @@ class TestDistributions:
 
         assert result.metric == "Total Trades"
         assert len(result.group_a_values) == 3
+
+    def test_compare_values(self):
+        result = compare_values(
+            values_a=[10.0, 12.0, 11.0],
+            values_b=[15.0, 14.0, 16.0],
+            metric_name="welfare",
+            group_a_name="control",
+            group_b_name="treatment",
+        )
+        assert result.metric == "welfare"
+        assert result.group_a_name == "control"
+        assert result.group_b_name == "treatment"
+        assert result.group_a_mean == pytest.approx(11.0)
+        assert result.group_b_mean == pytest.approx(15.0)
+        assert result.difference == pytest.approx(4.0)
+        assert result.effect_size > 0
+        assert result.group_a_values == [10.0, 12.0, 11.0]
+        assert result.group_b_values == [15.0, 14.0, 16.0]
 
     def test_compare_protocols(self):
         runs = [

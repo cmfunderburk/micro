@@ -19,3 +19,9 @@ references/
 !.archived/docs/2026-02-09-doc-consolidation/**
 docs/alpha/.old/
 output/
+
+# B-E1: Orchestrator data
+microecon.db
+microecon.db-wal
+microecon.db-shm
+data/

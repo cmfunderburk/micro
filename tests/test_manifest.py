@@ -195,3 +195,13 @@ class TestManifestValidation:
         )
         errors = validate_manifest(m)
         assert len(errors) >= 4
+
+    def test_negative_override_bounds(self):
+        """Override values like grid_size=-1 should be caught by validation."""
+        m = _make_manifest(treatments=[
+            TreatmentArm(name="a", description="a", overrides={"grid_size": -1}),
+            TreatmentArm(name="b", description="b", overrides={"n_agents": 0}),
+        ])
+        errors = validate_manifest(m)
+        assert any("grid_size" in e and "-1" in e for e in errors)
+        assert any("n_agents" in e and "0" in e for e in errors)

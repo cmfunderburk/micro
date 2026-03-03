@@ -230,5 +230,16 @@ def validate_manifest(manifest: ExperimentManifest) -> list[str]:
                     f"Treatment '{arm.name}': invalid info_env_name '{value}'. "
                     f"Valid: {sorted(_VALID_INFO_ENVS)}"
                 )
+            # Numeric bounds on overridable config fields
+            if key in ("n_agents", "grid_size", "ticks") and isinstance(value, (int, float)):
+                if value <= 0:
+                    errors.append(
+                        f"Treatment '{arm.name}': {key} must be > 0, got {value}"
+                    )
+            if key == "perception_radius" and isinstance(value, (int, float)):
+                if value <= 0:
+                    errors.append(
+                        f"Treatment '{arm.name}': perception_radius must be > 0, got {value}"
+                    )
 
     return errors

@@ -305,8 +305,11 @@ async def compare_treatments(manifest_id: str) -> dict[str, Any]:
     for arm_a, arm_b in combinations(treatments, 2):
         metrics: dict[str, Any] = {}
         for metric_key in metric_keys:
-            values_a = [s[metric_key] for s in arm_values[arm_a]]
-            values_b = [s[metric_key] for s in arm_values[arm_b]]
+            values_a = [s.get(metric_key) for s in arm_values[arm_a]]
+            values_b = [s.get(metric_key) for s in arm_values[arm_b]]
+            # Skip metrics that are missing from any summary
+            if any(v is None for v in values_a) or any(v is None for v in values_b):
+                continue
 
             result = compare_values(
                 values_a=values_a,

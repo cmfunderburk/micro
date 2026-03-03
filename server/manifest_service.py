@@ -89,7 +89,13 @@ async def create_manifest(request: CreateManifestRequest) -> dict[str, Any]:
     created_at = datetime.now(timezone.utc).isoformat()
 
     # Build domain objects for validation
-    base_config = BaseConfig.from_dict(request.base_config)
+    try:
+        base_config = BaseConfig.from_dict(request.base_config)
+    except (KeyError, TypeError) as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"errors": [f"Invalid base_config: {e}"]},
+        )
     treatments = [
         TreatmentArm(name=t.name, description=t.description, overrides=t.overrides)
         for t in request.treatments

@@ -91,3 +91,11 @@ class TestManifestService:
 
         resp = client.get(f"/api/manifests/{manifest_id}")
         assert resp.status_code == 404
+
+    def test_malformed_base_config_returns_422(self, client):
+        """Missing required fields in base_config should return 422, not 500."""
+        payload = _valid_manifest_payload()
+        payload["base_config"] = {"grid_size": 15}  # missing n_agents, ticks
+        resp = client.post("/api/manifests", json=payload)
+        assert resp.status_code == 422
+        assert "errors" in resp.json()["detail"]

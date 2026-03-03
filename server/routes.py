@@ -221,6 +221,7 @@ async def load_run(run_name: str) -> dict[str, Any]:
             raise HTTPException(status_code=422, detail=str(ve))
 
         ticks = []
+        initial_welfare = None
         with open(ticks_file) as f:
             for line in f:
                 tick_data = json.loads(line)
@@ -250,6 +251,10 @@ async def load_run(run_name: str) -> dict[str, Any]:
                     agent["agent_id"]: agent["alpha"]
                     for agent in tick_data.get("agent_snapshots", [])
                 }
+
+                total_welfare = tick_data.get("total_welfare", 0)
+                if initial_welfare is None:
+                    initial_welfare = total_welfare
 
                 # Transform to frontend format
                 ticks.append({
@@ -284,8 +289,8 @@ async def load_run(run_name: str) -> dict[str, Any]:
                         for trade in tick_data.get("trades", [])
                     ],
                     "metrics": {
-                        "total_welfare": tick_data.get("total_welfare", 0),
-                        "welfare_gains": tick_data.get("total_welfare", 0) - config.get("initial_welfare", 0),
+                        "total_welfare": total_welfare,
+                        "welfare_gains": total_welfare - initial_welfare,
                         "cumulative_trades": tick_data.get("cumulative_trades", 0),
                     },
                     "beliefs": beliefs,

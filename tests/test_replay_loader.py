@@ -152,6 +152,7 @@ def test_replay_transform_uses_correct_fields(run_dir):
         config = json.load(f)
 
     ticks = []
+    initial_welfare = None
     with open(ticks_file) as f:
         for line in f:
             tick_data = json.loads(line)
@@ -185,6 +186,10 @@ def test_replay_transform_uses_correct_fields(run_dir):
                     "n_trades_in_memory": bs.get("n_trades_in_memory", 0),
                 }
 
+            total_welfare = tick_data.get("total_welfare", 0)
+            if initial_welfare is None:
+                initial_welfare = total_welfare
+
             transformed = {
                 "tick": tick_data["tick"],
                 "agents": [
@@ -217,9 +222,8 @@ def test_replay_transform_uses_correct_fields(run_dir):
                     for trade in tick_data.get("trades", [])
                 ],
                 "metrics": {
-                    "total_welfare": tick_data.get("total_welfare", 0),
-                    "welfare_gains": tick_data.get("total_welfare", 0)
-                    - config.get("initial_welfare", 0),
+                    "total_welfare": total_welfare,
+                    "welfare_gains": total_welfare - initial_welfare,
                     "cumulative_trades": tick_data.get("cumulative_trades", 0),
                 },
                 "beliefs": beliefs,

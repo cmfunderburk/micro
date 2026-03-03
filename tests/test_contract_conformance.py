@@ -476,6 +476,25 @@ class TestReplayRouteIntegration:
             assert "beliefs" in tick
             assert isinstance(tick["beliefs"], dict)
 
+    def test_replay_welfare_gains_uses_correct_baseline(self, persisted_run):
+        """welfare_gains must be relative to initial welfare, not zero.
+
+        Bug: replay computed welfare_gains as total_welfare - config.initial_welfare,
+        but initial_welfare was never persisted, so baseline was always 0.
+        Fix: compute baseline from first tick's total_welfare.
+        """
+        _, run_name = persisted_run
+        result = self._call_route(run_name)
+        ticks = result["ticks"]
+        assert len(ticks) >= 2
+
+        # Tick 0 welfare_gains should be ~0 (welfare relative to itself)
+        tick0 = ticks[0]
+        assert tick0["metrics"]["welfare_gains"] == pytest.approx(0.0, abs=1e-9), (
+            f"Tick 0 welfare_gains should be ~0 but was {tick0['metrics']['welfare_gains']} "
+            f"(total_welfare={tick0['metrics']['total_welfare']})"
+        )
+
 
 # =========================================================================
 # Level 4: Live WebSocket payload conformance
@@ -547,3 +566,38 @@ class TestLivePayloadConformance:
             assert "post_allocation_1" in trade
             assert "post_allocation_2" in trade
             assert "gains" in trade
+
+    def test_live_trade_has_proposer_id(self):
+        """Live trade payload must include proposer_id for mechanism analysis.
+
+        Bug: live/comparison paths omitted proposer_id while replay included it.
+        """
+        mgr = SimulationManager()
+        config = ServerConfig(n_agents=4, grid_size=5, seed=42, bargaining_protocol="nash")
+        mgr.create_simulation(config)
+        for _ in range(50):
+            mgr.step()
+            payload = mgr.get_tick_data()
+            if payload["trades"]:
+                trade = payload["trades"][0]
+                assert "proposer_id" in trade, "Live trade missing proposer_id"
+                assert isinstance(trade["proposer_id"], str)
+                return
+        pytest.fail("No trades in 50 ticks — cannot verify proposer_id")
+
+    def test_comparison_trade_has_proposer_id(self):
+        """Comparison mode trade payload must include proposer_id."""
+        mgr = SimulationManager()
+        config1 = ServerConfig(n_agents=4, grid_size=5, seed=42, bargaining_protocol="nash")
+        config2 = ServerConfig(n_agents=4, grid_size=5, seed=42, bargaining_protocol="rubinstein")
+        mgr.create_comparison(config1, config2)
+        for _ in range(50):
+            mgr.step()
+            data = mgr.get_comparison_tick_data()
+            for sim_data in data["simulations"]:
+                if sim_data["trades"]:
+                    trade = sim_data["trades"][0]
+                    assert "proposer_id" in trade, "Comparison trade missing proposer_id"
+                    assert isinstance(trade["proposer_id"], str)
+                    return
+        pytest.fail("No trades in comparison after 50 ticks")

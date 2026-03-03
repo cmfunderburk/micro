@@ -55,15 +55,17 @@ CREATE INDEX IF NOT EXISTS idx_runs_treatment ON runs(manifest_id, treatment_arm
 """
 
 
-def init_db(path: Path = DB_PATH) -> None:
+def init_db(path: Path | None = None) -> None:
     """Create tables and indexes if they don't exist."""
     conn = get_connection(path)
     conn.executescript(_SCHEMA_SQL)
     conn.close()
 
 
-def get_connection(path: Path = DB_PATH) -> sqlite3.Connection:
+def get_connection(path: Path | None = None) -> sqlite3.Connection:
     """Return a connection with WAL mode and foreign keys enabled."""
+    if path is None:
+        path = DB_PATH
     conn = sqlite3.connect(str(path))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

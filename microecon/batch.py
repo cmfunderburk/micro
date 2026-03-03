@@ -9,7 +9,6 @@ from datetime import datetime
 from itertools import product
 from pathlib import Path
 from typing import Any, Iterator
-import random
 
 from microecon.simulation import Simulation, create_simple_economy
 from microecon.grid import Grid
@@ -18,15 +17,15 @@ from microecon.information import (
     FullInformation,
     NoisyAlphaInformation,
 )
+from microecon.matching import (
+    MatchingProtocol,
+    BilateralProposalMatching,
+    CentralizedClearingMatching,
+)
 from microecon.bargaining import (
     BargainingProtocol,
     NashBargainingProtocol,
     RubinsteinBargainingProtocol,
-)
-from microecon.matching import (
-    MatchingProtocol,
-    OpportunisticMatchingProtocol,
-    StableRoommatesMatchingProtocol,
 )
 from microecon.logging import (
     SimulationConfig,
@@ -56,16 +55,6 @@ def _get_protocol_name(protocol: BargainingProtocol) -> str:
         return protocol.__class__.__name__.lower()
 
 
-def _get_matching_protocol_name(protocol: MatchingProtocol) -> str:
-    """Get a string name for a matching protocol."""
-    if isinstance(protocol, OpportunisticMatchingProtocol):
-        return "opportunistic"
-    elif isinstance(protocol, StableRoommatesMatchingProtocol):
-        return "stable_roommates"
-    else:
-        return protocol.__class__.__name__.lower()
-
-
 def _get_protocol_params(protocol: BargainingProtocol) -> dict[str, Any]:
     """Get parameters for a bargaining protocol."""
     # Rubinstein uses agent discount factors, not protocol-level delta
@@ -87,6 +76,16 @@ def _get_info_env_params(info_env: InformationEnvironment) -> dict[str, Any]:
     if isinstance(info_env, NoisyAlphaInformation):
         return {"noise_std": info_env.noise_std}
     return {}
+
+
+def _get_matching_protocol_name(protocol: MatchingProtocol) -> str:
+    """Get a string name for a matching protocol."""
+    if isinstance(protocol, BilateralProposalMatching):
+        return "bilateral_proposal"
+    elif isinstance(protocol, CentralizedClearingMatching):
+        return "centralized_clearing"
+    else:
+        return protocol.__class__.__name__.lower()
 
 
 @dataclass
@@ -142,12 +141,10 @@ class BatchRunner:
         discount_factor = config.get("discount_factor", 0.95)
         seed = config.get("seed")
         bargaining_protocol = config.get("protocol", NashBargainingProtocol())
-        matching_protocol = config.get("matching_protocol", OpportunisticMatchingProtocol())
+        info_env = config.get("info_env")
+        matching_protocol = config.get("matching_protocol")
 
         # Create simulation using factory function but inject logger
-        if seed is not None:
-            random.seed(seed)
-
         sim = create_simple_economy(
             n_agents=n_agents,
             grid_size=grid_size,
@@ -155,6 +152,7 @@ class BatchRunner:
             discount_factor=discount_factor,
             seed=seed,
             bargaining_protocol=bargaining_protocol,
+            info_env=info_env,
             matching_protocol=matching_protocol,
         )
 
@@ -168,8 +166,8 @@ class BatchRunner:
     ) -> SimulationConfig:
         """Convert config dict to SimulationConfig dataclass."""
         protocol = config.get("protocol", NashBargainingProtocol())
-        matching = config.get("matching_protocol", OpportunisticMatchingProtocol())
         info_env = config.get("info_env", FullInformation())
+        matching = config.get("matching_protocol", BilateralProposalMatching())
         return SimulationConfig(
             n_agents=config.get("n_agents", 10),
             grid_size=config.get("grid_size", 10),
@@ -193,14 +191,11 @@ class BatchRunner:
         bargaining = config.get("protocol", NashBargainingProtocol())
         bargaining_name = _get_protocol_name(bargaining)
 
-        # Include matching protocol if varying
-        matching = config.get("matching_protocol", OpportunisticMatchingProtocol())
+        # Include matching protocol
+        matching = config.get("matching_protocol", BilateralProposalMatching())
         matching_name = _get_matching_protocol_name(matching)
 
-        # Build name with both protocols if non-default matching
-        if matching_name != "opportunistic":
-            return f"run_{timestamp}_seed{seed}_{bargaining_name}_{matching_name}_{index:04d}"
-        return f"run_{timestamp}_seed{seed}_{bargaining_name}_{index:04d}"
+        return f"run_{timestamp}_seed{seed}_{bargaining_name}_{matching_name}_{index:04d}"
 
     def _run_single(
         self, config: dict[str, Any], ticks: int, index: int
@@ -327,49 +322,6 @@ def run_comparison(
             "protocol": [
                 NashBargainingProtocol(),
                 RubinsteinBargainingProtocol(),
-            ],
-            "seed": seeds,
-        },
-        output_dir=output_dir,
-    )
-
-    return runner.run(ticks=ticks)
-
-
-def run_matching_comparison(
-    n_agents: int = 10,
-    grid_size: int = 15,
-    ticks: int = 100,
-    seeds: list[int] | None = None,
-    output_dir: Path | None = None,
-) -> list[RunResult]:
-    """Quick comparison of Opportunistic vs StableRoommates matching.
-
-    Convenience function for comparing matching protocols. Uses Nash
-    bargaining as the default bargaining protocol.
-
-    Args:
-        n_agents: Number of agents per run
-        grid_size: Size of the grid
-        ticks: Number of simulation ticks
-        seeds: List of seeds to run (default: [0, 1, 2, 3, 4])
-        output_dir: Optional directory to save logs
-
-    Returns:
-        List of RunResult objects (alternating Opportunistic/StableRoommates for each seed)
-    """
-    if seeds is None:
-        seeds = list(range(5))
-
-    runner = BatchRunner(
-        base_config={
-            "n_agents": n_agents,
-            "grid_size": grid_size,
-        },
-        variations={
-            "matching_protocol": [
-                OpportunisticMatchingProtocol(),
-                StableRoommatesMatchingProtocol(),
             ],
             "seed": seeds,
         },

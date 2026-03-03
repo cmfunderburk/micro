@@ -19,6 +19,8 @@ import math
 from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
 
+pytestmark = pytest.mark.theory
+
 
 class TestMRSFormula:
     """Test MRS formula: MRS = (alpha/(1-alpha)) * (y/x)."""

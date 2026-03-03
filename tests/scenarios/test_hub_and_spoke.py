@@ -25,6 +25,8 @@ from microecon.bargaining import (
 )
 from microecon.search import evaluate_targets, SearchResult
 
+pytestmark = pytest.mark.scenario
+
 
 # =============================================================================
 # Symmetric Hub-and-Spoke (all α=0.5, identical peripheral endowments)
@@ -197,8 +199,8 @@ class TestFourAgentHubAndSpokeStage1:
         # With symmetric α=0.5, on contract curve each gets equal utility gain
 
         # Just verify feasibility and utility improvements
-        total_x = center.endowment.x + p_a.endowment.x
-        total_y = center.endowment.y + p_a.endowment.y
+        total_x = center.holdings.x + p_a.holdings.x
+        total_y = center.holdings.y + p_a.holdings.y
 
         assert total_x == pytest.approx(16.0, rel=0.01)
         assert total_y == pytest.approx(8.0, rel=0.01)
@@ -211,8 +213,8 @@ class TestFourAgentHubAndSpokeStage1:
         """After first trade, p_b and p_d should be unchanged."""
         sim, center, p_a, p_b, p_d = scenario
 
-        initial_b = (p_b.endowment.x, p_b.endowment.y)
-        initial_d = (p_d.endowment.x, p_d.endowment.y)
+        initial_b = (p_b.holdings.x, p_b.holdings.y)
+        initial_d = (p_d.holdings.x, p_d.holdings.y)
 
         # Run until first trade
         for _ in range(10):
@@ -221,8 +223,8 @@ class TestFourAgentHubAndSpokeStage1:
                 break
 
         # p_b and p_d should be unchanged
-        assert (p_b.endowment.x, p_b.endowment.y) == initial_b
-        assert (p_d.endowment.x, p_d.endowment.y) == initial_d
+        assert (p_b.holdings.x, p_b.holdings.y) == initial_b
+        assert (p_d.holdings.x, p_d.holdings.y) == initial_d
 
     def test_post_trade_remaining_surplus_exists(self, scenario):
         """After center-p_a trade, surplus should still exist with p_b and p_d."""
@@ -235,9 +237,9 @@ class TestFourAgentHubAndSpokeStage1:
                 break
 
         # Check surplus between center (now modified) and p_b, p_d
-        center_type = AgentType(center.preferences, center.endowment)
-        type_b = AgentType(p_b.preferences, p_b.endowment)
-        type_d = AgentType(p_d.preferences, p_d.endowment)
+        center_type = AgentType(center.preferences, center.holdings)
+        type_b = AgentType(p_b.preferences, p_b.holdings)
+        type_d = AgentType(p_d.preferences, p_d.holdings)
 
         surplus_cb = compute_nash_surplus(center_type, type_b)
         surplus_cd = compute_nash_surplus(center_type, type_d)
@@ -328,9 +330,9 @@ class TestFourAgentHubAndSpokeStage2:
         """Center and p_a should have different MRS after trade."""
         sim, center, p_a, p_b, p_d = scenario_after_first_trade
 
-        mrs_center = center.preferences.marginal_rate_of_substitution(center.endowment)
-        mrs_a = p_a.preferences.marginal_rate_of_substitution(p_a.endowment)
-        mrs_b = p_b.preferences.marginal_rate_of_substitution(p_b.endowment)
+        mrs_center = center.preferences.marginal_rate_of_substitution(center.holdings)
+        mrs_a = p_a.preferences.marginal_rate_of_substitution(p_a.holdings)
+        mrs_b = p_b.preferences.marginal_rate_of_substitution(p_b.holdings)
 
         # Center and p_a should have equal MRS (they just traded to Pareto efficiency)
         assert mrs_center == pytest.approx(mrs_a, rel=0.1)
@@ -456,10 +458,10 @@ class TestFourAgentHubAndSpokeStage3:
         """
         sim, center, p_a, p_b, p_d, _, _, _ = scenario_at_equilibrium
 
-        mrs_center = center.preferences.marginal_rate_of_substitution(center.endowment)
-        mrs_a = p_a.preferences.marginal_rate_of_substitution(p_a.endowment)
-        mrs_b = p_b.preferences.marginal_rate_of_substitution(p_b.endowment)
-        mrs_d = p_d.preferences.marginal_rate_of_substitution(p_d.endowment)
+        mrs_center = center.preferences.marginal_rate_of_substitution(center.holdings)
+        mrs_a = p_a.preferences.marginal_rate_of_substitution(p_a.holdings)
+        mrs_b = p_b.preferences.marginal_rate_of_substitution(p_b.holdings)
+        mrs_d = p_d.preferences.marginal_rate_of_substitution(p_d.holdings)
 
         # Initial MRS values were: center=1.0, peripherals=0.2
         # After trading, MRS should have converged somewhat
@@ -485,8 +487,8 @@ class TestFourAgentHubAndSpokeStage3:
 
         for i, agent1 in enumerate(agents):
             for agent2 in agents[i + 1:]:
-                type1 = AgentType(agent1.preferences, agent1.endowment)
-                type2 = AgentType(agent2.preferences, agent2.endowment)
+                type1 = AgentType(agent1.preferences, agent1.holdings)
+                type2 = AgentType(agent2.preferences, agent2.holdings)
 
                 surplus = compute_nash_surplus(type1, type2)
 
@@ -505,8 +507,8 @@ class TestFourAgentHubAndSpokeStage3:
         """Total resources should be unchanged."""
         sim, center, p_a, p_b, p_d, _, initial_total_x, initial_total_y = scenario_at_equilibrium
 
-        final_total_x = sum(a.endowment.x for a in sim.agents)
-        final_total_y = sum(a.endowment.y for a in sim.agents)
+        final_total_x = sum(a.holdings.x for a in sim.agents)
+        final_total_y = sum(a.holdings.y for a in sim.agents)
 
         assert final_total_x == pytest.approx(initial_total_x, rel=1e-9)
         assert final_total_y == pytest.approx(initial_total_y, rel=1e-9)
@@ -802,10 +804,10 @@ class TestMixedHubAndSpokeStage1:
                 break
 
         # Verify allocations
-        assert p_a.endowment.x == pytest.approx(6.0, abs=0.1)
-        assert p_a.endowment.y == pytest.approx(6.0, abs=0.1)
-        assert p_d.endowment.x == pytest.approx(6.0, abs=0.1)
-        assert p_d.endowment.y == pytest.approx(6.0, abs=0.1)
+        assert p_a.holdings.x == pytest.approx(6.0, abs=0.1)
+        assert p_a.holdings.y == pytest.approx(6.0, abs=0.1)
+        assert p_d.holdings.x == pytest.approx(6.0, abs=0.1)
+        assert p_d.holdings.y == pytest.approx(6.0, abs=0.1)
 
     def test_post_ad_trade_utilities(self, scenario):
         """After A-D trade, both A and D should have utility 6."""
@@ -825,8 +827,8 @@ class TestMixedHubAndSpokeStage1:
         sim, center, p_a, p_b, p_d = scenario
 
         # Record initial values
-        initial_c = (center.endowment.x, center.endowment.y)
-        initial_b = (p_b.endowment.x, p_b.endowment.y)
+        initial_c = (center.holdings.x, center.holdings.y)
+        initial_b = (p_b.holdings.x, p_b.holdings.y)
 
         # Run until first trade
         for _ in range(15):
@@ -835,8 +837,8 @@ class TestMixedHubAndSpokeStage1:
                 break
 
         # C and B unchanged
-        assert (center.endowment.x, center.endowment.y) == initial_c
-        assert (p_b.endowment.x, p_b.endowment.y) == initial_b
+        assert (center.holdings.x, center.holdings.y) == initial_c
+        assert (p_b.holdings.x, p_b.holdings.y) == initial_b
 
     def test_remaining_surplus_after_first_trade(self, scenario):
         """After A-D trade, there should still be surplus with B."""
@@ -852,8 +854,8 @@ class TestMixedHubAndSpokeStage1:
         # B still has (10,2) with MRS=0.2
         # There should be gains from trade between any of {A, D, C} and B
 
-        type_a = AgentType(p_a.preferences, p_a.endowment)
-        type_b = AgentType(p_b.preferences, p_b.endowment)
+        type_a = AgentType(p_a.preferences, p_a.holdings)
+        type_b = AgentType(p_b.preferences, p_b.holdings)
 
         surplus_a_b = compute_nash_surplus(type_a, type_b)
 
@@ -951,8 +953,8 @@ class TestMixedHubAndSpokeStage2:
         mrs = center.preferences.marginal_rate_of_substitution
 
         # A and D traded and should have MRS = 1 (balanced bundle)
-        assert mrs(p_a.endowment) == pytest.approx(1.0, rel=0.1)
-        assert mrs(p_d.endowment) == pytest.approx(1.0, rel=0.1)
+        assert mrs(p_a.holdings) == pytest.approx(1.0, rel=0.1)
+        assert mrs(p_d.holdings) == pytest.approx(1.0, rel=0.1)
 
     def test_center_unchanged_still_mrs_1(self, scenario_after_ad_trade):
         """Center should still have MRS = 1.0 (didn't trade yet)."""
@@ -961,9 +963,9 @@ class TestMixedHubAndSpokeStage2:
         mrs = center.preferences.marginal_rate_of_substitution
 
         # Center didn't trade - still at (6, 6) with MRS = 1
-        assert center.endowment.x == pytest.approx(6.0, abs=0.01)
-        assert center.endowment.y == pytest.approx(6.0, abs=0.01)
-        assert mrs(center.endowment) == pytest.approx(1.0, rel=0.01)
+        assert center.holdings.x == pytest.approx(6.0, abs=0.01)
+        assert center.holdings.y == pytest.approx(6.0, abs=0.01)
+        assert mrs(center.holdings) == pytest.approx(1.0, rel=0.01)
 
     def test_b_unchanged_still_mrs_02(self, scenario_after_ad_trade):
         """B should still have MRS = 0.2 (didn't trade yet)."""
@@ -972,9 +974,9 @@ class TestMixedHubAndSpokeStage2:
         mrs = center.preferences.marginal_rate_of_substitution
 
         # B didn't trade - still at (10, 2) with MRS = 0.2
-        assert p_b.endowment.x == pytest.approx(10.0, abs=0.01)
-        assert p_b.endowment.y == pytest.approx(2.0, abs=0.01)
-        assert mrs(p_b.endowment) == pytest.approx(0.2, rel=0.01)
+        assert p_b.holdings.x == pytest.approx(10.0, abs=0.01)
+        assert p_b.holdings.y == pytest.approx(2.0, abs=0.01)
+        assert mrs(p_b.holdings) == pytest.approx(0.2, rel=0.01)
 
     # =========================================================================
     # Phase 2: Surplus analysis - B is the only trade opportunity
@@ -984,9 +986,9 @@ class TestMixedHubAndSpokeStage2:
         """A, D, C all have (6,6) - no gains from trading with each other."""
         sim, center, p_a, p_b, p_d = scenario_after_ad_trade
 
-        type_a = AgentType(p_a.preferences, p_a.endowment)
-        type_d = AgentType(p_d.preferences, p_d.endowment)
-        type_c = AgentType(center.preferences, center.endowment)
+        type_a = AgentType(p_a.preferences, p_a.holdings)
+        type_d = AgentType(p_d.preferences, p_d.holdings)
+        type_c = AgentType(center.preferences, center.holdings)
 
         # All pairs among A, D, C should have ~0 surplus
         assert compute_nash_surplus(type_a, type_d) == pytest.approx(0.0, abs=0.05)
@@ -997,10 +999,10 @@ class TestMixedHubAndSpokeStage2:
         """A, D, C all have positive surplus with B (~0.42)."""
         sim, center, p_a, p_b, p_d = scenario_after_ad_trade
 
-        type_a = AgentType(p_a.preferences, p_a.endowment)
-        type_d = AgentType(p_d.preferences, p_d.endowment)
-        type_c = AgentType(center.preferences, center.endowment)
-        type_b = AgentType(p_b.preferences, p_b.endowment)
+        type_a = AgentType(p_a.preferences, p_a.holdings)
+        type_d = AgentType(p_d.preferences, p_d.holdings)
+        type_c = AgentType(center.preferences, center.holdings)
+        type_b = AgentType(p_b.preferences, p_b.holdings)
 
         surplus_a_b = compute_nash_surplus(type_a, type_b)
         surplus_d_b = compute_nash_surplus(type_d, type_b)
@@ -1023,14 +1025,14 @@ class TestMixedHubAndSpokeStage2:
         """B should participate in at least one trade after A-D."""
         sim, center, p_a, p_b, p_d = scenario_after_ad_trade
 
-        initial_b_endowment = (p_b.endowment.x, p_b.endowment.y)
+        initial_b_holdings = (p_b.holdings.x, p_b.holdings.y)
 
         # Run more ticks
         sim.run(30)
 
-        # B's endowment should have changed (participated in trade)
-        final_b_endowment = (p_b.endowment.x, p_b.endowment.y)
-        assert final_b_endowment != initial_b_endowment, \
+        # B's holdings should have changed (participated in trade)
+        final_b_holdings = (p_b.holdings.x, p_b.holdings.y)
+        assert final_b_holdings != initial_b_holdings, \
             "B should have traded at some point"
 
     def test_b_trades_recorded_in_log(self, scenario_after_ad_trade):
@@ -1151,8 +1153,8 @@ class TestMixedHubAndSpokeStage3:
 
         for i, agent1 in enumerate(agents):
             for agent2 in agents[i + 1:]:
-                type1 = AgentType(agent1.preferences, agent1.endowment)
-                type2 = AgentType(agent2.preferences, agent2.endowment)
+                type1 = AgentType(agent1.preferences, agent1.holdings)
+                type2 = AgentType(agent2.preferences, agent2.holdings)
 
                 surplus = compute_nash_surplus(type1, type2)
 
@@ -1175,8 +1177,8 @@ class TestMixedHubAndSpokeStage3:
         """Total resources should be unchanged (conservation of goods)."""
         sim, center, p_a, p_b, p_d, _, initial_total_x, initial_total_y = scenario_at_equilibrium
 
-        final_total_x = sum(a.endowment.x for a in sim.agents)
-        final_total_y = sum(a.endowment.y for a in sim.agents)
+        final_total_x = sum(a.holdings.x for a in sim.agents)
+        final_total_y = sum(a.holdings.y for a in sim.agents)
 
         # Total: (6+10+10+2, 6+2+2+10) = (28, 20)
         assert final_total_x == pytest.approx(initial_total_x, rel=1e-9)
@@ -1233,10 +1235,10 @@ class TestMixedHubAndSpokeStage3:
 
         # Final MRS
         final_mrs = [
-            mrs(center.endowment),
-            mrs(p_a.endowment),
-            mrs(p_b.endowment),
-            mrs(p_d.endowment),
+            mrs(center.holdings),
+            mrs(p_a.holdings),
+            mrs(p_b.holdings),
+            mrs(p_d.holdings),
         ]
         mean_final = sum(final_mrs) / 4
         variance_final = sum((m - mean_final) ** 2 for m in final_mrs) / 4

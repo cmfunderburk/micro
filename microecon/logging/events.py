@@ -8,29 +8,36 @@ All fields use primitive types (int, float, str, tuple) for JSON serialization.
 from dataclasses import dataclass, field
 from typing import Any
 
+SCHEMA_VERSION = "1.0"
+
 
 @dataclass(frozen=True)
 class SimulationConfig:
     """Configuration snapshot for a simulation run.
 
     Captures all institutional settings needed to reproduce and compare runs:
-    - Bargaining protocol (Nash, Rubinstein)
-    - Matching protocol (opportunistic, stable_roommates)
+    - Bargaining protocol (Nash, Rubinstein, Asymmetric Nash, TIOLI)
+    - Matching mechanism (currently: bilateral_proposal via action system)
     - Information environment (full, noisy)
     """
 
     n_agents: int
     grid_size: int
     seed: int
-    protocol_name: str  # "nash" or "rubinstein"
+    protocol_name: str  # "nash", "rubinstein", "asymmetric_nash", "tioli"
     protocol_params: dict[str, Any] = field(default_factory=dict)
     perception_radius: float = 3.0
     discount_factor: float = 0.95
     movement_budget: int = 1
-    # Institutional metadata (LA-1)
-    matching_protocol_name: str = "opportunistic"
+    # Matching mechanism: "bilateral_proposal" = propose/accept/reject action system
+    # (replaces old MatchingProtocol abstraction)
+    matching_protocol_name: str = "bilateral_proposal"
     info_env_name: str = "full_information"
     info_env_params: dict[str, Any] = field(default_factory=dict)
+    schema_version: str = SCHEMA_VERSION
+    run_id: str = ""
+    manifest_id: str | None = None
+    treatment_arm: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -45,6 +52,10 @@ class SimulationConfig:
             "matching_protocol_name": self.matching_protocol_name,
             "info_env_name": self.info_env_name,
             "info_env_params": self.info_env_params,
+            "schema_version": self.schema_version,
+            "run_id": self.run_id,
+            "manifest_id": self.manifest_id,
+            "treatment_arm": self.treatment_arm,
         }
 
     @classmethod
@@ -61,6 +72,10 @@ class SimulationConfig:
             matching_protocol_name=d.get("matching_protocol_name", "opportunistic"),
             info_env_name=d.get("info_env_name", "full_information"),
             info_env_params=d.get("info_env_params", {}),
+            schema_version=d.get("schema_version", "0.0"),
+            run_id=d.get("run_id", ""),
+            manifest_id=d.get("manifest_id"),
+            treatment_arm=d.get("treatment_arm"),
         )
 
 
@@ -219,9 +234,9 @@ class TradeEvent:
     agent1_id: str
     agent2_id: str
     proposer_id: str  # Critical for Rubinstein comparison
-    pre_endowments: tuple[
+    pre_holdings: tuple[
         tuple[float, float], tuple[float, float]
-    ]  # (agent1, agent2)
+    ]  # (agent1, agent2) holdings before trade
     post_allocations: tuple[
         tuple[float, float], tuple[float, float]
     ]  # (agent1, agent2)
@@ -234,7 +249,7 @@ class TradeEvent:
             "agent1_id": self.agent1_id,
             "agent2_id": self.agent2_id,
             "proposer_id": self.proposer_id,
-            "pre_endowments": [list(e) for e in self.pre_endowments],
+            "pre_holdings": [list(h) for h in self.pre_holdings],
             "post_allocations": [list(a) for a in self.post_allocations],
             "utilities": list(self.utilities),
             "gains": list(self.gains),
@@ -247,7 +262,7 @@ class TradeEvent:
             agent1_id=d["agent1_id"],
             agent2_id=d["agent2_id"],
             proposer_id=d["proposer_id"],
-            pre_endowments=tuple(tuple(e) for e in d["pre_endowments"]),
+            pre_holdings=tuple(tuple(h) for h in d["pre_holdings"]),
             post_allocations=tuple(tuple(a) for a in d["post_allocations"]),
             utilities=tuple(d["utilities"]),
             gains=tuple(d["gains"]),

@@ -1,509 +1,311 @@
 """
-Matching protocols for bilateral exchange.
+Matching/clearing protocol abstraction.
 
-This module implements matching protocols that determine how agents form
-trading pairs. Different protocols create different emergent dynamics:
+Defines the interface for how agents are matched for trade each tick.
+The protocol receives proposals and returns match decisions — it does NOT
+execute trades or mutate agent state.
 
-1. Opportunistic Matching (default)
-   - No explicit matching phase
-   - Any co-located agents can trade
-   - Current behavior preserved
+Implementations:
+- BilateralProposalMatching: Current behavior (mutual detection + sequential evaluation)
+- CentralizedClearingMatching: Welfare-maximizing greedy clearing
 
-2. Stable Roommates Matching (Irving's algorithm)
-   - Agents form committed pairs before trading
-   - Only mutually committed + co-located pairs can trade
-   - Produces stable matching (no blocking pairs) when solution exists
-
-The matching protocol abstraction enables comparing outcomes under different
-institutional rules - a core value proposition per VISION.md.
-
-Reference: DESIGN_matching_protocol.md, Irving (1985)
+Reference: ADR-006-MATCHING.md
 """
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from microecon.agent import Agent
+if TYPE_CHECKING:
+    from microecon.actions import ActionContext, ProposeAction
+    from microecon.agent import Agent
+    from microecon.bargaining import BargainingProtocol
+    from microecon.decisions import DecisionProcedure
+    from microecon.grid import Position
 
 
-@dataclass
-class CommitmentState:
+@dataclass(frozen=True)
+class TradeOutcome:
+    """A matched pair that should trade."""
+    proposer_id: str
+    target_id: str
+
+
+@dataclass(frozen=True)
+class Rejection:
+    """An explicit rejection (triggers cooldown for proposer)."""
+    proposer_id: str
+    target_id: str
+    cooldown_ticks: int
+
+
+@dataclass(frozen=True)
+class MatchResult:
+    """Result of matching protocol resolution for one tick.
+
+    Contains three disjoint sets covering all proposers:
+    - trades: matched pairs that should execute trades
+    - rejections: explicit rejections (proposer gets cooldown)
+    - non_selections: implicit failures (no cooldown, e.g. target chose someone else)
     """
-    Tracks mutual commitments between agents.
-
-    Commitments persist until:
-    1. Successful trade between committed partners
-    2. Partner exits perception radius
-
-    Attributes:
-        _commitments: Set of frozensets, each containing two agent IDs
-    """
-    _commitments: Set[frozenset] = field(default_factory=set)
-
-    def is_committed(self, agent_id: str) -> bool:
-        """Check if an agent has an active commitment."""
-        return any(agent_id in pair for pair in self._commitments)
-
-    def get_partner(self, agent_id: str) -> Optional[str]:
-        """Get the committed partner for an agent, if any."""
-        for pair in self._commitments:
-            if agent_id in pair:
-                other = pair - {agent_id}
-                if other:
-                    return next(iter(other))
-        return None
-
-    def form_commitment(self, agent_a: str, agent_b: str) -> None:
-        """Form a mutual commitment between two agents."""
-        self._commitments.add(frozenset({agent_a, agent_b}))
-
-    def break_commitment(self, agent_a: str, agent_b: str) -> bool:
-        """
-        Break a commitment between two agents.
-
-        Returns:
-            True if a commitment was broken, False if none existed
-        """
-        pair = frozenset({agent_a, agent_b})
-        if pair in self._commitments:
-            self._commitments.discard(pair)
-            return True
-        return False
-
-    def break_all_for_agent(self, agent_id: str) -> List[str]:
-        """
-        Break all commitments involving an agent.
-
-        Returns:
-            List of partner IDs whose commitments were broken
-        """
-        broken = []
-        to_remove = set()
-        for pair in self._commitments:
-            if agent_id in pair:
-                to_remove.add(pair)
-                other = pair - {agent_id}
-                if other:
-                    broken.append(next(iter(other)))
-        self._commitments -= to_remove
-        return broken
-
-    def get_all_committed_pairs(self) -> List[Tuple[str, str]]:
-        """Get all committed pairs as a list of tuples."""
-        return [tuple(sorted(pair)) for pair in self._commitments]
-
-    def get_uncommitted_agents(self, all_agent_ids: Set[str]) -> Set[str]:
-        """Get the set of agents without commitments."""
-        committed = set()
-        for pair in self._commitments:
-            committed.update(pair)
-        return all_agent_ids - committed
-
-    def clear(self) -> None:
-        """Clear all commitments."""
-        self._commitments.clear()
+    trades: tuple[TradeOutcome, ...]
+    rejections: tuple[Rejection, ...]
+    non_selections: tuple[str, ...]  # proposer_ids
 
 
 class MatchingProtocol(ABC):
+    """Abstract base for matching/clearing protocols.
+
+    A matching protocol determines which proposals become trades each tick.
+    It receives all proposals and agent state, and returns a pure-data
+    MatchResult. It does NOT execute trades or mutate state.
+
+    Implementations must be deterministic given the same inputs.
+    Tie-breaking uses sorted agent IDs (lexicographic).
     """
-    Abstract base class for matching protocols.
-
-    Matching protocols determine how agents form trading pairs:
-    - Opportunistic: Any co-located pair can trade (no explicit matching)
-    - Committed: Agents must form mutual commitments before trading
-
-    This abstraction enables comparing outcomes under different institutional
-    matching rules, parallel to how BargainingProtocol enables comparing
-    different bargaining rules.
-
-    Usage:
-        protocol = OpportunisticMatchingProtocol()
-        # or
-        protocol = StableRoommatesMatchingProtocol()
-
-        # Compute matches among uncommitted agents
-        new_pairs = protocol.compute_matches(uncommitted, visibility, surplus_fn)
-    """
-
-    @property
-    @abstractmethod
-    def requires_commitment(self) -> bool:
-        """
-        Whether trade requires explicit mutual commitment.
-
-        If True: Only committed + co-located pairs can trade
-        If False: Any co-located pair can trade (opportunistic)
-        """
-        pass
 
     @abstractmethod
-    def compute_matches(
+    def resolve(
         self,
-        agents: List[Agent],
-        visibility: Dict[str, Set[str]],
-        surplus_fn: Callable[[Agent, Agent], float],
-    ) -> List[Tuple[str, str]]:
-        """
-        Compute committed pairs for this tick.
+        propose_actions: dict[str, "ProposeAction"],
+        agents: dict[str, "Agent"],
+        positions: dict[str, "Position"],
+        decision_procedure: "DecisionProcedure",
+        bargaining_protocol: "BargainingProtocol",
+        action_context: "ActionContext | None" = None,
+    ) -> MatchResult:
+        """Resolve all proposals for this tick.
 
         Args:
-            agents: Uncommitted agents to consider for matching
-            visibility: Map of agent_id -> set of visible agent_ids
-            surplus_fn: Function computing bilateral surplus between agents
+            propose_actions: Map of proposer_id -> ProposeAction
+            agents: Map of agent_id -> Agent (all agents, not just proposers)
+            positions: Map of agent_id -> Position (current positions)
+            decision_procedure: For evaluating proposal acceptance
+            bargaining_protocol: For computing surplus
+            action_context: Simulation execution context (tick, adjacency, etc.)
 
         Returns:
-            List of (agent_id, agent_id) pairs that form commitments
+            MatchResult with trades, rejections, and non-selections
         """
-        pass
+        ...
 
 
-class OpportunisticMatchingProtocol(MatchingProtocol):
+class BilateralProposalMatching(MatchingProtocol):
+    """Default bilateral proposal matching -- extracts current _execute_actions behavior.
+
+    Resolution order:
+    1. Detect mutual proposals (A->B and B->A) -- fast-track to trade
+    2. Evaluate non-mutual proposals -- target accepts/rejects based on opportunity cost
+    3. Handle conflicts -- first-responder advantage for same target
+
+    This is a pure extraction of the matching logic from simulation.py into a protocol.
     """
-    Opportunistic matching - no explicit commitment required.
 
-    This preserves the current behavior:
-    - Any co-located agents can trade
-    - No matching phase needed
-    - Trade partner selected from co-located set (lexicographic tie-breaking)
-
-    This is the default matching protocol.
-    """
-
-    @property
-    def requires_commitment(self) -> bool:
-        return False
-
-    def compute_matches(
+    def resolve(
         self,
-        agents: List[Agent],
-        visibility: Dict[str, Set[str]],
-        surplus_fn: Callable[[Agent, Agent], float],
-    ) -> List[Tuple[str, str]]:
-        """No explicit matching in opportunistic mode."""
-        return []
+        propose_actions: dict[str, "ProposeAction"],
+        agents: dict[str, "Agent"],
+        positions: dict[str, "Position"],
+        decision_procedure: "DecisionProcedure",
+        bargaining_protocol: "BargainingProtocol",
+        action_context: "ActionContext | None" = None,
+    ) -> MatchResult:
+        if not propose_actions:
+            return MatchResult(trades=(), rejections=(), non_selections=())
 
+        trades: list[TradeOutcome] = []
+        rejections: list[Rejection] = []
+        non_selections: list[str] = []
+        traded_this_tick: set[str] = set()
 
-class StableRoommatesMatchingProtocol(MatchingProtocol):
-    """
-    Stable Roommates matching using Irving's algorithm.
+        # Step 1: Detect and resolve mutual proposals
+        mutual_proposals: set[frozenset[str]] = set()
+        for proposer_id, action in propose_actions.items():
+            target_action = propose_actions.get(action.target_id)
+            if target_action and target_action.target_id == proposer_id:
+                mutual_proposals.add(frozenset([proposer_id, action.target_id]))
 
-    Forms committed pairs with the stability property: no two agents
-    would both prefer to be matched with each other over their current
-    partners (when a stable matching exists).
-
-    Properties:
-    - One-sided matching (any agent can match with any other)
-    - Stable when solution exists (no blocking pairs)
-    - May fail to find stable matching in some configurations
-    - Perception-constrained: only match with visible agents
-    - Surplus-discounted preferences: rankings based on bilateral surplus
-
-    When no stable matching exists or agents are unmatched, they use
-    fallback behavior (approach best visible target).
-
-    Reference: Irving, R.W. (1985). "An efficient algorithm for the
-    stable roommates problem." Journal of Algorithms 6(4): 577-595.
-    """
-
-    @property
-    def requires_commitment(self) -> bool:
-        return True
-
-    def compute_matches(
-        self,
-        agents: List[Agent],
-        visibility: Dict[str, Set[str]],
-        surplus_fn: Callable[[Agent, Agent], float],
-    ) -> List[Tuple[str, str]]:
-        """
-        Compute stable matching among agents using Irving's algorithm.
-
-        Args:
-            agents: Uncommitted agents to consider for matching
-            visibility: Map of agent_id -> set of visible agent_ids
-            surplus_fn: Function computing bilateral surplus (distance-discounted)
-
-        Returns:
-            List of (agent_id, agent_id) pairs forming stable matches
-        """
-        if len(agents) < 2:
-            return []
-
-        # Build agent lookup
-        agent_map = {a.id: a for a in agents}
-        agent_ids = list(agent_map.keys())
-
-        # Build preference lists based on surplus (higher = more preferred)
-        # Only include visible agents with positive surplus
-        preferences: Dict[str, List[str]] = {}
-
-        for agent in agents:
-            visible = visibility.get(agent.id, set())
-            candidates = []
-
-            for other_id in visible:
-                if other_id == agent.id:
-                    continue
-                other = agent_map.get(other_id)
-                if other is None:
-                    continue
-
-                surplus = surplus_fn(agent, other)
-                if surplus > 0:
-                    candidates.append((surplus, other_id))
-
-            # Sort by surplus (descending), then by ID (for determinism)
-            candidates.sort(key=lambda x: (-x[0], x[1]))
-            preferences[agent.id] = [c[1] for c in candidates]
-
-        # Run Irving's algorithm
-        return self._irving_algorithm(agent_ids, preferences)
-
-    def _irving_algorithm(
-        self,
-        agents: List[str],
-        preferences: Dict[str, List[str]],
-    ) -> List[Tuple[str, str]]:
-        """
-        Irving's Stable Roommates algorithm.
-
-        Phase 1: Proposal phase (like Gale-Shapley)
-        - Each agent proposes to their most preferred
-        - Each agent holds at most one proposal, rejecting worse ones
-        - Rejected agents propose to next choice
-
-        Phase 2: Rotation elimination (unique to stable roommates)
-        - Find and eliminate "rotations" that must be removed
-        - Continue until matching found or proven impossible
-
-        Returns:
-            List of matched pairs, or partial matching if no stable solution
-        """
-        n = len(agents)
-        if n < 2:
-            return []
-
-        # Deep copy preference lists (we'll modify them)
-        prefs = {a: list(preferences.get(a, [])) for a in agents}
-
-        # Track who each agent is currently holding (proposal from)
-        holding: Dict[str, Optional[str]] = {a: None for a in agents}
-
-        # Phase 1: Proposal phase
-        # Each agent proposes to their first choice
-        proposers = list(agents)
-
-        while proposers:
-            proposer = proposers.pop(0)
-
-            if not prefs[proposer]:
-                # No one left to propose to
+        processed_mutual: set[str] = set()
+        for pair in sorted(mutual_proposals, key=lambda p: sorted(p)):
+            pair_list = sorted(pair)
+            if pair_list[0] in processed_mutual or pair_list[1] in processed_mutual:
+                non_selections.extend(
+                    pid for pid in pair_list if pid not in processed_mutual
+                )
                 continue
 
-            # Propose to first choice
-            target = prefs[proposer][0]
-
-            if target not in prefs:
-                # Target not in our agent set, skip
-                prefs[proposer].pop(0)
-                if prefs[proposer]:
-                    proposers.append(proposer)
+            a_id, b_id = pair_list
+            if a_id not in agents or b_id not in agents:
+                non_selections.extend(pid for pid in pair_list if pid in propose_actions)
                 continue
 
-            current_holder = holding[target]
+            pos_a = positions.get(a_id)
+            pos_b = positions.get(b_id)
+            if pos_a is None or pos_b is None:
+                non_selections.extend(pid for pid in pair_list if pid in propose_actions)
+                continue
+            if pos_a.chebyshev_distance_to(pos_b) > 1:
+                non_selections.extend(pid for pid in pair_list if pid in propose_actions)
+                continue
 
-            if current_holder is None:
-                # Target is free, accept proposal
-                holding[target] = proposer
+            # Mutual match: use sorted order for deterministic proposer assignment
+            trades.append(TradeOutcome(proposer_id=a_id, target_id=b_id))
+            processed_mutual.add(a_id)
+            processed_mutual.add(b_id)
+            traded_this_tick.add(a_id)
+            traded_this_tick.add(b_id)
+
+        # Step 2: Evaluate non-mutual proposals
+        # Use real action_context if provided, otherwise build a minimal one
+        from microecon.actions import ActionContext as _ActionContext
+        from microecon.decisions import DecisionContext
+
+        if action_context is None:
+            action_context = _ActionContext(
+                current_tick=0,
+                agent_positions=positions,
+                agent_interaction_states={},
+                co_located_agents={},
+                adjacent_agents={},
+                pending_proposals={},
+            )
+        decision_context = DecisionContext(
+            action_context=action_context,
+            visible_agents=agents,  # Full visibility for evaluation (ADR-005)
+            bargaining_protocol=bargaining_protocol,
+            agent_positions=positions,
+        )
+
+        responded_targets: set[str] = set()
+
+        for proposer_id, action in propose_actions.items():
+            if proposer_id in processed_mutual:
+                continue
+            if proposer_id in traded_this_tick:
+                continue
+
+            target_id = action.target_id
+            proposer = agents.get(proposer_id)
+            target = agents.get(target_id)
+            if proposer is None or target is None:
+                non_selections.append(proposer_id)
+                continue
+
+            # Target already responded to another proposal
+            if target_id in responded_targets:
+                non_selections.append(proposer_id)
+                continue
+
+            # Target already traded (from mutual proposal)
+            if target_id in traded_this_tick:
+                non_selections.append(proposer_id)
+                continue
+
+            # Check adjacency
+            proposer_pos = positions.get(proposer_id)
+            target_pos = positions.get(target_id)
+            if proposer_pos is None or target_pos is None:
+                non_selections.append(proposer_id)
+                continue
+            if proposer_pos.chebyshev_distance_to(target_pos) > 1:
+                non_selections.append(proposer_id)
+                continue
+
+            # Target evaluates proposal
+            accept = decision_procedure.evaluate_proposal(
+                target, proposer, decision_context
+            )
+            responded_targets.add(target_id)
+
+            if accept:
+                trades.append(TradeOutcome(proposer_id=proposer_id, target_id=target_id))
+                traded_this_tick.add(proposer_id)
+                traded_this_tick.add(target_id)
             else:
-                # Target compares current holder vs new proposer
-                target_prefs = prefs[target]
+                rejections.append(Rejection(
+                    proposer_id=proposer_id,
+                    target_id=target_id,
+                    cooldown_ticks=3,
+                ))
 
-                # Find positions in preference list
-                proposer_rank = target_prefs.index(proposer) if proposer in target_prefs else float('inf')
-                holder_rank = target_prefs.index(current_holder) if current_holder in target_prefs else float('inf')
+        return MatchResult(
+            trades=tuple(trades),
+            rejections=tuple(rejections),
+            non_selections=tuple(non_selections),
+        )
 
-                if proposer_rank < holder_rank:
-                    # New proposer is better, reject current holder
-                    holding[target] = proposer
-                    # Current holder must propose again
-                    prefs[current_holder].remove(target)
-                    if prefs[current_holder]:
-                        proposers.append(current_holder)
-                else:
-                    # Keep current holder, reject new proposer
-                    prefs[proposer].remove(target)
-                    if prefs[proposer]:
-                        proposers.append(proposer)
 
-        # After phase 1, reduce preference lists
-        # Remove anyone worse than current holder from each preference list
-        for agent in agents:
-            holder = holding[agent]
-            if holder is not None and holder in prefs[agent]:
-                holder_idx = prefs[agent].index(holder)
-                # Remove everyone after holder
-                worse = prefs[agent][holder_idx + 1:]
-                prefs[agent] = prefs[agent][:holder_idx + 1]
-                # Also remove agent from those worse agents' lists
-                for w in worse:
-                    if agent in prefs.get(w, []):
-                        prefs[w].remove(agent)
+class CentralizedClearingMatching(MatchingProtocol):
+    """Centralized welfare-maximizing matching.
 
-        # Phase 2: Rotation elimination
-        # Find rotations and eliminate them until lists have length 1 or failure
-        max_iterations = n * n  # Prevent infinite loops
-        iteration = 0
+    A centralized auctioneer collects all proposals, computes bilateral surplus
+    for each adjacent proposer-target pair, and greedily assigns matches by
+    descending surplus (each agent matched at most once).
 
-        while iteration < max_iterations:
-            iteration += 1
+    Key differences from BilateralProposalMatching:
+    - No rejections (unmatched = non-selected, no cooldowns)
+    - Welfare-maximizing (highest surplus pairs matched first)
+    - Simultaneous resolution (no first-responder advantage)
 
-            # Check for completion or failure
-            all_single = True
-            any_empty = False
+    This is a stub demonstrating the MatchingProtocol interface.
+    """
 
-            for agent in agents:
-                if len(prefs[agent]) == 0:
-                    any_empty = True
-                elif len(prefs[agent]) > 1:
-                    all_single = False
+    def resolve(
+        self,
+        propose_actions: dict[str, "ProposeAction"],
+        agents: dict[str, "Agent"],
+        positions: dict[str, "Position"],
+        decision_procedure: "DecisionProcedure",
+        bargaining_protocol: "BargainingProtocol",
+        action_context: "ActionContext | None" = None,
+    ) -> MatchResult:
+        if not propose_actions:
+            return MatchResult(trades=(), rejections=(), non_selections=())
 
-            if all_single:
-                break  # Found stable matching
-
-            if any_empty:
-                break  # No stable matching exists
-
-            # Find a rotation
-            rotation = self._find_rotation(agents, prefs)
-
-            if rotation is None:
-                break  # No rotation found, done
-
-            # Eliminate the rotation
-            self._eliminate_rotation(rotation, prefs)
-
-        # Build matching from reduced preference lists
-        matches = []
-        matched = set()
-
-        for agent in sorted(agents):  # Sorted for determinism
-            if agent in matched:
+        # Compute surplus for each valid proposal (adjacent pairs only)
+        scored_proposals: list[tuple[float, str, str]] = []
+        eligible: set[str] = set()
+        for proposer_id, action in propose_actions.items():
+            target_id = action.target_id
+            proposer = agents.get(proposer_id)
+            target = agents.get(target_id)
+            if proposer is None or target is None:
                 continue
 
-            if prefs[agent]:
-                partner = prefs[agent][0]
-                if partner not in matched and agent in prefs.get(partner, []):
-                    matches.append((agent, partner) if agent < partner else (partner, agent))
-                    matched.add(agent)
-                    matched.add(partner)
+            pos_p = positions.get(proposer_id)
+            pos_t = positions.get(target_id)
+            if pos_p is None or pos_t is None:
+                continue
+            if pos_p.chebyshev_distance_to(pos_t) > 1:
+                continue
 
-        return matches
+            surplus = bargaining_protocol.compute_expected_surplus(proposer, target)
+            if surplus > 0:
+                scored_proposals.append((surplus, proposer_id, target_id))
+                eligible.add(proposer_id)
 
-    def _find_rotation(
-        self,
-        agents: List[str],
-        prefs: Dict[str, List[str]],
-    ) -> Optional[List[Tuple[str, str]]]:
-        """
-        Find a rotation in the reduced preference lists.
+        # Sort by surplus descending, then by proposer_id for determinism
+        scored_proposals.sort(key=lambda x: (-x[0], x[1]))
 
-        A rotation is a sequence [(p0, q0), (p1, q1), ..., (pr, qr)] where:
-        - qi is second on pi's list
-        - p(i+1 mod r+1) is last on qi's list
+        # Greedy matching: assign highest surplus pairs first
+        trades: list[TradeOutcome] = []
+        matched: set[str] = set()
 
-        Returns:
-            Rotation as list of (p, q) pairs, or None if not found
-        """
-        # Find an agent with list length > 1
-        start = None
-        for agent in agents:
-            if len(prefs[agent]) > 1:
-                start = agent
-                break
+        for surplus, proposer_id, target_id in scored_proposals:
+            if proposer_id in matched or target_id in matched:
+                continue
+            trades.append(TradeOutcome(proposer_id=proposer_id, target_id=target_id))
+            matched.add(proposer_id)
+            matched.add(target_id)
 
-        if start is None:
-            return None
+        # All unmatched proposers are non-selected (no rejections in centralized clearing)
+        non_selections = tuple(
+            pid for pid in propose_actions if pid not in matched
+        )
 
-        rotation = []
-        p = start
-        visited = set()
-
-        while p not in visited:
-            visited.add(p)
-
-            if len(prefs[p]) < 2:
-                return None  # Can't form rotation
-
-            q = prefs[p][1]  # Second on p's list
-
-            if not prefs.get(q):
-                return None
-
-            # Find last person on q's list
-            next_p = prefs[q][-1]
-
-            rotation.append((p, q))
-            p = next_p
-
-        # Find where the cycle starts
-        cycle_start_idx = None
-        for i, (pi, _) in enumerate(rotation):
-            if pi == p:
-                cycle_start_idx = i
-                break
-
-        if cycle_start_idx is None:
-            return None
-
-        return rotation[cycle_start_idx:]
-
-    def _eliminate_rotation(
-        self,
-        rotation: List[Tuple[str, str]],
-        prefs: Dict[str, List[str]],
-    ) -> None:
-        """
-        Eliminate a rotation from the preference lists.
-
-        For rotation [(p0, q0), (p1, q1), ..., (pr, qr)]:
-        - For each (pi, qi): remove qi from pi's list and pi from qi's list
-        """
-        for p, q in rotation:
-            if q in prefs.get(p, []):
-                prefs[p].remove(q)
-            if p in prefs.get(q, []):
-                prefs[q].remove(p)
-
-
-# =============================================================================
-# Matching Event Types (for logging)
-# =============================================================================
-
-
-@dataclass
-class CommitmentFormedEvent:
-    """Record of a commitment forming between two agents."""
-    tick: int
-    agent_a: str
-    agent_b: str
-
-
-@dataclass
-class CommitmentBrokenEvent:
-    """Record of a commitment breaking."""
-    tick: int
-    agent_a: str
-    agent_b: str
-    reason: str  # "trade_completed" or "left_perception"
-
-
-@dataclass
-class MatchingPhaseResult:
-    """Summary of a matching phase."""
-    tick: int
-    new_pairs: List[Tuple[str, str]]
-    unmatched_agents: List[str]
-    algorithm_succeeded: bool
+        return MatchResult(
+            trades=tuple(trades),
+            rejections=(),  # Centralized clearing never rejects
+            non_selections=non_selections,
+        )

@@ -4,8 +4,18 @@
  * Renders two simulation grids side-by-side with labels.
  */
 
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, type ReactElement } from 'react';
 import { useComparisonStore } from '@/store/comparisonStore';
+import { useDualContainerSize } from '@/hooks/useContainerSize';
+import { alphaToColor } from '@/lib/colors';
+import {
+  groupAgentsByPosition,
+  getAgentCanvasPos,
+  getAgentDrawRadius,
+  drawGridLines,
+  clearCanvas,
+  createAgentLookup,
+} from '@/lib/gridUtils';
 import type { Agent, Trade } from '@/types/simulation';
 
 interface GridCanvasProps {
@@ -18,12 +28,6 @@ interface GridCanvasProps {
   label: string;
 }
 
-// Map alpha (0-1) to color (red to blue via purple)
-function alphaToColor(alpha: number): string {
-  const hue = alpha * 240;
-  return `hsl(${hue}, 70%, 50%)`;
-}
-
 function ComparisonGridCanvas({
   width,
   height,
@@ -31,58 +35,14 @@ function ComparisonGridCanvas({
   trades,
   gridSize,
   label,
-}: GridCanvasProps) {
+}: GridCanvasProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
   const tradeAnimationsRef = useRef<Map<string, { trade: Trade; startTime: number }>>(new Map());
+  const renderRef = useRef<(() => void) | undefined>(undefined);
 
   const cellSize = Math.min(width, height) / gridSize;
   const agentRadius = cellSize * 0.35;
-
-  const posToCanvas = useCallback(
-    (row: number, col: number): [number, number] => {
-      const x = (col + 0.5) * cellSize;
-      const y = (row + 0.5) * cellSize;
-      return [x, y];
-    },
-    [cellSize]
-  );
-
-  const agentsByPosition = useCallback(() => {
-    const posMap = new Map<string, Agent[]>();
-    for (const agent of agents) {
-      const key = `${agent.position[0]},${agent.position[1]}`;
-      const existing = posMap.get(key) || [];
-      existing.push(agent);
-      posMap.set(key, existing);
-    }
-    return posMap;
-  }, [agents]);
-
-  const getAgentCanvasPos = useCallback(
-    (agent: Agent, posMap?: Map<string, Agent[]>): [number, number] => {
-      const [row, col] = agent.position;
-      const [baseX, baseY] = posToCanvas(row, col);
-
-      if (!posMap) return [baseX, baseY];
-
-      const key = `${row},${col}`;
-      const colocated = posMap.get(key);
-
-      if (!colocated || colocated.length <= 1) return [baseX, baseY];
-
-      const index = colocated.findIndex(a => a.id === agent.id);
-      const count = colocated.length;
-
-      const offsetRadius = agentRadius * 0.6;
-      const angle = (2 * Math.PI * index) / count;
-      const offsetX = Math.cos(angle) * offsetRadius;
-      const offsetY = Math.sin(angle) * offsetRadius;
-
-      return [baseX + offsetX, baseY + offsetY];
-    },
-    [posToCanvas, agentRadius]
-  );
 
   // Add new trades to animation queue
   useEffect(() => {
@@ -105,31 +65,11 @@ function ComparisonGridCanvas({
     const now = Date.now();
     const TRADE_ANIMATION_DURATION = 2000;
 
-    // Clear canvas
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(0, 0, width, height);
+    clearCanvas(ctx, width, height);
+    drawGridLines(ctx, gridSize, cellSize, width, height);
 
-    // Draw grid lines
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-
-    for (let i = 0; i <= gridSize; i++) {
-      const pos = i * cellSize;
-      ctx.beginPath();
-      ctx.moveTo(pos, 0);
-      ctx.lineTo(pos, height);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, pos);
-      ctx.lineTo(width, pos);
-      ctx.stroke();
-    }
-
-    const agentById = new Map<string, Agent>();
-    for (const agent of agents) {
-      agentById.set(agent.id, agent);
-    }
-    const posMap = agentsByPosition();
+    const agentById = createAgentLookup(agents);
+    const posMap = groupAgentsByPosition(agents);
 
     // Draw trade animations
     for (const [key, { trade, startTime }] of tradeAnimationsRef.current) {
@@ -143,8 +83,8 @@ function ComparisonGridCanvas({
       const agent2 = agentById.get(trade.agent2_id);
       if (!agent1 || !agent2) continue;
 
-      const [x1, y1] = getAgentCanvasPos(agent1, posMap);
-      const [x2, y2] = getAgentCanvasPos(agent2, posMap);
+      const [x1, y1] = getAgentCanvasPos(agent1, posMap, cellSize, agentRadius);
+      const [x2, y2] = getAgentCanvasPos(agent2, posMap, cellSize, agentRadius);
 
       const alpha = 1 - elapsed / TRADE_ANIMATION_DURATION;
 
@@ -158,12 +98,9 @@ function ComparisonGridCanvas({
 
     // Draw agents
     for (const agent of agents) {
-      const [x, y] = getAgentCanvasPos(agent, posMap);
+      const [x, y] = getAgentCanvasPos(agent, posMap, cellSize, agentRadius);
       const color = alphaToColor(agent.alpha);
-
-      const posKey = `${agent.position[0]},${agent.position[1]}`;
-      const colocatedCount = posMap.get(posKey)?.length ?? 1;
-      const drawRadius = colocatedCount > 1 ? agentRadius * 0.7 : agentRadius;
+      const drawRadius = getAgentDrawRadius(agent, posMap, agentRadius);
 
       ctx.fillStyle = color;
       ctx.beginPath();
@@ -176,9 +113,13 @@ function ComparisonGridCanvas({
     }
 
     if (tradeAnimationsRef.current.size > 0) {
-      animationRef.current = requestAnimationFrame(render);
+      animationRef.current = requestAnimationFrame(() => renderRef.current?.());
     }
-  }, [agents, gridSize, cellSize, width, height, agentRadius, getAgentCanvasPos, agentsByPosition]);
+  }, [agents, gridSize, cellSize, width, height, agentRadius]);
+
+  useEffect(() => {
+    renderRef.current = render;
+  }, [render]);
 
   useEffect(() => {
     render();
@@ -205,33 +146,11 @@ function ComparisonGridCanvas({
   );
 }
 
-export function DualGridView() {
+export function DualGridView(): ReactElement | null {
   const simulationA = useComparisonStore((state) => state.simulationA);
   const simulationB = useComparisonStore((state) => state.simulationB);
   const comparisonMode = useComparisonStore((state) => state.comparisonMode);
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [gridSize, setGridSize] = useState(280);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const updateGridSize = () => {
-      const rect = container.getBoundingClientRect();
-      // Each grid takes half the width minus gap
-      const availableWidth = (rect.width - 24) / 2;
-      const availableHeight = rect.height - 40; // Account for labels
-      const size = Math.min(availableWidth, availableHeight, 400);
-      setGridSize(Math.max(200, Math.floor(size)));
-    };
-
-    const resizeObserver = new ResizeObserver(updateGridSize);
-    resizeObserver.observe(container);
-    requestAnimationFrame(updateGridSize);
-
-    return () => resizeObserver.disconnect();
-  }, []);
+  const { containerRef, size: gridSize } = useDualContainerSize();
 
   if (!comparisonMode) {
     return null;

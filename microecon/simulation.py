@@ -1,57 +1,57 @@
 """
 Simulation engine for grid-based search and exchange.
 
-The simulation runs in discrete ticks with four phases:
-1. EVALUATE - Observe visible agents, compute surplus rankings
-2. DECIDE   - Form commitments (committed mode) or select targets (opportunistic)
-3. MOVE     - Move toward committed partner or selected target
-4. EXCHANGE - Execute bargaining (commitment-gated or any co-located)
+The simulation runs in discrete ticks with three phases:
+1. PERCEIVE - All agents observe frozen state (simultaneous snapshot)
+2. DECIDE   - All agents select ONE action from available_actions()
+3. EXECUTE  - Conflict resolution, execute actions, state transitions
 
-Reference: CLAUDE.md, DESIGN_matching_protocol.md
+Reference: CLAUDE.md, ADR-001-TICK-MODEL.md, ADR-002-INTERACTION-STATE.md
 """
 
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Callable, TYPE_CHECKING
-import random as random_module
 from random import Random
 
-from microecon.agent import Agent, create_agent
+from microecon.agent import Agent, AgentInteractionState, InteractionState, create_agent
 from microecon.bundle import Bundle
 from microecon.grid import Grid, Position
 from microecon.information import InformationEnvironment, FullInformation
 from microecon.beliefs import record_trade_observation
+from microecon.logging.events import TradeEvent
 from microecon.bargaining import (
     BargainingOutcome,
     BargainingProtocol,
     NashBargainingProtocol,
 )
 from microecon.search import (
-    compute_move_target,
-    should_trade,
-    evaluate_targets,
     evaluate_targets_detailed,
     TargetEvaluationResult,
 )
+from microecon.actions import (
+    Action,
+    ActionContext,
+    ActionType,
+    MoveAction,
+    ProposeAction,
+    AcceptAction,
+    RejectAction,
+    WaitAction,
+)
+from microecon.decisions import (
+    DecisionProcedure,
+    DecisionContext,
+    RationalDecisionProcedure,
+)
 from microecon.matching import (
+    BilateralProposalMatching,
     MatchingProtocol,
-    OpportunisticMatchingProtocol,
-    CommitmentState,
+    MatchResult,
 )
 
 if TYPE_CHECKING:
     from microecon.logging import SimulationLogger
-
-
-@dataclass
-class TradeEvent:
-    """Record of a trade that occurred."""
-    tick: int
-    agent1_id: str
-    agent2_id: str
-    outcome: BargainingOutcome
-    pre_endowment_1: tuple[float, float]  # Agent 1's endowment before trade
-    pre_endowment_2: tuple[float, float]  # Agent 2's endowment before trade
 
 
 @dataclass
@@ -76,30 +76,35 @@ class Simulation:
     """
     Main simulation engine.
 
-    Coordinates agent search, movement, and exchange on the grid.
+    Coordinates agent search, movement, and exchange on the grid using
+    the 3-phase tick model (Perceive-Decide-Execute).
 
     Attributes:
         grid: The spatial grid
         agents: All agents in the simulation
         info_env: Information environment
         bargaining_protocol: Protocol for bilateral bargaining (Nash, Rubinstein, etc.)
-        matching_protocol: Protocol for forming trading pairs (Opportunistic, StableRoommates)
+        decision_procedure: Procedure for agent action selection
         tick: Current tick number
         trades: History of trades
-        commitments: Tracks committed pairs (for committed matching protocols)
         logger: Optional SimulationLogger for capturing detailed state
     """
     grid: Grid
     info_env: InformationEnvironment = field(default_factory=FullInformation)
     bargaining_protocol: BargainingProtocol = field(default_factory=NashBargainingProtocol)
-    matching_protocol: MatchingProtocol = field(default_factory=OpportunisticMatchingProtocol)
+    decision_procedure: DecisionProcedure = field(default_factory=RationalDecisionProcedure)
+    matching_protocol: MatchingProtocol = field(default_factory=BilateralProposalMatching)
     agents: list[Agent] = field(default_factory=list)
     tick: int = 0
     trades: list[TradeEvent] = field(default_factory=list)
-    commitments: CommitmentState = field(default_factory=CommitmentState)
     _agents_by_id: dict[str, Agent] = field(default_factory=dict, repr=False)
     logger: Optional["SimulationLogger"] = field(default=None, repr=False)
     _rng: Random = field(default_factory=Random, repr=False)
+
+    # Track pending proposals: target_id -> proposer_id
+    _pending_proposals: dict[str, str] = field(default_factory=dict, repr=False)
+    # Track negotiating pairs: (agent_a_id, agent_b_id) -> exchange_id
+    _negotiating_pairs: dict[tuple[str, str], str] = field(default_factory=dict, repr=False)
 
     def add_agent(self, agent: Agent, position: Position) -> None:
         """Add an agent to the simulation at the given position."""
@@ -124,13 +129,12 @@ class Simulation:
 
     def step(self) -> list[TradeEvent]:
         """
-        Execute one simulation tick with four phases.
+        Execute one simulation tick with three phases (ADR-001).
 
         Phases:
-        1. EVALUATE - Observe visible agents, compute surplus rankings
-        2. DECIDE   - Form commitments (committed mode) or select targets (opportunistic)
-        3. MOVE     - Move toward committed partner or selected target
-        4. EXCHANGE - Execute bargaining (commitment-gated or any co-located)
+        1. PERCEIVE - All agents observe frozen state (simultaneous snapshot)
+        2. DECIDE   - All agents select ONE action from available_actions()
+        3. EXECUTE  - Conflict resolution, execute actions, state transitions
 
         Returns:
             List of trades that occurred this tick
@@ -141,11 +145,8 @@ class Simulation:
         # For logging: collect search decisions and movement events
         search_decisions_data: list[tuple[str, Position, int, list[TargetEvaluationResult], Optional[str], float]] = []
         movement_events_data: list[tuple[str, Position, Position, Optional[str], str]] = []
-        # Track commitment events for logging
-        commitments_formed_data: list[tuple[str, str]] = []
-        commitments_broken_data: list[tuple[str, str, str]] = []  # (agent_a, agent_b, reason)
 
-        # Store old positions for crossing detection
+        # Store old positions for movement tracking
         old_positions: dict[str, Position] = {
             agent.id: self.grid.get_position(agent)
             for agent in self.agents
@@ -153,25 +154,22 @@ class Simulation:
         }
 
         # =====================================================================
-        # PRE-TICK: Commitment maintenance (break stale commitments)
+        # PRE-TICK: Tick cooldowns and expire stale proposals
         # =====================================================================
-        if self.matching_protocol.requires_commitment:
-            broken_pairs = self._maintain_commitments()
-            for agent_a_id, agent_b_id in broken_pairs:
-                commitments_broken_data.append((agent_a_id, agent_b_id, "left_perception"))
+        self._pre_tick_maintenance()
 
         # =====================================================================
-        # PHASE 1: EVALUATE - Observe visible agents, compute surplus rankings
+        # PHASE 1: PERCEIVE - Build frozen state snapshot
         # =====================================================================
-        # Build visibility map: agent_id -> set of visible agent_ids
-        visibility: dict[str, set[str]] = {}
-        # Store evaluation results for Decide phase and logging
+        # Build visibility map: agent_id -> dict of visible agents
+        visible_agents_map: dict[str, dict[str, Agent]] = {}
+        # Store evaluation results for logging
         agent_evaluations: dict[str, tuple[Optional[str], Optional[Position], float, int, list[TargetEvaluationResult]]] = {}
 
         for agent in self.agents:
             agent_pos = self.grid.get_position(agent)
             if agent_pos is None:
-                visibility[agent.id] = set()
+                visible_agents_map[agent.id] = {}
                 agent_evaluations[agent.id] = (None, None, 0.0, 0, [])
                 continue
 
@@ -181,10 +179,14 @@ class Simulation:
                 self.bargaining_protocol
             )
 
-            # Build visibility set from evaluations
-            visibility[agent.id] = {e.target_id for e in evaluations}
+            # Build visible agents dict from evaluations
+            visible_agents_map[agent.id] = {
+                e.target_id: self._agents_by_id[e.target_id]
+                for e in evaluations
+                if e.target_id in self._agents_by_id
+            }
 
-            # Store for Decide phase
+            # Store for logging
             agent_evaluations[agent.id] = (
                 result.best_target_id,
                 result.best_target_position,
@@ -204,281 +206,317 @@ class Simulation:
                     result.discounted_value,
                 ))
 
-        # =====================================================================
-        # PHASE 2: DECIDE - Form commitments or select targets
-        # =====================================================================
-        move_targets: dict[str, Optional[Position]] = {}
-        move_target_ids: dict[str, Optional[str]] = {}
-
-        if self.matching_protocol.requires_commitment:
-            # Committed mode: run matching for uncommitted agents
-            uncommitted_ids = self.commitments.get_uncommitted_agents(
-                {a.id for a in self.agents}
-            )
-            uncommitted_agents = [
-                self._agents_by_id[aid] for aid in uncommitted_ids
-                if aid in self._agents_by_id
-            ]
-
-            # Define surplus function for matching with protocol and distance discounting
-            def surplus_fn(a: Agent, b: Agent) -> float:
-                # Get expected surplus using the bargaining protocol
-                base_surplus = self.bargaining_protocol.compute_expected_surplus(a, b)
-                if base_surplus <= 0:
-                    return 0.0
-
-                # Apply distance discounting
-                pos_a = self.grid.get_position(a)
-                pos_b = self.grid.get_position(b)
-                if pos_a is None or pos_b is None:
-                    return 0.0
-
-                # Use grid.chebyshev_distance to respect wrap setting
-                ticks_to_reach = self.grid.chebyshev_distance(pos_a, pos_b)
-                return base_surplus * (a.discount_factor ** ticks_to_reach)
-
-            # Compute new matches
-            new_pairs = self.matching_protocol.compute_matches(
-                uncommitted_agents, visibility, surplus_fn
-            )
-
-            # Form new commitments
-            for agent_a_id, agent_b_id in new_pairs:
-                self.commitments.form_commitment(agent_a_id, agent_b_id)
-                commitments_formed_data.append((agent_a_id, agent_b_id))
-
-            # Set movement targets based on commitment status
-            for agent in self.agents:
-                partner_id = self.commitments.get_partner(agent.id)
-                if partner_id is not None:
-                    # Committed: move toward partner
-                    partner = self._agents_by_id.get(partner_id)
-                    if partner is not None:
-                        partner_pos = self.grid.get_position(partner)
-                        move_targets[agent.id] = partner_pos
-                        move_target_ids[agent.id] = partner_id
-                    else:
-                        # Partner not found, use fallback
-                        best_id, best_pos, _, _, _ = agent_evaluations.get(agent.id, (None, None, 0, 0, []))
-                        move_targets[agent.id] = best_pos
-                        move_target_ids[agent.id] = best_id
-                else:
-                    # Uncommitted/unmatched: use fallback (best surplus target)
-                    best_id, best_pos, _, _, _ = agent_evaluations.get(agent.id, (None, None, 0, 0, []))
-                    move_targets[agent.id] = best_pos
-                    move_target_ids[agent.id] = best_id
-        else:
-            # Opportunistic mode: select best surplus target
-            for agent in self.agents:
-                best_id, best_pos, _, _, _ = agent_evaluations.get(agent.id, (None, None, 0, 0, []))
-                move_targets[agent.id] = best_pos
-                move_target_ids[agent.id] = best_id
+        # Build frozen ActionContext for precondition checking
+        action_context = self._build_action_context()
 
         # =====================================================================
-        # PHASE 3: MOVE - Move toward partner or target
+        # PHASE 2: DECIDE - Each agent selects one action
         # =====================================================================
+        agent_actions: dict[str, Action] = {}
+
         for agent in self.agents:
-            target = move_targets.get(agent.id)
-            if target is not None:
-                self.grid.move_toward(agent, target, steps=agent.movement_budget)
+            # Build decision context
+            decision_context = DecisionContext(
+                action_context=action_context,
+                visible_agents=visible_agents_map.get(agent.id, {}),
+                bargaining_protocol=self.bargaining_protocol,
+                agent_positions={
+                    aid: pos for aid, pos in
+                    ((a.id, self.grid.get_position(a)) for a in self.agents)
+                    if pos is not None
+                },
+            )
 
-        # Detect crossing paths - if two agents swapped positions or
-        # crossed through each other, place them at the same position (meeting)
-        new_positions: dict[str, Position] = {
-            a.id: self.grid.get_position(a) for a in self.agents
-        }
-        for i, agent1 in enumerate(self.agents):
-            for agent2 in self.agents[i+1:]:
-                old1, old2 = old_positions.get(agent1.id), old_positions.get(agent2.id)
-                new1, new2 = new_positions.get(agent1.id), new_positions.get(agent2.id)
+            # Let decision procedure choose action
+            action = self.decision_procedure.choose(agent, decision_context)
+            agent_actions[agent.id] = action
 
-                if old1 is None or old2 is None or new1 is None or new2 is None:
-                    continue
-
-                # Check if they crossed paths (swapped positions or crossed through)
-                crossed = (old1 == new2 and old2 == new1)
-                # Also check if they're now adjacent but were moving toward each other
-                # Use grid.chebyshev_distance to respect wrap setting
-                adjacent = self.grid.chebyshev_distance(new1, new2) == 1
-                moving_toward = (
-                    move_targets.get(agent1.id) == old2 and
-                    move_targets.get(agent2.id) == old1
-                )
-
-                if crossed or (adjacent and moving_toward):
-                    # Place both at the midpoint (agent1's new position)
-                    self.grid.move_agent(agent2, new1)
-                    new_positions[agent2.id] = new1
+        # =====================================================================
+        # PHASE 3: EXECUTE - Conflict resolution and action execution
+        # =====================================================================
+        tick_trades = self._execute_actions(agent_actions, old_positions, movement_events_data)
 
         # Record movement events for logging
         if self.logger is not None:
+            new_positions = {
+                a.id: self.grid.get_position(a) for a in self.agents
+            }
             for agent in self.agents:
                 old_pos = old_positions.get(agent.id)
                 new_pos = new_positions.get(agent.id)
-                target_id = move_target_ids.get(agent.id)
+                action = agent_actions.get(agent.id)
 
                 if old_pos is None or new_pos is None:
                     continue
 
+                target_id = None
+                if isinstance(action, MoveAction):
+                    # Find which agent is at target position
+                    for aid, apos in new_positions.items():
+                        if apos == action.target_position and aid != agent.id:
+                            target_id = aid
+                            break
+
                 if old_pos == new_pos:
-                    reason = "at_target" if target_id is not None else "no_target"
-                elif target_id is not None:
-                    reason = "toward_target"
-                else:
                     reason = "stayed"
+                else:
+                    reason = "toward_target" if target_id else "moved"
 
                 movement_events_data.append((
                     agent.id, old_pos, new_pos, target_id, reason
                 ))
-
-        # =====================================================================
-        # PHASE 4: EXCHANGE - Execute bargaining
-        # =====================================================================
-        traded_this_tick: set[str] = set()
-        trade_events_data: list[tuple] = []
-
-        for agent in self.agents:
-            if agent.id in traded_this_tick:
-                continue
-
-            # Find other agents at same position
-            others = self.grid.agents_at_same_position(agent)
-            others = {oid for oid in others if oid not in traded_this_tick}
-
-            if not others:
-                continue
-
-            # Trade with first available partner (sorted by ID for determinism)
-            for other_id in sorted(others):
-                other = self._agents_by_id.get(other_id)
-                if other is None:
-                    continue
-
-                # Check if trade is allowed under current matching protocol
-                if self.matching_protocol.requires_commitment:
-                    # Committed mode: only committed pairs can trade
-                    if self.commitments.get_partner(agent.id) != other_id:
-                        continue  # Not committed to this agent
-
-                if should_trade(agent, other, self.info_env, self.bargaining_protocol):
-                    # Capture pre-trade endowments for logging
-                    pre_endowment1 = (agent.endowment.x, agent.endowment.y)
-                    pre_endowment2 = (other.endowment.x, other.endowment.y)
-
-                    # Random proposer assignment eliminates arbitrary bias
-                    # (With BRW Rubinstein, proposer identity doesn't affect outcomes anyway)
-                    proposer = self._rng.choice([agent, other])
-                    outcome = self.bargaining_protocol.execute(agent, other, proposer=proposer)
-                    if outcome.trade_occurred:
-                        event = TradeEvent(
-                            tick=self.tick,
-                            agent1_id=agent.id,
-                            agent2_id=other.id,
-                            outcome=outcome,
-                            pre_endowment_1=pre_endowment1,
-                            pre_endowment_2=pre_endowment2,
-                        )
-                        tick_trades.append(event)
-                        self.trades.append(event)
-                        traded_this_tick.add(agent.id)
-                        traded_this_tick.add(other.id)
-
-                        # Update beliefs for both traders
-                        observed_type1 = self.info_env.get_observable_type(agent)
-                        observed_type2 = self.info_env.get_observable_type(other)
-
-                        record_trade_observation(
-                            agent=agent,
-                            partner=other,
-                            bundle_before=Bundle(pre_endowment1[0], pre_endowment1[1]),
-                            bundle_after=outcome.allocation_1,
-                            observed_partner_alpha=observed_type2.preferences.alpha,
-                            tick=self.tick,
-                        )
-                        record_trade_observation(
-                            agent=other,
-                            partner=agent,
-                            bundle_before=Bundle(pre_endowment2[0], pre_endowment2[1]),
-                            bundle_after=outcome.allocation_2,
-                            observed_partner_alpha=observed_type1.preferences.alpha,
-                            tick=self.tick,
-                        )
-
-                        # Break commitment after successful trade (committed mode)
-                        if self.matching_protocol.requires_commitment:
-                            self.commitments.break_commitment(agent.id, other.id)
-                            commitments_broken_data.append((agent.id, other.id, "trade_completed"))
-
-                        # Record for logging
-                        if self.logger is not None:
-                            trade_events_data.append((
-                                agent.id,
-                                other.id,
-                                proposer.id,  # proposer_id (randomly assigned)
-                                (pre_endowment1, pre_endowment2),
-                                ((outcome.allocation_1.x, outcome.allocation_1.y),
-                                 (outcome.allocation_2.x, outcome.allocation_2.y)),
-                                (outcome.utility_1, outcome.utility_2),
-                                (outcome.gains_1, outcome.gains_2),
-                                outcome.trade_occurred,
-                            ))
-
-                        break  # Agent can only trade once per tick
 
         # Log the complete tick record
         if self.logger is not None:
             self._log_tick(
                 search_decisions_data,
                 movement_events_data,
-                trade_events_data,
-                commitments_formed_data,
-                commitments_broken_data,
+                tick_trades,
+                [],  # No commitment events in new model
+                [],  # No commitment events in new model
             )
 
         return tick_trades
 
-    def _maintain_commitments(self) -> list[tuple[str, str]]:
-        """
-        Check and break stale commitments.
+    def _pre_tick_maintenance(self) -> None:
+        """Pre-tick maintenance: tick cooldowns."""
+        for agent in self.agents:
+            agent.interaction_state.tick_cooldowns()
 
-        A commitment is broken if the partner is no longer within perception radius.
-        Called at the start of each tick (before Evaluate phase).
+    def _build_action_context(self) -> ActionContext:
+        """Build frozen ActionContext for precondition checking."""
+        # Build agent positions
+        agent_positions = {
+            agent.id: pos
+            for agent in self.agents
+            if (pos := self.grid.get_position(agent)) is not None
+        }
+
+        # Build co-located agents map
+        co_located: dict[str, set[str]] = {agent.id: set() for agent in self.agents}
+        for agent in self.agents:
+            others = self.grid.agents_at_same_position(agent)
+            co_located[agent.id] = others
+
+        # Build adjacent agents map (includes co-located + neighboring positions)
+        adjacent: dict[str, set[str]] = {agent.id: set() for agent in self.agents}
+        for agent in self.agents:
+            others = self.grid.agents_adjacent_to(agent)
+            adjacent[agent.id] = others
+
+        # Build interaction state copies
+        interaction_states = {
+            agent.id: agent.interaction_state.copy()
+            for agent in self.agents
+        }
+
+        return ActionContext(
+            current_tick=self.tick,
+            agent_positions=agent_positions,
+            agent_interaction_states=interaction_states,
+            co_located_agents=co_located,
+            adjacent_agents=adjacent,
+            pending_proposals=dict(self._pending_proposals),
+        )
+
+    def _execute_actions(
+        self,
+        agent_actions: dict[str, Action],
+        old_positions: dict[str, Position],
+        movement_events_data: list,
+    ) -> list[TradeEvent]:
+        """
+        Execute all actions with conflict resolution.
+
+        Handles:
+        - Multiple proposals to same target
+        - Mutual proposals
+        - Movement
+        - Accept/Reject responses
+        - Negotiations completing in trades
 
         Returns:
-            List of (agent_a, agent_b) pairs that were broken due to leaving perception.
+            List of trades that occurred this tick
         """
-        to_break: list[tuple[str, str]] = []
+        tick_trades: list[TradeEvent] = []
 
-        for agent_a_id, agent_b_id in self.commitments.get_all_committed_pairs():
-            agent_a = self._agents_by_id.get(agent_a_id)
-            agent_b = self._agents_by_id.get(agent_b_id)
+        # Separate actions by type
+        move_actions: dict[str, MoveAction] = {}
+        propose_actions: dict[str, ProposeAction] = {}
 
-            if agent_a is None or agent_b is None:
-                to_break.append((agent_a_id, agent_b_id))
+        for agent_id, action in agent_actions.items():
+            if isinstance(action, MoveAction):
+                move_actions[agent_id] = action
+            elif isinstance(action, ProposeAction):
+                propose_actions[agent_id] = action
+
+        # Track agents that traded this tick
+        traded_this_tick: set[str] = set()
+
+        # =====================================================================
+        # Step 1-2: Matching protocol resolves proposals
+        # =====================================================================
+        action_context = self._build_action_context()
+        match_result = self.matching_protocol.resolve(
+            propose_actions=propose_actions,
+            agents=self._agents_by_id,
+            positions={a.id: self.grid.get_position(a) for a in self.agents
+                       if self.grid.get_position(a) is not None},
+            decision_procedure=self.decision_procedure,
+            bargaining_protocol=self.bargaining_protocol,
+            action_context=action_context,
+        )
+
+        # Execute matched trades
+        for trade_outcome in match_result.trades:
+            proposer = self._agents_by_id.get(trade_outcome.proposer_id)
+            target = self._agents_by_id.get(trade_outcome.target_id)
+            if proposer is None or target is None:
                 continue
 
-            pos_a = self.grid.get_position(agent_a)
-            pos_b = self.grid.get_position(agent_b)
+            # Proposer must be in propose_actions — use the proposer's exchange_id,
+            # or fall back to target's for mutual proposals where sorted order
+            # assigned proposer_id to the lexicographically first agent.
+            propose_action = propose_actions.get(trade_outcome.proposer_id)
+            if propose_action is None:
+                propose_action = propose_actions[trade_outcome.target_id]
+            exchange_id = propose_action.exchange_id
 
-            if pos_a is None or pos_b is None:
-                to_break.append((agent_a_id, agent_b_id))
+            proposer.interaction_state.enter_negotiating(trade_outcome.target_id, self.tick)
+            target.interaction_state.enter_negotiating(trade_outcome.proposer_id, self.tick)
+
+            trade_event = self._execute_trade(proposer, target, exchange_id)
+            if trade_event:
+                tick_trades.append(trade_event)
+
+            proposer.interaction_state.enter_available()
+            target.interaction_state.enter_available()
+
+            traded_this_tick.add(trade_outcome.proposer_id)
+            traded_this_tick.add(trade_outcome.target_id)
+
+        # Apply cooldowns from rejections
+        for rejection in match_result.rejections:
+            proposer = self._agents_by_id.get(rejection.proposer_id)
+            if proposer is not None:
+                proposer.interaction_state.enter_available(
+                    add_cooldown_for=rejection.target_id,
+                    cooldown_duration=rejection.cooldown_ticks,
+                )
+
+        # Build set of all failed proposers for fallback execution
+        rejected_proposers = {r.proposer_id for r in match_result.rejections}
+        non_selected_proposers = set(match_result.non_selections)
+        all_failed_proposers = rejected_proposers | non_selected_proposers
+
+        # =====================================================================
+        # Step 3: Execute fallback actions for failed proposals
+        # =====================================================================
+        for proposer_id in all_failed_proposers:
+            proposer = self._agents_by_id.get(proposer_id)
+            if proposer is None:
                 continue
 
-            # Check if partner is still within perception radius (using Chebyshev)
-            distance = self.grid.chebyshev_distance(pos_a, pos_b)
-            if distance > agent_a.perception_radius or distance > agent_b.perception_radius:
-                to_break.append((agent_a_id, agent_b_id))
+            action = propose_actions.get(proposer_id)
+            if action is None:
+                continue
 
-        for agent_a_id, agent_b_id in to_break:
-            self.commitments.break_commitment(agent_a_id, agent_b_id)
+            fallback = action.fallback
+            if fallback is None:
+                continue
 
-        return to_break
+            if isinstance(fallback, MoveAction):
+                if proposer.interaction_state.is_available():
+                    self.grid.move_toward(
+                        proposer,
+                        fallback.target_position,
+                        steps=proposer.movement_budget
+                    )
+
+        # =====================================================================
+        # Step 4: Execute movement actions
+        # =====================================================================
+        for agent_id, action in move_actions.items():
+            if agent_id in traded_this_tick:
+                continue
+            if agent_id in all_failed_proposers:
+                continue
+
+            agent = self._agents_by_id.get(agent_id)
+            if agent is None:
+                continue
+            if not agent.interaction_state.is_available():
+                continue
+
+            self.grid.move_toward(agent, action.target_position, steps=agent.movement_budget)
+
+        return tick_trades
+
+    def _execute_trade(
+        self,
+        agent1: Agent,
+        agent2: Agent,
+        exchange_id: str,
+    ) -> Optional[TradeEvent]:
+        """
+        Execute a trade between two agents.
+
+        Returns TradeEvent if trade occurred, None otherwise.
+        """
+        # Capture pre-trade holdings for logging
+        pre_holdings1 = (agent1.holdings.x, agent1.holdings.y)
+        pre_holdings2 = (agent2.holdings.x, agent2.holdings.y)
+
+        # Let protocol select proposer
+        proposer = self.bargaining_protocol.select_proposer(agent1, agent2, self._rng)
+        outcome = self.bargaining_protocol.execute(agent1, agent2, proposer=proposer)
+
+        if outcome.trade_occurred:
+            event = TradeEvent(
+                agent1_id=agent1.id,
+                agent2_id=agent2.id,
+                proposer_id=proposer.id,
+                pre_holdings=(pre_holdings1, pre_holdings2),
+                post_allocations=(
+                    (outcome.allocation_1.x, outcome.allocation_1.y),
+                    (outcome.allocation_2.x, outcome.allocation_2.y),
+                ),
+                utilities=(outcome.utility_1, outcome.utility_2),
+                gains=(outcome.gains_1, outcome.gains_2),
+                trade_occurred=outcome.trade_occurred,
+            )
+            self.trades.append(event)
+
+            # Update beliefs for both traders
+            observed_type1 = self.info_env.get_observable_type(agent1)
+            observed_type2 = self.info_env.get_observable_type(agent2)
+
+            record_trade_observation(
+                agent=agent1,
+                partner=agent2,
+                bundle_before=Bundle(pre_holdings1[0], pre_holdings1[1]),
+                bundle_after=outcome.allocation_1,
+                observed_partner_alpha=observed_type2.preferences.alpha,
+                tick=self.tick,
+            )
+            record_trade_observation(
+                agent=agent2,
+                partner=agent1,
+                bundle_before=Bundle(pre_holdings2[0], pre_holdings2[1]),
+                bundle_after=outcome.allocation_2,
+                observed_partner_alpha=observed_type1.preferences.alpha,
+                tick=self.tick,
+            )
+
+            return event
+
+        return None
 
     def _log_tick(
         self,
         search_decisions_data: list,
         movement_events_data: list,
-        trade_events_data: list,
+        trade_events: list[TradeEvent],
         commitments_formed_data: list[tuple[str, str]],
         commitments_broken_data: list[tuple[str, str, str]],
     ) -> None:
@@ -491,7 +529,6 @@ class Simulation:
             create_search_decision,
             create_target_evaluation,
             create_movement_event,
-            create_trade_event,
             create_tick_record,
             TargetEvaluation,
         )
@@ -504,7 +541,7 @@ class Simulation:
                 agent_snapshots.append(create_agent_snapshot(
                     agent_id=agent.id,
                     position=(pos.row, pos.col),
-                    endowment=(agent.endowment.x, agent.endowment.y),
+                    endowment=(agent.holdings.x, agent.holdings.y),
                     alpha=agent.preferences.alpha,
                     utility=agent.utility(),
                     has_beliefs=agent.has_beliefs,
@@ -550,20 +587,8 @@ class Simulation:
             for agent_id, from_pos, to_pos, target_id, reason in movement_events_data
         ]
 
-        # Create trade events
-        trades = [
-            create_trade_event(
-                agent1_id=a1,
-                agent2_id=a2,
-                proposer_id=proposer,
-                pre_endowments=pre,
-                post_allocations=post,
-                utilities=utils,
-                gains=gains,
-                trade_occurred=occurred,
-            )
-            for a1, a2, proposer, pre, post, utils, gains, occurred in trade_events_data
-        ]
+        # Trade events are already canonical TradeEvent objects
+        trades = trade_events
 
         # Create commitment events
         commitments_formed = [
@@ -651,7 +676,7 @@ class Simulation:
     def welfare_gains(self) -> float:
         """Compute total gains from trade (sum of all trade surpluses)."""
         return sum(
-            trade.outcome.gains_1 + trade.outcome.gains_2
+            trade.gains[0] + trade.gains[1]
             for trade in self.trades
         )
 
@@ -663,8 +688,10 @@ def create_simple_economy(
     discount_factor: float = 0.95,
     seed: Optional[int] = None,
     bargaining_protocol: Optional[BargainingProtocol] = None,
+    decision_procedure: Optional[DecisionProcedure] = None,
     matching_protocol: Optional[MatchingProtocol] = None,
     use_beliefs: bool = False,
+    info_env: Optional[InformationEnvironment] = None,
 ) -> Simulation:
     """
     Create a simple economy with heterogeneous agents.
@@ -683,8 +710,10 @@ def create_simple_economy(
         discount_factor: Time preference
         seed: Random seed for reproducibility
         bargaining_protocol: Protocol for bilateral bargaining (default: Nash)
-        matching_protocol: Protocol for forming trading pairs (default: Opportunistic)
+        decision_procedure: Procedure for agent action selection (default: Rational)
+        matching_protocol: Protocol for matching proposals (default: BilateralProposalMatching)
         use_beliefs: Enable belief system for agents (default: False)
+        info_env: Information environment (default: FullInformation)
 
     Returns:
         Configured Simulation ready to run
@@ -694,9 +723,10 @@ def create_simple_economy(
 
     sim = Simulation(
         grid=Grid(grid_size),
-        info_env=FullInformation(),
+        info_env=info_env or FullInformation(),
         bargaining_protocol=bargaining_protocol or NashBargainingProtocol(),
-        matching_protocol=matching_protocol or OpportunisticMatchingProtocol(),
+        decision_procedure=decision_procedure or RationalDecisionProcedure(),
+        matching_protocol=matching_protocol or BilateralProposalMatching(),
         _rng=rng,
     )
 

@@ -1,494 +1,357 @@
-"""
-Tests for matching protocols.
-
-Tests cover:
-1. CommitmentState operations
-2. OpportunisticMatchingProtocol (no-op behavior)
-3. StableRoommatesMatchingProtocol (Irving's algorithm)
-"""
+"""Tests for matching protocol types, interface (A-201), and BilateralProposalMatching (A-202, A-203)."""
 
 import pytest
+
 from microecon.matching import (
-    CommitmentState,
+    BilateralProposalMatching,
+    CentralizedClearingMatching,
     MatchingProtocol,
-    OpportunisticMatchingProtocol,
-    StableRoommatesMatchingProtocol,
-    CommitmentFormedEvent,
-    CommitmentBrokenEvent,
-    MatchingPhaseResult,
+    MatchResult,
+    TradeOutcome,
+    Rejection,
 )
-from microecon.agent import Agent, AgentPrivateState
-from microecon.bundle import Bundle
-from microecon.preferences import CobbDouglas
+from microecon.actions import ProposeAction
+from microecon.agent import create_agent
+from microecon.grid import Grid, Position
+from microecon.bargaining import NashBargainingProtocol
+from microecon.decisions import RationalDecisionProcedure, DecisionContext
 
 
-def make_agent(agent_id: str, alpha: float, endowment_x: float, endowment_y: float) -> Agent:
-    """Helper to create agents with explicit IDs for testing."""
-    return Agent(
-        id=agent_id,
-        private_state=AgentPrivateState(
-            preferences=CobbDouglas(alpha),
-            endowment=Bundle(endowment_x, endowment_y),
-        ),
-        perception_radius=10.0,
-        discount_factor=0.95,
+class TestMatchResultTypes:
+    """Test MatchResult and its component types."""
+
+    def test_trade_outcome_is_frozen(self):
+        outcome = TradeOutcome(proposer_id="a1", target_id="a2")
+        with pytest.raises(AttributeError):
+            outcome.proposer_id = "changed"
+
+    def test_rejection_is_frozen(self):
+        rejection = Rejection(proposer_id="a1", target_id="a2", cooldown_ticks=3)
+        with pytest.raises(AttributeError):
+            rejection.proposer_id = "changed"
+
+    def test_match_result_is_frozen(self):
+        result = MatchResult(
+            trades=(TradeOutcome("a1", "a2"),),
+            rejections=(),
+            non_selections=(),
+        )
+        with pytest.raises(AttributeError):
+            result.trades = ()
+
+    def test_match_result_empty(self):
+        result = MatchResult(trades=(), rejections=(), non_selections=())
+        assert len(result.trades) == 0
+        assert len(result.rejections) == 0
+        assert len(result.non_selections) == 0
+
+    def test_match_result_with_all_outcomes(self):
+        result = MatchResult(
+            trades=(TradeOutcome("a1", "a2"),),
+            rejections=(Rejection("a3", "a4", 3),),
+            non_selections=("a5",),
+        )
+        assert len(result.trades) == 1
+        assert result.trades[0].proposer_id == "a1"
+        assert result.rejections[0].cooldown_ticks == 3
+        assert result.non_selections[0] == "a5"
+
+    def test_matching_protocol_is_abstract(self):
+        with pytest.raises(TypeError):
+            MatchingProtocol()
+
+
+# =============================================================================
+# BilateralProposalMatching Tests (A-202, A-203)
+# =============================================================================
+
+
+def _make_agent(agent_id, alpha=0.5, endowment_x=10.0, endowment_y=2.0):
+    """Create a test agent."""
+    return create_agent(
+        agent_id=agent_id,
+        alpha=alpha,
+        endowment_x=endowment_x,
+        endowment_y=endowment_y,
     )
 
 
-# =============================================================================
-# CommitmentState Tests
-# =============================================================================
+def _setup_pair(grid, agent_a, agent_b, pos_a, pos_b):
+    """Place two agents on a grid and return positions dict."""
+    grid.place_agent(agent_a, pos_a)
+    grid.place_agent(agent_b, pos_b)
+    return {agent_a.id: pos_a, agent_b.id: pos_b}
 
 
-class TestCommitmentState:
-    """Tests for CommitmentState tracking."""
+class TestBilateralProposalMatching:
+    """Tests for default bilateral proposal matching protocol."""
 
-    def test_initial_state_empty(self):
-        """New commitment state has no commitments."""
-        state = CommitmentState()
-        assert not state.is_committed("a")
-        assert state.get_partner("a") is None
-        assert state.get_all_committed_pairs() == []
+    def test_mutual_proposal_creates_trade(self):
+        """Two agents proposing to each other -> trade."""
+        grid = Grid(5)
+        a1 = _make_agent("a1", alpha=0.3)
+        a2 = _make_agent("a2", alpha=0.7)
+        pos = _setup_pair(grid, a1, a2, Position(0, 0), Position(0, 1))
 
-    def test_form_commitment(self):
-        """Can form commitment between two agents."""
-        state = CommitmentState()
-        state.form_commitment("a", "b")
-
-        assert state.is_committed("a")
-        assert state.is_committed("b")
-        assert state.get_partner("a") == "b"
-        assert state.get_partner("b") == "a"
-
-    def test_form_multiple_commitments(self):
-        """Can form multiple independent commitments."""
-        state = CommitmentState()
-        state.form_commitment("a", "b")
-        state.form_commitment("c", "d")
-
-        assert state.is_committed("a")
-        assert state.is_committed("c")
-        assert state.get_partner("a") == "b"
-        assert state.get_partner("c") == "d"
-        assert not state.is_committed("e")
-
-    def test_break_commitment(self):
-        """Can break an existing commitment."""
-        state = CommitmentState()
-        state.form_commitment("a", "b")
-
-        result = state.break_commitment("a", "b")
-
-        assert result is True
-        assert not state.is_committed("a")
-        assert not state.is_committed("b")
-
-    def test_break_commitment_nonexistent(self):
-        """Breaking nonexistent commitment returns False."""
-        state = CommitmentState()
-        result = state.break_commitment("a", "b")
-        assert result is False
-
-    def test_break_all_for_agent(self):
-        """Can break all commitments for an agent."""
-        state = CommitmentState()
-        state.form_commitment("a", "b")
-        state.form_commitment("c", "d")
-
-        broken = state.break_all_for_agent("a")
-
-        assert "b" in broken
-        assert not state.is_committed("a")
-        assert not state.is_committed("b")
-        # Other commitments unaffected
-        assert state.is_committed("c")
-        assert state.is_committed("d")
-
-    def test_get_all_committed_pairs(self):
-        """Can get all committed pairs."""
-        state = CommitmentState()
-        state.form_commitment("b", "a")  # Order shouldn't matter
-        state.form_commitment("c", "d")
-
-        pairs = state.get_all_committed_pairs()
-
-        assert len(pairs) == 2
-        # Pairs should be sorted tuples
-        assert ("a", "b") in pairs
-        assert ("c", "d") in pairs
-
-    def test_get_uncommitted_agents(self):
-        """Can get set of uncommitted agents."""
-        state = CommitmentState()
-        state.form_commitment("a", "b")
-
-        all_agents = {"a", "b", "c", "d", "e"}
-        uncommitted = state.get_uncommitted_agents(all_agents)
-
-        assert uncommitted == {"c", "d", "e"}
-
-    def test_clear(self):
-        """Can clear all commitments."""
-        state = CommitmentState()
-        state.form_commitment("a", "b")
-        state.form_commitment("c", "d")
-
-        state.clear()
-
-        assert not state.is_committed("a")
-        assert state.get_all_committed_pairs() == []
-
-
-# =============================================================================
-# OpportunisticMatchingProtocol Tests
-# =============================================================================
-
-
-class TestOpportunisticMatchingProtocol:
-    """Tests for opportunistic matching (no explicit commitment)."""
-
-    def test_requires_commitment_false(self):
-        """Opportunistic matching doesn't require commitment."""
-        protocol = OpportunisticMatchingProtocol()
-        assert protocol.requires_commitment is False
-
-    def test_compute_matches_returns_empty(self):
-        """Opportunistic matching returns no committed pairs."""
-        protocol = OpportunisticMatchingProtocol()
-
-        agents = [
-            make_agent("a", alpha=0.3, endowment_x=10, endowment_y=2),
-            make_agent("b", alpha=0.7, endowment_x=2, endowment_y=10),
-        ]
-
-        visibility = {
-            agents[0].id: {agents[1].id},
-            agents[1].id: {agents[0].id},
+        proposals = {
+            "a1": ProposeAction(target_id="a2"),
+            "a2": ProposeAction(target_id="a1"),
         }
-
-        def surplus_fn(a, b):
-            return 1.0  # Positive surplus
-
-        matches = protocol.compute_matches(agents, visibility, surplus_fn)
-
-        assert matches == []
-
-
-# =============================================================================
-# StableRoommatesMatchingProtocol Tests
-# =============================================================================
-
-
-class TestStableRoommatesMatchingProtocol:
-    """Tests for Irving's stable roommates algorithm."""
-
-    def test_requires_commitment_true(self):
-        """Stable roommates requires commitment."""
-        protocol = StableRoommatesMatchingProtocol()
-        assert protocol.requires_commitment is True
-
-    def test_empty_agents(self):
-        """No agents means no matches."""
-        protocol = StableRoommatesMatchingProtocol()
-        matches = protocol.compute_matches([], {}, lambda a, b: 1.0)
-        assert matches == []
-
-    def test_single_agent(self):
-        """Single agent cannot match."""
-        protocol = StableRoommatesMatchingProtocol()
-        agent = make_agent("a", alpha=0.5, endowment_x=5, endowment_y=5)
-        matches = protocol.compute_matches([agent], {agent.id: set()}, lambda a, b: 1.0)
-        assert matches == []
-
-    def test_two_agents_mutual_visibility(self):
-        """Two agents who can see each other should match."""
-        protocol = StableRoommatesMatchingProtocol()
-
-        a = make_agent("a", alpha=0.3, endowment_x=10, endowment_y=2)
-        b = make_agent("b", alpha=0.7, endowment_x=2, endowment_y=10)
-
-        visibility = {"a": {"b"}, "b": {"a"}}
-
-        def surplus_fn(agent1, agent2):
-            # Both agents have positive surplus from trading
-            return 1.0
-
-        matches = protocol.compute_matches([a, b], visibility, surplus_fn)
-
-        assert len(matches) == 1
-        assert matches[0] == ("a", "b")
-
-    def test_two_agents_one_sided_visibility(self):
-        """If only one can see the other, no match forms."""
-        protocol = StableRoommatesMatchingProtocol()
-
-        a = make_agent("a", alpha=0.3, endowment_x=10, endowment_y=2)
-        b = make_agent("b", alpha=0.7, endowment_x=2, endowment_y=10)
-
-        # a can see b, but b cannot see a
-        visibility = {"a": {"b"}, "b": set()}
-
-        matches = protocol.compute_matches([a, b], visibility, lambda x, y: 1.0)
-
-        # b has no one to propose to, so a's proposal to b should succeed
-        # Actually in Irving's algorithm, if b can't see anyone, b has empty prefs
-        # but a can still propose to b. Let's verify behavior.
-        # With b having empty preferences, b won't propose to anyone but can accept.
-        assert len(matches) <= 1
-
-    def test_four_agents_stable_matching(self):
-        """Four agents with clear preferences should find stable matching."""
-        protocol = StableRoommatesMatchingProtocol()
-
-        # Create four agents
-        a = make_agent("a", alpha=0.2, endowment_x=10, endowment_y=2)
-        b = make_agent("b", alpha=0.4, endowment_x=8, endowment_y=4)
-        c = make_agent("c", alpha=0.6, endowment_x=4, endowment_y=8)
-        d = make_agent("d", alpha=0.8, endowment_x=2, endowment_y=10)
-
-        agents = [a, b, c, d]
-
-        # Full visibility
-        visibility = {
-            "a": {"b", "c", "d"},
-            "b": {"a", "c", "d"},
-            "c": {"a", "b", "d"},
-            "d": {"a", "b", "c"},
-        }
-
-        # Surplus function that creates preferences: a-d highest, b-c second, etc.
-        def surplus_fn(agent1, agent2):
-            # More different alphas = more surplus
-            alpha1 = agent1.preferences.alpha
-            alpha2 = agent2.preferences.alpha
-            return abs(alpha1 - alpha2)
-
-        matches = protocol.compute_matches(agents, visibility, surplus_fn)
-
-        # Should get 2 matches (all 4 agents paired)
-        assert len(matches) == 2
-
-        # All agents should be matched
-        matched_agents = set()
-        for pair in matches:
-            matched_agents.add(pair[0])
-            matched_agents.add(pair[1])
-        assert matched_agents == {"a", "b", "c", "d"}
-
-    def test_odd_number_of_agents(self):
-        """Odd number of agents leaves one unmatched."""
-        protocol = StableRoommatesMatchingProtocol()
-
-        a = make_agent("a", alpha=0.2, endowment_x=10, endowment_y=2)
-        b = make_agent("b", alpha=0.5, endowment_x=6, endowment_y=6)
-        c = make_agent("c", alpha=0.8, endowment_x=2, endowment_y=10)
-
-        agents = [a, b, c]
-        visibility = {
-            "a": {"b", "c"},
-            "b": {"a", "c"},
-            "c": {"a", "b"},
-        }
-
-        def surplus_fn(agent1, agent2):
-            return abs(agent1.preferences.alpha - agent2.preferences.alpha)
-
-        matches = protocol.compute_matches(agents, visibility, surplus_fn)
-
-        # Should get 1 match, leaving one agent unmatched
-        assert len(matches) == 1
-
-        matched_agents = set()
-        for pair in matches:
-            matched_agents.add(pair[0])
-            matched_agents.add(pair[1])
-        assert len(matched_agents) == 2
-
-    def test_zero_surplus_no_match(self):
-        """Agents with zero surplus should not match."""
-        protocol = StableRoommatesMatchingProtocol()
-
-        a = make_agent("a", alpha=0.5, endowment_x=5, endowment_y=5)
-        b = make_agent("b", alpha=0.5, endowment_x=5, endowment_y=5)
-
-        visibility = {"a": {"b"}, "b": {"a"}}
-
-        def surplus_fn(agent1, agent2):
-            return 0.0  # No gains from trade
-
-        matches = protocol.compute_matches([a, b], visibility, surplus_fn)
-
-        # Zero surplus means no one is on anyone's preference list
-        assert matches == []
-
-    def test_deterministic_output(self):
-        """Same input should always produce same output."""
-        protocol = StableRoommatesMatchingProtocol()
-
-        agents = [
-            make_agent("a", alpha=0.2, endowment_x=10, endowment_y=2),
-            make_agent("b", alpha=0.4, endowment_x=8, endowment_y=4),
-            make_agent("c", alpha=0.6, endowment_x=4, endowment_y=8),
-            make_agent("d", alpha=0.8, endowment_x=2, endowment_y=10),
-        ]
-
-        visibility = {
-            "a": {"b", "c", "d"},
-            "b": {"a", "c", "d"},
-            "c": {"a", "b", "d"},
-            "d": {"a", "b", "c"},
-        }
-
-        def surplus_fn(agent1, agent2):
-            return abs(agent1.preferences.alpha - agent2.preferences.alpha)
-
-        # Run multiple times
-        results = [
-            protocol.compute_matches(agents, visibility, surplus_fn)
-            for _ in range(5)
-        ]
-
-        # All results should be identical
-        for result in results[1:]:
-            assert result == results[0]
-
-    def test_preferences_respected(self):
-        """Higher surplus partners should be preferred."""
-        protocol = StableRoommatesMatchingProtocol()
-
-        # a strongly prefers d (very different alpha)
-        # b strongly prefers c (moderately different)
-        a = make_agent("a", alpha=0.1, endowment_x=10, endowment_y=2)
-        b = make_agent("b", alpha=0.4, endowment_x=8, endowment_y=4)
-        c = make_agent("c", alpha=0.6, endowment_x=4, endowment_y=8)
-        d = make_agent("d", alpha=0.9, endowment_x=2, endowment_y=10)
-
-        agents = [a, b, c, d]
-        visibility = {
-            "a": {"b", "c", "d"},
-            "b": {"a", "c", "d"},
-            "c": {"a", "b", "d"},
-            "d": {"a", "b", "c"},
-        }
-
-        def surplus_fn(agent1, agent2):
-            return abs(agent1.preferences.alpha - agent2.preferences.alpha)
-
-        matches = protocol.compute_matches(agents, visibility, surplus_fn)
-
-        # a (0.1) and d (0.9) have highest mutual surplus (0.8)
-        # b (0.4) and c (0.6) have second highest mutual surplus (0.2)
-        # So stable matching should be (a,d) and (b,c)
-        assert len(matches) == 2
-        assert ("a", "d") in matches
-        assert ("b", "c") in matches
-
-
-class TestIrvingAlgorithmEdgeCases:
-    """Edge cases for Irving's algorithm."""
-
-    def test_no_stable_matching_exists(self):
-        """Some configurations have no stable matching."""
-        protocol = StableRoommatesMatchingProtocol()
-
-        # Classic example where no stable matching exists:
-        # 4 agents where preferences form a problematic cycle
-        # This is the "cyclic preferences" case from literature
-        a = make_agent("a", alpha=0.25, endowment_x=10, endowment_y=2)
-        b = make_agent("b", alpha=0.35, endowment_x=8, endowment_y=4)
-        c = make_agent("c", alpha=0.65, endowment_x=4, endowment_y=8)
-        d = make_agent("d", alpha=0.75, endowment_x=2, endowment_y=10)
-
-        agents = [a, b, c, d]
-        visibility = {
-            "a": {"b", "c", "d"},
-            "b": {"a", "c", "d"},
-            "c": {"a", "b", "d"},
-            "d": {"a", "b", "c"},
-        }
-
-        # Create cyclic preferences: a>b>c>d>a
-        # Each agent prefers the next in cycle, then arbitrary
-        # (This may or may not produce unstable instance depending on full prefs)
-        pref_order = {"a": ["b", "c", "d"], "b": ["c", "d", "a"], "c": ["d", "a", "b"], "d": ["a", "b", "c"]}
-
-        def surplus_fn(agent1, agent2):
-            prefs = pref_order[agent1.id]
-            # Higher position = lower surplus (we want to test preference order)
-            return 3 - prefs.index(agent2.id) if agent2.id in prefs else 0
-
-        matches = protocol.compute_matches(agents, visibility, surplus_fn)
-
-        # Algorithm should still return something (possibly partial matching)
-        # We can't assert specific result, but should not crash
-        assert isinstance(matches, list)
-
-    def test_partial_visibility_graph(self):
-        """Agents with limited visibility still match where possible."""
-        protocol = StableRoommatesMatchingProtocol()
-
-        a = make_agent("a", alpha=0.2, endowment_x=10, endowment_y=2)
-        b = make_agent("b", alpha=0.4, endowment_x=8, endowment_y=4)
-        c = make_agent("c", alpha=0.6, endowment_x=4, endowment_y=8)
-        d = make_agent("d", alpha=0.8, endowment_x=2, endowment_y=10)
-
-        agents = [a, b, c, d]
-
-        # Disconnected visibility: a-b can see each other, c-d can see each other
-        visibility = {
-            "a": {"b"},
-            "b": {"a"},
-            "c": {"d"},
-            "d": {"c"},
-        }
-
-        def surplus_fn(agent1, agent2):
-            return abs(agent1.preferences.alpha - agent2.preferences.alpha)
-
-        matches = protocol.compute_matches(agents, visibility, surplus_fn)
-
-        # Should get 2 matches in the disconnected components
-        assert len(matches) == 2
-        matched_pairs = set(matches)
-        assert ("a", "b") in matched_pairs
-        assert ("c", "d") in matched_pairs
-
-
-# =============================================================================
-# Event Type Tests
-# =============================================================================
-
-
-class TestMatchingEvents:
-    """Tests for matching event dataclasses."""
-
-    def test_commitment_formed_event(self):
-        """CommitmentFormedEvent stores correct data."""
-        event = CommitmentFormedEvent(tick=5, agent_a="alice", agent_b="bob")
-        assert event.tick == 5
-        assert event.agent_a == "alice"
-        assert event.agent_b == "bob"
-
-    def test_commitment_broken_event(self):
-        """CommitmentBrokenEvent stores correct data."""
-        event = CommitmentBrokenEvent(
-            tick=10,
-            agent_a="alice",
-            agent_b="bob",
-            reason="trade_completed"
+        agents = {"a1": a1, "a2": a2}
+
+        protocol = BilateralProposalMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
         )
-        assert event.tick == 10
-        assert event.reason == "trade_completed"
 
-    def test_matching_phase_result(self):
-        """MatchingPhaseResult stores correct data."""
-        result = MatchingPhaseResult(
-            tick=3,
-            new_pairs=[("a", "b"), ("c", "d")],
-            unmatched_agents=["e"],
-            algorithm_succeeded=True
+        assert len(result.trades) == 1
+        pair = {result.trades[0].proposer_id, result.trades[0].target_id}
+        assert pair == {"a1", "a2"}
+        assert len(result.rejections) == 0
+        assert len(result.non_selections) == 0
+
+    def test_mutual_proposal_not_adjacent_no_trade(self):
+        """Mutual proposals but agents too far apart -> no trade."""
+        grid = Grid(10)
+        a1 = _make_agent("a1", alpha=0.3)
+        a2 = _make_agent("a2", alpha=0.7)
+        pos = _setup_pair(grid, a1, a2, Position(0, 0), Position(5, 5))
+
+        proposals = {
+            "a1": ProposeAction(target_id="a2"),
+            "a2": ProposeAction(target_id="a1"),
+        }
+        agents = {"a1": a1, "a2": a2}
+
+        protocol = BilateralProposalMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
         )
-        assert result.tick == 3
-        assert len(result.new_pairs) == 2
-        assert "e" in result.unmatched_agents
-        assert result.algorithm_succeeded
+        assert len(result.trades) == 0
+        # Non-adjacent mutual proposers should appear in non_selections
+        assert set(result.non_selections) == {"a1", "a2"}
+
+    def test_accepted_proposal(self):
+        """Non-mutual proposal where target accepts -> trade."""
+        grid = Grid(5)
+        a1 = _make_agent("a1", alpha=0.2)
+        a2 = _make_agent("a2", alpha=0.8)
+        pos = _setup_pair(grid, a1, a2, Position(0, 0), Position(0, 1))
+
+        # Set opportunity cost low so acceptance is likely
+        a2.opportunity_cost = 0.0
+
+        proposals = {"a1": ProposeAction(target_id="a2")}
+        agents = {"a1": a1, "a2": a2}
+
+        protocol = BilateralProposalMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        assert len(result.trades) == 1
+        assert result.trades[0].proposer_id == "a1"
+        assert result.trades[0].target_id == "a2"
+
+    def test_rejected_proposal_creates_rejection(self):
+        """Non-mutual proposal where target rejects -> rejection with cooldown."""
+        grid = Grid(5)
+        a1 = _make_agent("a1", alpha=0.45)
+        a2 = _make_agent("a2", alpha=0.55)
+        pos = _setup_pair(grid, a1, a2, Position(0, 0), Position(0, 1))
+
+        # Set opportunity cost very high so target rejects
+        a2.opportunity_cost = 999.0
+
+        proposals = {"a1": ProposeAction(target_id="a2")}
+        agents = {"a1": a1, "a2": a2}
+
+        protocol = BilateralProposalMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        assert len(result.trades) == 0
+        assert len(result.rejections) == 1
+        assert result.rejections[0].proposer_id == "a1"
+        assert result.rejections[0].target_id == "a2"
+        assert result.rejections[0].cooldown_ticks == 3
+
+    def test_multiple_proposals_to_same_target(self):
+        """Two proposers to same target -> one trade, one non-selection."""
+        grid = Grid(5)
+        a1 = _make_agent("a1", alpha=0.2)
+        a2 = _make_agent("a2", alpha=0.8)
+        a3 = _make_agent("a3", alpha=0.3)
+        grid.place_agent(a1, Position(0, 0))
+        grid.place_agent(a2, Position(0, 1))
+        grid.place_agent(a3, Position(1, 1))
+        pos = {"a1": Position(0, 0), "a2": Position(0, 1), "a3": Position(1, 1)}
+
+        a2.opportunity_cost = 0.0
+
+        proposals = {
+            "a1": ProposeAction(target_id="a2"),
+            "a3": ProposeAction(target_id="a2"),
+        }
+        agents = {"a1": a1, "a2": a2, "a3": a3}
+
+        protocol = BilateralProposalMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        # First proposer in iteration order should trade, the other is non-selected
+        assert len(result.trades) == 1
+        assert result.trades[0].proposer_id == "a1"
+        assert result.trades[0].target_id == "a2"
+        assert len(result.non_selections) == 1
+        assert result.non_selections[0] == "a3"
+
+    def test_no_agent_matched_twice(self):
+        """An agent that already traded cannot be matched again."""
+        grid = Grid(5)
+        a1 = _make_agent("a1", alpha=0.2)
+        a2 = _make_agent("a2", alpha=0.8)
+        a3 = _make_agent("a3", alpha=0.3)
+        grid.place_agent(a1, Position(0, 0))
+        grid.place_agent(a2, Position(0, 1))
+        grid.place_agent(a3, Position(1, 0))
+        pos = {"a1": Position(0, 0), "a2": Position(0, 1), "a3": Position(1, 0)}
+
+        a2.opportunity_cost = 0.0
+        a1.opportunity_cost = 0.0
+
+        # a1 and a2 mutual, a3 proposes to a1
+        proposals = {
+            "a1": ProposeAction(target_id="a2"),
+            "a2": ProposeAction(target_id="a1"),
+            "a3": ProposeAction(target_id="a1"),
+        }
+        agents = {"a1": a1, "a2": a2, "a3": a3}
+
+        protocol = BilateralProposalMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        # a1-a2 trade (mutual), a3 non-selected (a1 already traded)
+        assert len(result.trades) == 1
+        traded_ids = {result.trades[0].proposer_id, result.trades[0].target_id}
+        assert traded_ids == {"a1", "a2"}
+        assert "a3" in result.non_selections
+
+    def test_empty_proposals(self):
+        """No proposals -> empty result."""
+        protocol = BilateralProposalMatching()
+        result = protocol.resolve({}, {}, {}, RationalDecisionProcedure(), NashBargainingProtocol())
+        assert result == MatchResult(trades=(), rejections=(), non_selections=())
+
+    def test_is_matching_protocol_subclass(self):
+        """BilateralProposalMatching implements MatchingProtocol."""
+        protocol = BilateralProposalMatching()
+        assert isinstance(protocol, MatchingProtocol)
+
+
+# =============================================================================
+# CentralizedClearingMatching Tests (A-206)
+# =============================================================================
+
+
+class TestCentralizedClearingMatching:
+    """Tests for centralized clearing matching protocol."""
+
+    def test_single_pair_matched(self):
+        """Single proposal with surplus -> trade."""
+        grid = Grid(5)
+        a1 = _make_agent("a1", alpha=0.2)
+        a2 = _make_agent("a2", alpha=0.8)
+        pos = _setup_pair(grid, a1, a2, Position(0, 0), Position(0, 1))
+
+        proposals = {"a1": ProposeAction(target_id="a2")}
+        agents = {"a1": a1, "a2": a2}
+
+        protocol = CentralizedClearingMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        assert len(result.trades) == 1
+        assert len(result.rejections) == 0  # Centralized clearing doesn't reject
+
+    def test_welfare_maximizing_match(self):
+        """When multiple matches possible, picks highest surplus."""
+        grid = Grid(5)
+        a1 = _make_agent("a1", alpha=0.1)   # Very different alpha
+        a2 = _make_agent("a2", alpha=0.9)   # Very different alpha -> high surplus
+        a3 = _make_agent("a3", alpha=0.45)  # Similar alpha -> low surplus
+        grid.place_agent(a1, Position(0, 0))
+        grid.place_agent(a2, Position(0, 1))
+        grid.place_agent(a3, Position(1, 0))
+        pos = {"a1": Position(0, 0), "a2": Position(0, 1), "a3": Position(1, 0)}
+
+        # Both a1 and a3 propose to a2, a2 is adjacent to both
+        proposals = {
+            "a1": ProposeAction(target_id="a2"),
+            "a3": ProposeAction(target_id="a2"),
+        }
+        agents = {"a1": a1, "a2": a2, "a3": a3}
+
+        protocol = CentralizedClearingMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        # Should pick a1-a2 (higher surplus) over a3-a2
+        assert len(result.trades) == 1
+        assert result.trades[0].proposer_id == "a1"
+        assert result.trades[0].target_id == "a2"
+        assert "a3" in result.non_selections
+
+    def test_no_rejections_only_non_selections(self):
+        """Centralized clearing never rejects -- unmatched are non-selected."""
+        grid = Grid(5)
+        a1 = _make_agent("a1", alpha=0.45)
+        a2 = _make_agent("a2", alpha=0.55)
+        pos = _setup_pair(grid, a1, a2, Position(0, 0), Position(0, 1))
+
+        proposals = {"a1": ProposeAction(target_id="a2")}
+        agents = {"a1": a1, "a2": a2}
+
+        protocol = CentralizedClearingMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        # Either trades or non-selects, never rejects
+        assert len(result.rejections) == 0
+
+    def test_non_adjacent_not_matched(self):
+        """Only adjacent pairs can be matched."""
+        grid = Grid(10)
+        a1 = _make_agent("a1", alpha=0.2)
+        a2 = _make_agent("a2", alpha=0.8)
+        pos = _setup_pair(grid, a1, a2, Position(0, 0), Position(5, 5))
+
+        proposals = {"a1": ProposeAction(target_id="a2")}
+        agents = {"a1": a1, "a2": a2}
+
+        protocol = CentralizedClearingMatching()
+        result = protocol.resolve(
+            proposals, agents, pos,
+            RationalDecisionProcedure(),
+            NashBargainingProtocol(),
+        )
+        assert len(result.trades) == 0
+        assert "a1" in result.non_selections

@@ -7,6 +7,8 @@ from microecon.agent import create_agent
 from microecon.information import FullInformation
 from microecon.search import evaluate_targets, compute_move_target, should_trade
 
+pytestmark = pytest.mark.search
+
 
 class TestEvaluateTargets:
     """Test target evaluation for search."""
@@ -232,3 +234,132 @@ class TestSearchIntegration:
         assert len(sim.trades) > 0
         assert agent1.utility() >= initial_u1
         assert agent2.utility() >= initial_u2
+
+
+class TestCooldownExclusion:
+    """Tests for FEAT-006: Cooldown exclusion from search."""
+
+    def test_evaluate_targets_skips_cooldown(self):
+        """evaluate_targets skips agents on cooldown."""
+        from microecon.search import evaluate_targets_detailed
+
+        grid = Grid(10)
+        info_env = FullInformation()
+
+        observer = create_agent(
+            alpha=0.3,
+            endowment_x=10.0,
+            endowment_y=2.0,
+            perception_radius=10.0,
+            agent_id="observer",
+        )
+        target = create_agent(
+            alpha=0.7,
+            endowment_x=2.0,
+            endowment_y=10.0,
+            agent_id="target",
+        )
+
+        grid.place_agent(observer, Position(0, 0))
+        grid.place_agent(target, Position(1, 0))
+
+        agents_by_id = {observer.id: observer, target.id: target}
+
+        # Without cooldown - should find target
+        result_no_cooldown, evals_no_cooldown = evaluate_targets_detailed(
+            observer, grid, info_env, agents_by_id
+        )
+        assert result_no_cooldown.best_target_id == target.id
+        assert len(evals_no_cooldown) == 1
+
+        # Add cooldown for target
+        observer.interaction_state.cooldowns[target.id] = 3
+
+        # With cooldown - should not find target
+        result_with_cooldown, evals_with_cooldown = evaluate_targets_detailed(
+            observer, grid, info_env, agents_by_id
+        )
+        assert result_with_cooldown.best_target_id is None
+        assert len(evals_with_cooldown) == 0
+
+    def test_available_actions_excludes_move_to_cooldown(self):
+        """available_actions excludes MoveAction toward cooldown targets."""
+        from microecon.decisions import RationalDecisionProcedure, DecisionContext
+        from microecon.actions import ActionContext, MoveAction
+        from microecon.bargaining import NashBargainingProtocol
+
+        grid = Grid(10)
+        observer = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, agent_id="observer")
+        target = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, agent_id="target")
+
+        grid.place_agent(observer, Position(0, 0))
+        grid.place_agent(target, Position(5, 0))  # Not adjacent (distance 5)
+
+        agent_positions = {observer.id: Position(0, 0), target.id: Position(5, 0)}
+        action_context = ActionContext(
+            current_tick=0,
+            agent_positions=agent_positions,
+            agent_interaction_states={
+                observer.id: observer.interaction_state,
+                target.id: target.interaction_state,
+            },
+            co_located_agents={observer.id: set(), target.id: set()},
+            adjacent_agents={observer.id: set(), target.id: set()},
+            pending_proposals={},
+        )
+        decision_context = DecisionContext(
+            action_context=action_context,
+            visible_agents={target.id: target},
+            bargaining_protocol=NashBargainingProtocol(),
+            agent_positions=agent_positions,
+        )
+
+        procedure = RationalDecisionProcedure()
+
+        # Without cooldown - should include MoveAction toward target
+        actions_no_cooldown = procedure.available_actions(observer, decision_context)
+        move_actions = [a for a in actions_no_cooldown if isinstance(a, MoveAction)]
+        assert len(move_actions) == 1
+        assert move_actions[0].target_position == Position(5, 0)
+
+        # Add cooldown for target
+        observer.interaction_state.cooldowns[target.id] = 3
+
+        # With cooldown - should NOT include MoveAction toward target
+        actions_with_cooldown = procedure.available_actions(observer, decision_context)
+        move_actions = [a for a in actions_with_cooldown if isinstance(a, MoveAction)]
+        assert len(move_actions) == 0
+
+    def test_propose_action_blocked_by_cooldown(self):
+        """ProposeAction preconditions return False for cooldown targets."""
+        from microecon.actions import ProposeAction, ActionContext
+
+        grid = Grid(10)
+        observer = create_agent(alpha=0.3, endowment_x=10.0, endowment_y=2.0, agent_id="observer")
+        target = create_agent(alpha=0.7, endowment_x=2.0, endowment_y=10.0, agent_id="target")
+
+        grid.place_agent(observer, Position(0, 0))
+        grid.place_agent(target, Position(0, 0))  # Co-located
+
+        action_context = ActionContext(
+            current_tick=0,
+            agent_positions={observer.id: Position(0, 0), target.id: Position(0, 0)},
+            agent_interaction_states={
+                observer.id: observer.interaction_state,
+                target.id: target.interaction_state,
+            },
+            co_located_agents={observer.id: {target.id}, target.id: {observer.id}},
+            adjacent_agents={observer.id: {target.id}, target.id: {observer.id}},
+            pending_proposals={},
+        )
+
+        action = ProposeAction(target_id=target.id)
+
+        # Without cooldown - preconditions pass
+        assert action.preconditions(observer, action_context) is True
+
+        # Add cooldown
+        observer.interaction_state.cooldowns[target.id] = 3
+
+        # With cooldown - preconditions fail
+        assert action.preconditions(observer, action_context) is False

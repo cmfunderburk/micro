@@ -8,12 +8,20 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from microecon.logging.events import SimulationConfig as LoggingSimulationConfig
 import uuid
 
 from microecon.simulation import Simulation, create_simple_economy, TradeEvent
-from microecon.bargaining import NashBargainingProtocol, RubinsteinBargainingProtocol
-from microecon.matching import OpportunisticMatchingProtocol, StableRoommatesMatchingProtocol
+from microecon.bargaining import (
+    NashBargainingProtocol,
+    RubinsteinBargainingProtocol,
+    TIOLIBargainingProtocol,
+    AsymmetricNashBargainingProtocol,
+)
+# matching_protocol removed in 3-phase tick model rework - agents now use DecisionProcedure
 from microecon.logging import SimulationLogger
 from microecon.logging.events import TickRecord, AgentSnapshot
 
@@ -37,9 +45,15 @@ class SimulationConfig:
     perception_radius: float = 7.0
     discount_factor: float = 0.95
     seed: int | None = None
-    bargaining_protocol: str = "nash"  # "nash" or "rubinstein"
-    matching_protocol: str = "opportunistic"  # "opportunistic" or "stable_roommates"
+    bargaining_protocol: str = "nash"  # "nash", "rubinstein", "tioli", "asymmetric_nash"
+    # matching_protocol removed - agents now use DecisionProcedure in 3-phase tick model
     use_beliefs: bool = False
+    # Bargaining power distribution (only used with asymmetric_nash)
+    # Options: "uniform", "gaussian", "bimodal"
+    bargaining_power_distribution: str = "uniform"
+    # Information environment configuration
+    info_env_name: str = "full"  # "full" or "noisy_alpha"
+    info_env_params: dict[str, Any] = field(default_factory=dict)
     # Optional: specific agents for scenario mode (overrides n_agents if provided)
     agents: list[AgentSpec] | None = None
 
@@ -51,8 +65,10 @@ class SimulationConfig:
             "discount_factor": self.discount_factor,
             "seed": self.seed,
             "bargaining_protocol": self.bargaining_protocol,
-            "matching_protocol": self.matching_protocol,
             "use_beliefs": self.use_beliefs,
+            "bargaining_power_distribution": self.bargaining_power_distribution,
+            "info_env_name": self.info_env_name,
+            "info_env_params": self.info_env_params,
         }
         if self.agents is not None:
             result["agents"] = [
@@ -86,9 +102,36 @@ class SimulationConfig:
             discount_factor=d.get("discount_factor", 0.95),
             seed=d.get("seed"),
             bargaining_protocol=d.get("bargaining_protocol", "nash"),
-            matching_protocol=d.get("matching_protocol", "opportunistic"),
             use_beliefs=d.get("use_beliefs", False),
+            bargaining_power_distribution=d.get("bargaining_power_distribution", "uniform"),
+            info_env_name=d.get("info_env_name", "full"),
+            info_env_params=d.get("info_env_params", {}),
             agents=agents,
+        )
+
+    def to_logging_config(self) -> "LoggingSimulationConfig":
+        """Convert server config to logging config for run persistence.
+
+        The server config captures user intent (what to create).
+        The logging config captures what was created (for reproducibility).
+        """
+        from microecon.logging.events import SimulationConfig as LoggingSimulationConfig
+
+        if self.seed is None:
+            raise ValueError(
+                "Cannot convert to logging config without a seed. "
+                "Assign a seed before persisting."
+            )
+
+        return LoggingSimulationConfig(
+            n_agents=self.n_agents,
+            grid_size=self.grid_size,
+            seed=self.seed,
+            protocol_name=self.bargaining_protocol,
+            perception_radius=self.perception_radius,
+            discount_factor=self.discount_factor,
+            info_env_name=self.info_env_name,
+            info_env_params=self.info_env_params,
         )
 
 
@@ -101,6 +144,7 @@ class SimulationInstance:
     simulation: Simulation
     config: SimulationConfig
     _initial_welfare: float = 0.0
+    _prev_trade_count: int = 0
 
     def get_tick_data(self) -> dict[str, Any]:
         """Get current tick data for this simulation."""
@@ -111,15 +155,24 @@ class SimulationInstance:
         for agent in sim.agents:
             pos = sim.grid.get_position(agent)
             if pos is not None:
+                # Get interaction state info for visualization
+                interaction_state = agent.interaction_state
+                state_info = {
+                    "state": interaction_state.state.value,
+                    "proposal_target": interaction_state.proposal_target,
+                    "negotiation_partner": interaction_state.negotiation_partner,
+                }
                 agent_data = {
                     "id": agent.id,
                     "position": [pos.row, pos.col],
-                    "endowment": [agent.endowment.x, agent.endowment.y],
+                    "endowment": [agent.holdings.x, agent.holdings.y],  # Use holdings for current state
                     "alpha": agent.preferences.alpha,
                     "utility": agent.utility(),
                     "perception_radius": agent.perception_radius,
                     "discount_factor": agent.discount_factor,
+                    "bargaining_power": agent.bargaining_power,
                     "has_beliefs": agent.has_beliefs,
+                    "interaction_state": state_info,  # New: expose agent state
                 }
                 agents.append(agent_data)
 
@@ -149,24 +202,24 @@ class SimulationInstance:
 
         trades = []
         agent_by_id = {a.id: a for a in sim.agents}
-        for trade in sim.trades:
-            if trade.tick == sim.tick:
-                agent1 = agent_by_id.get(trade.agent1_id)
-                agent2 = agent_by_id.get(trade.agent2_id)
-                alpha1 = agent1.preferences.alpha if agent1 else 0.5
-                alpha2 = agent2.preferences.alpha if agent2 else 0.5
-                trades.append({
-                    "tick": trade.tick,
-                    "agent1_id": trade.agent1_id,
-                    "agent2_id": trade.agent2_id,
-                    "alpha1": alpha1,
-                    "alpha2": alpha2,
-                    "pre_endowment_1": list(trade.pre_endowment_1),
-                    "pre_endowment_2": list(trade.pre_endowment_2),
-                    "post_allocation_1": [trade.outcome.allocation_1.x, trade.outcome.allocation_1.y],
-                    "post_allocation_2": [trade.outcome.allocation_2.x, trade.outcome.allocation_2.y],
-                    "gains": [trade.outcome.gains_1, trade.outcome.gains_2],
-                })
+        for trade in sim.trades[self._prev_trade_count:]:
+            agent1 = agent_by_id.get(trade.agent1_id)
+            agent2 = agent_by_id.get(trade.agent2_id)
+            alpha1 = agent1.preferences.alpha if agent1 else 0.5
+            alpha2 = agent2.preferences.alpha if agent2 else 0.5
+            trades.append({
+                "tick": sim.tick,
+                "agent1_id": trade.agent1_id,
+                "agent2_id": trade.agent2_id,
+                "proposer_id": trade.proposer_id,
+                "alpha1": alpha1,
+                "alpha2": alpha2,
+                "pre_holdings_1": list(trade.pre_holdings[0]),
+                "pre_holdings_2": list(trade.pre_holdings[1]),
+                "post_allocation_1": list(trade.post_allocations[0]),
+                "post_allocation_2": list(trade.post_allocations[1]),
+                "gains": list(trade.gains),
+            })
 
         return {
             "sim_id": self.sim_id,
@@ -186,44 +239,101 @@ class SimulationInstance:
         }
 
 
+def _generate_bargaining_powers(
+    n_agents: int,
+    distribution: str,
+    seed: int | None = None,
+) -> list[float]:
+    """Generate bargaining power values according to distribution.
+
+    Args:
+        n_agents: Number of agents
+        distribution: One of "uniform", "gaussian", "bimodal"
+        seed: Random seed for reproducibility
+
+    Returns:
+        List of bargaining power values (all positive)
+    """
+    import random
+
+    rng = random.Random(seed)
+
+    if distribution == "gaussian":
+        # Gaussian: μ=1, σ=0.3, clipped to positive
+        powers = [max(0.1, min(3.0, rng.gauss(1.0, 0.3))) for _ in range(n_agents)]
+    elif distribution == "bimodal":
+        # Bimodal: half at 0.5, half at 1.5
+        powers = [0.5 if i < n_agents // 2 else 1.5 for i in range(n_agents)]
+        rng.shuffle(powers)
+    else:  # uniform (default)
+        # Uniform: [0.5, 1.5]
+        powers = [rng.uniform(0.5, 1.5) for _ in range(n_agents)]
+
+    return powers
+
+
+def _create_info_env(name: str, params: dict[str, Any]) -> "InformationEnvironment":
+    """Create an InformationEnvironment from name and params."""
+    from microecon.information import FullInformation, NoisyAlphaInformation
+
+    if name == "noisy_alpha":
+        return NoisyAlphaInformation(noise_std=params.get("noise_std", 0.1))
+    return FullInformation()
+
+
 def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
     """Create a Simulation from a SimulationConfig."""
     from microecon.grid import Grid, Position
     from microecon.agent import Agent, AgentPrivateState
     from microecon.preferences import CobbDouglas
     from microecon.bundle import Bundle
-    from microecon.information import FullInformation
 
+    # Select bargaining protocol
     if config.bargaining_protocol == "rubinstein":
         bargaining = RubinsteinBargainingProtocol()
-    else:
+    elif config.bargaining_protocol == "tioli":
+        bargaining = TIOLIBargainingProtocol()
+    elif config.bargaining_protocol == "asymmetric_nash":
+        bargaining = AsymmetricNashBargainingProtocol()
+    else:  # "nash" or default
         bargaining = NashBargainingProtocol()
 
-    if config.matching_protocol == "stable_roommates":
-        matching = StableRoommatesMatchingProtocol()
-    else:
-        matching = OpportunisticMatchingProtocol()
+    # matching_protocol removed - agents now use DecisionProcedure in 3-phase tick model
+
+    # Generate bargaining powers if using asymmetric_nash
+    bargaining_powers = None
+    if config.bargaining_protocol == "asymmetric_nash":
+        bargaining_powers = _generate_bargaining_powers(
+            config.n_agents,
+            config.bargaining_power_distribution,
+            config.seed,
+        )
+
+    # Create the configured information environment
+    info_env = _create_info_env(config.info_env_name, config.info_env_params)
 
     # If agents are specified (scenario mode), use them directly
     if config.agents is not None:
         grid = Grid(config.grid_size)
         sim = Simulation(
             grid=grid,
-            info_env=FullInformation(),
+            info_env=info_env,
             bargaining_protocol=bargaining,
-            matching_protocol=matching,
         )
 
-        for agent_spec in config.agents:
+        for i, agent_spec in enumerate(config.agents):
             private_state = AgentPrivateState(
                 preferences=CobbDouglas(agent_spec.alpha),
                 endowment=Bundle(agent_spec.endowment[0], agent_spec.endowment[1]),
             )
+            # Assign bargaining power if available
+            bp = bargaining_powers[i] if bargaining_powers and i < len(bargaining_powers) else 1.0
             agent = Agent(
                 id=agent_spec.id,
                 private_state=private_state,
                 perception_radius=config.perception_radius,
                 discount_factor=config.discount_factor,
+                bargaining_power=bp,
             )
             if config.use_beliefs:
                 agent.enable_beliefs()
@@ -233,16 +343,24 @@ def _create_simulation_from_config(config: SimulationConfig) -> Simulation:
         return sim
 
     # Otherwise use create_simple_economy for random agents
-    return create_simple_economy(
+    sim = create_simple_economy(
         n_agents=config.n_agents,
         grid_size=config.grid_size,
         perception_radius=config.perception_radius,
         discount_factor=config.discount_factor,
         seed=config.seed,
         bargaining_protocol=bargaining,
-        matching_protocol=matching,
         use_beliefs=config.use_beliefs,
+        info_env=info_env,
     )
+
+    # Assign bargaining powers if using asymmetric_nash
+    if bargaining_powers:
+        for i, agent in enumerate(sim.agents):
+            if i < len(bargaining_powers):
+                agent.bargaining_power = bargaining_powers[i]
+
+    return sim
 
 
 @dataclass
@@ -260,6 +378,7 @@ class SimulationManager:
     tick_callbacks: list[Callable[[dict[str, Any]], None]] = field(default_factory=list)
     _run_task: asyncio.Task | None = field(default=None, repr=False)
     _initial_welfare: float = 0.0
+    _prev_trade_count: int = 0
 
     # Multi-simulation support for comparison mode
     _simulations: dict[str, SimulationInstance] = field(default_factory=dict)
@@ -336,12 +455,14 @@ class SimulationManager:
         if self.comparison_mode:
             all_trades = []
             for inst in self._simulations.values():
+                inst._prev_trade_count = len(inst.simulation.trades)
                 trades = inst.simulation.step()
                 all_trades.extend(trades)
             return all_trades
         else:
             if self.simulation is None:
                 self.create_simulation()
+            self._prev_trade_count = len(self.simulation.trades)
             return self.simulation.step()
 
     def start(self) -> None:
@@ -373,15 +494,24 @@ class SimulationManager:
         for agent in sim.agents:
             pos = sim.grid.get_position(agent)
             if pos is not None:
+                # Get interaction state info for visualization
+                interaction_state = agent.interaction_state
+                state_info = {
+                    "state": interaction_state.state.value,
+                    "proposal_target": interaction_state.proposal_target,
+                    "negotiation_partner": interaction_state.negotiation_partner,
+                }
                 agent_data = {
                     "id": agent.id,
                     "position": [pos.row, pos.col],
-                    "endowment": [agent.endowment.x, agent.endowment.y],
+                    "endowment": [agent.holdings.x, agent.holdings.y],  # Use holdings for current state
                     "alpha": agent.preferences.alpha,
                     "utility": agent.utility(),
                     "perception_radius": agent.perception_radius,
                     "discount_factor": agent.discount_factor,
+                    "bargaining_power": agent.bargaining_power,
                     "has_beliefs": agent.has_beliefs,
+                    "interaction_state": state_info,  # New: expose agent state
                 }
                 agents.append(agent_data)
 
@@ -414,24 +544,24 @@ class SimulationManager:
         trades = []
         # Build agent lookup for alpha values
         agent_by_id = {a.id: a for a in sim.agents}
-        for trade in sim.trades:
-            if trade.tick == sim.tick:
-                agent1 = agent_by_id.get(trade.agent1_id)
-                agent2 = agent_by_id.get(trade.agent2_id)
-                alpha1 = agent1.preferences.alpha if agent1 else 0.5
-                alpha2 = agent2.preferences.alpha if agent2 else 0.5
-                trades.append({
-                    "tick": trade.tick,
-                    "agent1_id": trade.agent1_id,
-                    "agent2_id": trade.agent2_id,
-                    "alpha1": alpha1,
-                    "alpha2": alpha2,
-                    "pre_endowment_1": list(trade.pre_endowment_1),
-                    "pre_endowment_2": list(trade.pre_endowment_2),
-                    "post_allocation_1": [trade.outcome.allocation_1.x, trade.outcome.allocation_1.y],
-                    "post_allocation_2": [trade.outcome.allocation_2.x, trade.outcome.allocation_2.y],
-                    "gains": [trade.outcome.gains_1, trade.outcome.gains_2],
-                })
+        for trade in sim.trades[self._prev_trade_count:]:
+            agent1 = agent_by_id.get(trade.agent1_id)
+            agent2 = agent_by_id.get(trade.agent2_id)
+            alpha1 = agent1.preferences.alpha if agent1 else 0.5
+            alpha2 = agent2.preferences.alpha if agent2 else 0.5
+            trades.append({
+                "tick": sim.tick,
+                "agent1_id": trade.agent1_id,
+                "agent2_id": trade.agent2_id,
+                "proposer_id": trade.proposer_id,
+                "alpha1": alpha1,
+                "alpha2": alpha2,
+                "pre_holdings_1": list(trade.pre_holdings[0]),
+                "pre_holdings_2": list(trade.pre_holdings[1]),
+                "post_allocation_1": list(trade.post_allocations[0]),
+                "post_allocation_2": list(trade.post_allocations[1]),
+                "gains": list(trade.gains),
+            })
 
         return {
             "tick": sim.tick,

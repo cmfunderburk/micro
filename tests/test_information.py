@@ -12,6 +12,8 @@ from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
 from microecon.information import FullInformation, NoisyAlphaInformation
 
+pytestmark = pytest.mark.core
+
 
 class TestFullInformation:
     """Tests for the FullInformation environment."""
@@ -307,7 +309,6 @@ class TestNoisyAlphaWithSimulation:
         from microecon.simulation import Simulation
         from microecon.grid import Grid, Position
         from microecon.bargaining import NashBargainingProtocol
-        from microecon.matching import OpportunisticMatchingProtocol
 
         # Create simulation with noisy information
         env = NoisyAlphaInformation(noise_std=0.1, seed=42)
@@ -317,7 +318,6 @@ class TestNoisyAlphaWithSimulation:
             grid=grid,
             info_env=env,
             bargaining_protocol=NashBargainingProtocol(),
-            matching_protocol=OpportunisticMatchingProtocol(),
         )
 
         # Create and place agents
@@ -340,7 +340,6 @@ class TestNoisyAlphaWithSimulation:
         from microecon.simulation import Simulation
         from microecon.grid import Grid, Position
         from microecon.bargaining import NashBargainingProtocol
-        from microecon.matching import OpportunisticMatchingProtocol
         from microecon.logging import SimulationLogger, SimulationConfig
 
         # Create agents with known alphas
@@ -355,7 +354,6 @@ class TestNoisyAlphaWithSimulation:
             grid=grid,
             info_env=FullInformation(),
             bargaining_protocol=NashBargainingProtocol(),
-            matching_protocol=OpportunisticMatchingProtocol(),
             logger=logger,
         )
         sim.add_agent(observer, Position(0, 0))
@@ -382,7 +380,6 @@ class TestNoisyAlphaWithSimulation:
             grid=grid2,
             info_env=noisy_env,
             bargaining_protocol=NashBargainingProtocol(),
-            matching_protocol=OpportunisticMatchingProtocol(),
             logger=logger2,
         )
         sim2.add_agent(observer2, Position(0, 0))

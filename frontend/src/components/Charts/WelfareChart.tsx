@@ -2,7 +2,7 @@
  * Time-series chart showing total welfare over time.
  */
 
-import { useMemo } from 'react';
+import { useMemo, type ReactElement } from 'react';
 import {
   LineChart,
   Line,
@@ -13,18 +13,17 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useSimulationStore } from '@/store';
+import {
+  TOOLTIP_STYLE,
+  AXIS_PROPS,
+  GRID_STROKE,
+  CHART_COLORS,
+  downsampleData,
+} from '@/lib/chartConfig';
 
-export function WelfareChart() {
+export function WelfareChart(): ReactElement {
   const history = useSimulationStore((state) => state.history);
-
-  // Downsample if too many points
-  const data = useMemo(() => {
-    if (history.length <= 100) return history;
-
-    // Take every nth point to get roughly 100 points
-    const step = Math.ceil(history.length / 100);
-    return history.filter((_, i) => i % step === 0 || i === history.length - 1);
-  }, [history]);
+  const data = useMemo(() => downsampleData(history), [history]);
 
   if (data.length === 0) {
     return (
@@ -38,33 +37,18 @@ export function WelfareChart() {
     <div className="h-full min-h-[100px]">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
-          <XAxis
-            dataKey="tick"
-            stroke="#71717a"
-            tick={{ fontSize: 10 }}
-            tickLine={false}
-          />
-          <YAxis
-            stroke="#71717a"
-            tick={{ fontSize: 10 }}
-            tickLine={false}
-            tickFormatter={(value) => value.toFixed(0)}
-          />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
+          <XAxis dataKey="tick" {...AXIS_PROPS} />
+          <YAxis {...AXIS_PROPS} tickFormatter={(value) => value.toFixed(0)} />
           <Tooltip
-            contentStyle={{
-              backgroundColor: '#27272a',
-              border: '1px solid #3f3f46',
-              borderRadius: '0.375rem',
-              fontSize: '12px',
-            }}
+            contentStyle={TOOLTIP_STYLE}
             labelFormatter={(tick) => `Tick ${tick}`}
             formatter={(value) => [typeof value === 'number' ? value.toFixed(2) : value, 'Welfare']}
           />
           <Line
             type="monotone"
             dataKey="welfare"
-            stroke="#22c55e"
+            stroke={CHART_COLORS.welfare}
             strokeWidth={2}
             dot={false}
             isAnimationActive={false}

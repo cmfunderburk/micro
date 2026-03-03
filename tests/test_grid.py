@@ -5,6 +5,8 @@ import math
 from microecon.grid import Grid, Position
 from microecon.agent import create_agent
 
+pytestmark = pytest.mark.core
+
 
 class TestPosition:
     """Test Position class."""

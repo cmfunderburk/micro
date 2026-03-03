@@ -27,7 +27,7 @@ export function AgentTooltip() {
           <span className="font-mono">{hoveredAgent.utility.toFixed(2)}</span>
         </div>
         <div className="flex justify-between gap-4">
-          <span className="text-zinc-400">Endowment:</span>
+          <span className="text-zinc-400">Holdings:</span>
           <span className="font-mono">
             ({hoveredAgent.endowment[0].toFixed(1)}, {hoveredAgent.endowment[1].toFixed(1)})
           </span>
@@ -38,6 +38,34 @@ export function AgentTooltip() {
             ({hoveredAgent.position[0]}, {hoveredAgent.position[1]})
           </span>
         </div>
+        {hoveredAgent.interaction_state && (
+          <div className="flex justify-between gap-4">
+            <span className="text-zinc-400">State:</span>
+            <span className={`font-mono ${
+              hoveredAgent.interaction_state.state === 'negotiating' ? 'text-green-400' :
+              hoveredAgent.interaction_state.state === 'proposal_pending' ? 'text-yellow-400' :
+              'text-zinc-300'
+            }`}>
+              {hoveredAgent.interaction_state.state}
+            </span>
+          </div>
+        )}
+        {hoveredAgent.interaction_state?.proposal_target && (
+          <div className="flex justify-between gap-4">
+            <span className="text-zinc-400">Proposing to:</span>
+            <span className="font-mono text-yellow-400">
+              {hoveredAgent.interaction_state.proposal_target}
+            </span>
+          </div>
+        )}
+        {hoveredAgent.interaction_state?.negotiation_partner && (
+          <div className="flex justify-between gap-4">
+            <span className="text-zinc-400">Trading with:</span>
+            <span className="font-mono text-green-400">
+              {hoveredAgent.interaction_state.negotiation_partner}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

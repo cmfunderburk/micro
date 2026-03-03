@@ -10,6 +10,7 @@ from microecon.logging import (
     AgentSnapshot,
     MovementEvent,
     RunSummary,
+    SCHEMA_VERSION,
     SearchDecision,
     SimulationConfig,
     TargetEvaluation,
@@ -21,6 +22,8 @@ from microecon.logging import (
     load_run,
 )
 from microecon.simulation import create_simple_economy
+
+pytestmark = pytest.mark.analysis
 
 
 class TestEventSerialization:
@@ -99,7 +102,7 @@ class TestEventSerialization:
             agent1_id="a1",
             agent2_id="a2",
             proposer_id="a1",
-            pre_endowments=((10.0, 2.0), (2.0, 10.0)),
+            pre_holdings=((10.0, 2.0), (2.0, 10.0)),
             post_allocations=((6.0, 6.0), (6.0, 6.0)),
             utilities=(6.0, 6.0),
             gains=(1.5, 1.5),
@@ -124,6 +127,103 @@ class TestEventSerialization:
         d = record.to_dict()
         restored = TickRecord.from_dict(d)
         assert restored == record
+
+    def test_simulation_config_includes_schema_version(self):
+        """to_dict() must include schema_version = SCHEMA_VERSION ("1.0")."""
+        config = SimulationConfig(
+            n_agents=10,
+            grid_size=15,
+            seed=42,
+            protocol_name="nash",
+        )
+        d = config.to_dict()
+        assert "schema_version" in d
+        assert d["schema_version"] == "1.0"
+        assert d["schema_version"] == SCHEMA_VERSION
+
+    def test_simulation_config_from_dict_without_schema_version(self):
+        """Pre-versioning dicts (no schema_version key) should get '0.0'."""
+        d = {
+            "n_agents": 10,
+            "grid_size": 15,
+            "seed": 42,
+            "protocol_name": "nash",
+        }
+        config = SimulationConfig.from_dict(d)
+        assert config.schema_version == "0.0"
+
+    def test_simulation_config_roundtrip_preserves_schema_version(self):
+        """Roundtrip through to_dict/from_dict must preserve schema_version."""
+        config = SimulationConfig(
+            n_agents=10,
+            grid_size=15,
+            seed=42,
+            protocol_name="nash",
+            schema_version="2.5",
+        )
+        d = config.to_dict()
+        restored = SimulationConfig.from_dict(d)
+        assert restored.schema_version == "2.5"
+        assert restored == config
+
+    def test_simulation_config_has_run_id_field(self):
+        """SimulationConfig includes run_id in serialization (default empty)."""
+        config = SimulationConfig(
+            n_agents=10, grid_size=15, seed=42, protocol_name="nash",
+        )
+        d = config.to_dict()
+        assert "run_id" in d
+        assert isinstance(d["run_id"], str)
+        # Default is empty; SimulationLogger (Task 2) populates UUID
+        assert d["run_id"] == ""
+
+    def test_simulation_config_run_id_roundtrip(self):
+        config = SimulationConfig(
+            n_agents=10, grid_size=15, seed=42, protocol_name="nash",
+            run_id="test-run-id-123",
+        )
+        d = config.to_dict()
+        restored = SimulationConfig.from_dict(d)
+        assert restored.run_id == "test-run-id-123"
+
+    def test_simulation_config_without_run_id_gets_empty(self):
+        """Pre-A-104 configs without run_id load with empty string."""
+        d = {
+            "n_agents": 10, "grid_size": 15, "seed": 42,
+            "protocol_name": "nash",
+        }
+        config = SimulationConfig.from_dict(d)
+        assert config.run_id == ""
+
+
+class TestRunIdGeneration:
+    """Test that SimulationLogger generates run_id when not provided."""
+
+    def test_logger_generates_run_id(self):
+        config = SimulationConfig(
+            n_agents=4, grid_size=5, seed=42, protocol_name="nash",
+        )
+        logger = SimulationLogger(config)
+        assert logger.config.run_id != ""
+        # Should be a valid UUID4
+        import uuid
+        uuid.UUID(logger.config.run_id, version=4)
+
+    def test_logger_preserves_provided_run_id(self):
+        config = SimulationConfig(
+            n_agents=4, grid_size=5, seed=42, protocol_name="nash",
+            run_id="my-custom-id",
+        )
+        logger = SimulationLogger(config)
+        assert logger.config.run_id == "my-custom-id"
+
+    def test_logger_generates_unique_run_ids(self):
+        config = SimulationConfig(
+            n_agents=4, grid_size=5, seed=42, protocol_name="nash",
+        )
+        logger1 = SimulationLogger(config)
+        logger2 = SimulationLogger(config)
+        assert logger1.config.run_id != logger2.config.run_id
 
 
 class TestSimulationLogger:
@@ -321,3 +421,70 @@ class TestRunData:
 
         assert len(trajectory) == 5
         assert all(s.agent_id == agent_id for s in trajectory)
+
+
+class TestSchemaVersionValidation:
+    """Test version validation when loading runs from disk."""
+
+    def test_load_current_version(self):
+        """A run written with the current schema version loads successfully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir)
+            fmt = JSONLinesFormat()
+
+            config = SimulationConfig(
+                n_agents=4, grid_size=5, seed=42, protocol_name="nash"
+            )
+            fmt.write_config(config, path)
+
+            # Write minimal ticks file so read_run doesn't fail
+            (path / "ticks.jsonl").touch()
+
+            loaded = fmt.read_run(path)
+            assert loaded.config.schema_version == "1.0"
+            assert loaded.config.schema_version == SCHEMA_VERSION
+
+    def test_load_pre_versioning_run(self):
+        """Pre-versioning config (no schema_version key) loads with version '0.0'."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir)
+
+            # Manually write a config.json WITHOUT schema_version
+            config_dict = {
+                "n_agents": 4,
+                "grid_size": 5,
+                "seed": 42,
+                "protocol_name": "nash",
+            }
+            with open(path / "config.json", "w") as f:
+                json.dump(config_dict, f)
+
+            # Write minimal ticks file
+            (path / "ticks.jsonl").touch()
+
+            fmt = JSONLinesFormat()
+            loaded = fmt.read_run(path)
+            assert loaded.config.schema_version == "0.0"
+
+    def test_load_future_version_raises(self):
+        """Loading a run with an unsupported future version raises ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir)
+
+            # Manually write config.json with a future schema_version
+            config_dict = {
+                "n_agents": 4,
+                "grid_size": 5,
+                "seed": 42,
+                "protocol_name": "nash",
+                "schema_version": "99.0",
+            }
+            with open(path / "config.json", "w") as f:
+                json.dump(config_dict, f)
+
+            # Write minimal ticks file
+            (path / "ticks.jsonl").touch()
+
+            fmt = JSONLinesFormat()
+            with pytest.raises(ValueError, match="Unsupported schema version"):
+                fmt.read_run(path)

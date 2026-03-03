@@ -602,7 +602,47 @@ With production/gathering, agents must also decide:
 
 ---
 
-## 10. References
+## 10. Architectural Decision: StableRoommates Deprecation
+
+**Date:** 2026-01-08
+**Decision:** Deprecate `StableRoommatesMatchingProtocol` pending architectural redesign
+
+### Problem Statement
+
+The current `StableRoommatesMatchingProtocol` implementation conflicts with the action-budget tick model (§6). Specifically:
+
+1. **Centralized vs agent-autonomous**: StableRoommates runs Irving's algorithm centrally to compute optimal pairings, then tells agents where to go and who to trade with. This treats matching as something "done to agents" rather than "rules agents operate within."
+
+2. **Commitment overrides action budget**: Once matched, committed agents automatically move toward partners and trade upon co-location. This bypasses the consent mechanisms (mutual selection, proposal acceptance) and action exclusivity (one action per tick) that the new model requires.
+
+3. **Paradigm mismatch**: The roadmap's tick model is designed for studying emergent coordination through decentralized agent decisions. StableRoommates is a mechanism design tool that computes and imposes optimal outcomes.
+
+### Resolution
+
+- Mark `StableRoommatesMatchingProtocol` as **deprecated** in code and documentation
+- Retain the code for reference but issue `DeprecationWarning` on instantiation
+- Remove from recommended usage paths in documentation
+- Revisit the stable roommates concept after the new tick architecture is implemented
+
+### Future Direction
+
+A properly integrated stable matching mechanism would likely:
+- Have agents *propose* commitments as an action (not computed centrally)
+- Make proposals visible within some information environment
+- Define acceptance rules that agents follow autonomously
+- Let stability emerge from repeated proposal/acceptance decisions
+- Use Irving's algorithm as a theoretical benchmark, not a runtime mechanism
+
+This aligns with the "institutions as rules agents operate within" paradigm.
+
+### References
+
+- `docs/current/stablematching-roadmap-thinking.md` — analysis of the architectural conflict
+- `microecon/matching.py` — deprecation notice in code
+
+---
+
+## 11. References
 
 ### Canonical Sources
 
@@ -632,7 +672,7 @@ With production/gathering, agents must also decide:
 
 ---
 
-## 11. Next Steps
+## 12. Next Steps
 
 1. ~~**Review this document** - Consider open questions, note preferences~~ ✓
 2. ~~**Session 2** - Resolve key decisions~~ ✓ (18 questions resolved)
@@ -645,12 +685,39 @@ With production/gathering, agents must also decide:
 
 ---
 
-**Document Version:** 2.0
+**Document Version:** 2.1
 **Created:** 2026-01-08
-**Updated:** 2026-01-08 (Session 2)
-**Status:** Most design questions resolved; ready for PRD drafting after final items
+**Updated:** 2026-01-09 (Session 3)
+**Status:** Superseded in part by AGENT-ARCHITECTURE.md v0.3
 
 ### Change Log
+
+**v2.1 (Session 3) — Supersession Note:**
+
+**IMPORTANT:** The tick model in §6.2 has been superseded by AGENT-ARCHITECTURE.md §7.6-7.9. Key changes:
+
+| This Document (§6.2) | AGENT-ARCHITECTURE (§7.6-7.9) | Resolution |
+|---------------------|-------------------------------|------------|
+| 4-phase tick: Perception → Co-location Resolution → Action Selection → Execution | 3-phase tick: Perceive → Decide → Execute | **Simplified.** No special "co-location resolution" phase; handled by normal DecisionProcedure. |
+| Trade executes within tick (Phase 1) | Trade spans multiple ticks (propose → accept → negotiate → execute) | **Multi-tick model is canonical.** Transaction costs require observable tick consumption. |
+| Crossing detection triggers interaction | Crossing paths = "ships in the night" | **No interaction.** Agents who cross never become co-located. |
+| MUTUAL MATCH required for trade | Proposal → acceptance sequence | **Explicit proposal model.** Agent proposes; target accepts/rejects. Mutual proposals detected as special case. |
+
+**What remains valid from §6:**
+- Action exclusivity (one action per tick) ✓
+- Consent required (no auto-trade) ✓
+- Rejection cooldown (3 ticks, per-target) ✓
+- Proposer determination by surplus (when relevant) ✓
+- Gather/Produce as future Phase 2 actions ✓
+
+**What should be disregarded:**
+- The specific 4-phase structure in §6.2
+- "Trade executes in this tick" semantics
+- Crossing detection as interaction trigger
+
+**Authoritative source:** AGENT-ARCHITECTURE.md is now the source of truth for tick semantics, interaction states, concurrency model, and acceptance rules.
+
+---
 
 **v2.0 (Session 2):**
 - Added Section 6: Tick Model and Action Budget (new architecture)

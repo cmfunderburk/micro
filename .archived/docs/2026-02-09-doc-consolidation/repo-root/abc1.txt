@@ -1,0 +1,1308 @@
+
+ ▐▛███▜▌   Claude Code v2.1.3
+▝▜█████▛▘  Opus 4.5 · Claude Max
+  ▘▘ ▝▝    ~/Work/microecon
+
+❯ Let's try to review where we left off in @docs/current/ and discuss next  
+  steps. We were working on test suite issues after the agent architecture  
+  rework                                                                    
+  ⎿  Listed directory docs/current/
+
+● Let me read the relevant documents to understand where we left off.
+
+● Read(docs/current/AGENT-ARCHITECTURE.md)
+  ⎿  Read 718 lines
+
+● Read(docs/current/ROADMAP-DISCUSSION-2026-01-08.md)
+  ⎿  Read 727 lines
+
+● Let me also check the current test status and the progress log mentioned in the recent commits.
+
+● Bash(uv run pytest --collect-only 2>&1 | tail -20)
+  ⎿         <Class TestTIOLIProtocolClass>                               
+              <Function
+    test_protocol_uses_lexicographic_proposer_by_defaul
+    t>
+    … +26 lines (ctrl+o to expand)
+
+● Search(pattern: "**/progress*.md")
+  ⎿  Found 0 files 
+
+● Good, tests collect. Let me run the test suite quickly and check the recent commit details for more context.
+
+● Bash(uv run pytest -x -q 2>&1 | tail -30)
+  ⎿              grid=Grid(15),                               
+                 info_env=FullInformation(),
+                 bargaining_protocol=NashBargainingProtocol(),
+     … +32 lines (ctrl+o to expand)
+
+● Bash(git log --oneline -10)
+  ⎿  2fbf4a1 docs: Add architecture gap analysis to progress log       
+     d80d43a fix: Update test suite for holdings vs endowment semantics
+     60d3cad fix: Same-tick proposals and adjacency trades
+     … +7 lines (ctrl+o to expand)
+
+● There's a failing test related to tie-breaking determinism. Let me look at the test and understand the issue.
+
+● Read(tests/scenarios/test_properties.py)
+  ⎿  Read 60 lines
+
+● Let me see the full test setup and also check the simulation code that handles partner selection.
+
+● Read(tests/scenarios/test_properties.py)
+  ⎿  Read 40 lines
+
+● Search(pattern: "tie.?break|sorted|agent_id", path: "microecon/simulation.py",
+         output_mode: "content")
+  ⎿  Found 110 lines (ctrl+o to expand)
+
+● Let me look at the search module to understand how target selection and tie-breaking works.
+
+● Search(pattern: "select_target|tie.?break|sorted.*agent|sorted.*target", path:
+         "microecon/search.py", output_mode: "content")
+  ⎿  Found 23 lines (ctrl+o to expand)
+
+● Let me look at how agents are iterated in the simulation's decide phase and how proposals are created.
+
+● Read(microecon/search.py)
+  ⎿  Read 60 lines
+
+● Search(pattern: "visible_agents|_agents\[|agents\.values\(\)|for agent in",
+        path: "microecon/simulation.py", output_mode: "content")
+  ⎿  Found 141 lines (ctrl+o to expand)
+
+● Let me check how evaluate_targets_detailed iterates through agents.
+
+● Read(microecon/search.py)
+  ⎿  Read 120 lines
+
+● Let me check how grid.agents_within_radius() iterates agents - this determines the order.
+
+● Search(pattern: "def agents_within_radius", path: "microecon/grid.py",
+        output_mode: "content")
+  ⎿  Found 41 lines (ctrl+o to expand)
+
+● Let me see the full condition for the tie-break logic.
+
+● Read(microecon/search.py)
+  ⎿  Read 20 lines
+
+● I think the issue might be in how trades are actually matched during execution, not in the search target selection. Let me check how the simulation executes trades.
+
+● Search(pattern: "def _execute_proposals|proposals_for|incoming_proposals",
+        path: "microecon/simulation.py", output_mode: "content")
+  ⎿  Found 0 lines 
+
+● Search(pattern: "propose_actions|ProposeAction|mutual_proposal", path:
+        "microecon/simulation.py", output_mode: "content")
+  ⎿  Found 82 lines (ctrl+o to expand)
+
+● Let me understand the simulation's agent iteration order and how trades get matched.
+
+● Search(pattern: "def agents|@property.*agents|_agents\s*=", path:
+        "microecon/simulation.py", output_mode: "content")
+  ⎿  Found 32 lines (ctrl+o to expand)
+
+● Search(pattern: "class Simulation|def add_agent|_agents", path:
+        "microecon/simulation.py", output_mode: "content")
+  ⎿  Found 193 lines (ctrl+o to expand)
+
+● Let me check how grid.place_agent adds to _positions.
+
+● Search(pattern: "def place_agent|_positions\[", path: "microecon/grid.py",
+        output_mode: "content")
+  ⎿  Found 34 lines (ctrl+o to expand)
+
+● Let me look at how agents decide their actions - specifically the decision procedure.
+
+● Read(microecon/decisions.py)
+  ⎿  Read 100 lines
+
+● Read(microecon/decisions.py)
+  ⎿  Read 150 lines
+
+● Read(microecon/decisions.py)
+  ⎿  Read 100 lines
+
+● Found the issue! At line 343-344:
+  # Choose maximum (ties broken by first occurrence)
+  best_action, best_value = max(evaluated, key=lambda x: x[1])
+
+  The tie-break is by first occurrence in the list, not lexicographic ID. Let me check how adjacent_agents is built.
+
+● Search(pattern: "agents_adjacent_to|adjacent_agents", path: "microecon",
+        output_mode: "content")
+  ⎿  Found 99 lines (ctrl+o to expand)
+
+● I've identified the bug. The issue is in RationalDecisionProcedure.choose():
+
+  1. adjacent_agents returns a set[str] which has non-deterministic iteration order (depends on hash values)
+  2. ProposeActions are added to the list in set iteration order
+  3. max(evaluated, key=lambda x: x[1]) breaks ties by first occurrence
+  4. Result: tie-breaking is non-deterministic, depending on Python's set iteration order
+
+  The fix should add explicit lexicographic tie-breaking in choose(), consistent with the search module's approach. Let me implement this.
+
+● Read(microecon/decisions.py)
+  ⎿  Read 38 lines
+
+● Update(microecon/decisions.py)
+  ⎿  (No changes)
+
+❯ Here's the problem: the test suite was fundamentally built around the old 
+  4-phase architecture. We have a new, improved 3-tick architecture. We     
+  need to review the tests *thoroughly*, considering complete rewrites if   
+  necessary. We want the spirit of the existing tests translated to the new 
+  architecture. Anything that tests old architecture can be discarded       
+  and/or rewritten to accomodate the new system.                            
+
+● You're right. Patching individual failures is the wrong approach - we need a systematic review of the test suite against the new architecture. Let me explore the test structure thoroughly.
+
+● Bash(find /home/cmf/Work/microecon/tests -name "*.py" -type f | head -30)
+  ⎿  /home/cmf/Work/microecon/tests/__init__.py                 
+     /home/cmf/Work/microecon/tests/scenarios/conftest.py
+     /home/cmf/Work/microecon/tests/scenarios/test_properties.py
+     … +27 lines (ctrl+o to expand)
+
+● Bash(wc -l /home/cmf/Work/microecon/tests/*.py
+      /home/cmf/Work/microecon/tests/**/*.py 2>/dev/null | sort -n | tail -20)
+  ⎿    325 /home/cmf/Work/microecon/tests/test_logging.py                
+       331 /home/cmf/Work/microecon/tests/test_emergence.py
+       334
+    /home/cmf/Work/microecon/tests/theory/test_rubinstein_bargaining
+    … +19 lines (ctrl+o to expand)
+
+● Bash(grep -E "^class |^    def test_"
+      /home/cmf/Work/microecon/tests/test_simulation.py)
+  ⎿  class TestSimulationSetup:           
+         def test_create_simulation(self):
+         def test_add_agent(self):
+     … +17 lines (ctrl+o to expand)
+
+● Bash(grep -E "^class |^    def test_"
+      /home/cmf/Work/microecon/tests/scenarios/test_properties.py)
+  ⎿  class TestNashSymmetry:                         
+         def test_symmetric_solution_basic(self):
+         def test_symmetric_solution_edge_case(self):
+     … +8 lines (ctrl+o to expand)
+
+● Bash(grep -E "^class |^    def test_"
+      /home/cmf/Work/microecon/tests/test_integration.py)
+  ⎿  class TestFullPipeline:                       
+         def test_setup_to_analysis(self):
+         def test_pipeline_with_disk_logging(self):
+     … +10 lines (ctrl+o to expand)
+
+● Bash(grep -E "^class |^    def test_"
+      /home/cmf/Work/microecon/tests/scenarios/test_two_agent.py)
+  ⎿  class TestTwoAgentSymmetricScenario:                        
+         def test_initial_utilities_match_theory(self, scenario):
+         def test_initial_positions(self, scenario):
+     … +39 lines (ctrl+o to expand)
+
+● Bash(grep -E "^class |^    def test_"
+      /home/cmf/Work/microecon/tests/scenarios/test_hub_and_spoke.py)
+  ⎿  class TestFourAgentHubAndSpokeStage1:                    
+         def test_initial_utilities(self, scenario):
+         def test_all_peripherals_equidistant(self, scenario):
+     … +61 lines (ctrl+o to expand)
+
+● Let me read key tests to understand their architecture assumptions.
+
+● Read(tests/scenarios/test_properties.py)
+  ⎿  Read 80 lines
+
+● Bash(grep -E "^class |^    def test_"
+      /home/cmf/Work/microecon/tests/test_matching.py)
+  ⎿  class TestCommitmentState:             
+         def test_initial_state_empty(self):
+         def test_form_commitment(self):
+     … +28 lines (ctrl+o to expand)
+
+● Read(tests/scenarios/test_two_agent.py)
+  ⎿  Read 100 lines
+
+● Read(tests/scenarios/test_two_agent.py)
+  ⎿  Read 80 lines
+
+● Read(tests/scenarios/test_hub_and_spoke.py)
+  ⎿  Read 100 lines
+
+● Read(tests/scenarios/test_hub_and_spoke.py)
+  ⎿  Read 100 lines
+
+● Let me run the full test suite to get a comprehensive view of failures.
+
+● Bash(uv run pytest -v --tb=no 2>&1 | grep -E                       timeout: 3m 
+      "PASSED|FAILED|ERROR|test_" | head -100)                       0s
+
+  ⎿ cachedir: .pytest_cache                                              
+    tests/scenarios/test_hub_and_spoke.py::TestFourAgentHubAndSpokeStage1:
+    :
+    test_initial_utilities PASSED [  0%]
+    … +196 lines (ctrl+o to expand)
+
+● Bash(uv run pytest -v --tb=no 2>&1 | grep -E "FAILED|ERROR" ) timeout: 3m 0s
+  ⎿  No matches found
+
+● Bash(uv run pytest --tb=short 2>&1 | tail -30) timeout: 3m 0s
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ There's a bigger issue to resolve first -- some tests take a *very long   
+  time* to run. We should skip these tests and note that we need to review  
+  them thoroughly later after we clean up the other architectural issues    
+
+● Good call. Let me identify the slow tests and skip them so we can make progress on the architectural review.
+
+● Bash(timeout 60 uv run pytest --collect-only -q 2>&1 | tail -20)
+  ⎿ tests/theory/test_tioli_bargaining.py::TestTIOLIProposerIdentityMatte
+    s
+    ::test_proposer_identity_swaps_surplus_recipient[0.8-0.2-5.0-15.0-15.0
+    -
+    5.0]
+    … +38 lines (ctrl+o to expand)
+
+● Bash(timeout 90 uv run pytest -x --timeout=5 --timeout_method=thread -q 2>&1 |
+       tail -40)
+  ⎿ ERROR: usage: pytest [options] [file_or_dir] [file_or_dir] [...]     
+    pytest: error: unrecognized arguments: --timeout=5
+    --timeout_method=thr
+    ead
+    … +2 lines (ctrl+o to expand)
+
+● Bash(timeout 60 uv run pytest --durations=20 -q 2>&1 | tail -40)
+  ⎿  Error: Exit code 143
+     Command timed out after 2m 0s Terminated                 timeout 60 uv run 
+     pytest --durations\=20 -q 2>&1 < /dev/null | tail -40
+
+● Bash(timeout 30 uv run pytest tests/scenarios/ --durations=10 -q 2>&1)
+  ⎿ ............................................................sssssssss
+    s
+    s [ 52%]
+    sssssssssssssssss...sssssss.....................................
+    … +24 lines (ctrl+o to expand)
+
+● Bash(timeout 30 uv run pytest tests/test_beliefs.py --durations=5 -q 2>&1)
+  ⎿ .....................................................................
+    .
+    . [ 83%]
+    ..............
+    … +14 lines (ctrl+o to expand)
+
+● Bash(timeout 30 uv run pytest tests/test_integration.py --durations=5 -q 2>&1)
+  ⎿ .....ssss                                                            
+      [100%]
+    ============================= slowest 5 durations
+    =====================
+    … +12 lines (ctrl+o to expand)
+
+● Bash(timeout 30 uv run pytest tests/test_emergence.py --durations=5 -q 2>&1)
+  ⎿ ....................                                                 
+      [100%]
+    ============================= slowest 5 durations
+    =====================
+    … +12 lines (ctrl+o to expand)
+
+● Bash(timeout 60 uv run pytest tests/theory/ --durations=10 -q 2>&1)
+  ⎿ .....................................................................
+    .
+    . [ 35%]
+    ......................................................................
+    .
+    … +29 lines (ctrl+o to expand)
+
+● Bash(timeout 60 uv run pytest tests/test_batch.py tests/test_simulation.py
+      --durations=10 -q 2>&1)
+  ⎿ ..............................                                       
+      [100%]
+    ============================= slowest 10 durations
+    ====================
+    … +22 lines (ctrl+o to expand)
+
+● Bash(timeout 60 uv run pytest tests/test_matching.py tests/test_edge_cases.py
+      tests/test_logging.py --durations=10 -q 2>&1)
+  ⎿ ...............................................ss.s........ss....s...
+    .
+    . [ 84%]
+    .............
+    … +122 lines (ctrl+o to expand)
+
+● Search(pattern: "pytest\.mark\.slow|@pytest\.mark|markers\s*=", path:
+        "pyproject.toml", output_mode: "content")
+  ⎿  Found 1 line (ctrl+o to expand)
+
+● Read(pyproject.toml)
+  ⎿  Read 46 lines
+
+● There's already a slow marker defined. Let me add it to the slow tests.
+
+● Search(pattern: "def test_market_emergence_with_noisy_info|def
+        test_market_emergence_with_rubinstein", path:
+        "tests/test_edge_cases.py", output_mode: "content")
+  ⎿  Found 9 lines (ctrl+o to expand)
+
+● Read(tests/test_edge_cases.py)
+  ⎿  Read 70 lines
+
+● Update(tests/test_edge_cases.py)
+  ⎿  Added 1 line                                                        
+      412          assert result.analysis.n_agents == 2
+      413          assert result.analysis.total_ticks == 5
+      414 
+      415 +    @pytest.mark.slow                                         
+      416      def test_market_emergence_with_rubinstein(self):
+      417          """Market emergence with Rubinstein protocol."""
+      418          config = MarketEmergenceConfig(
+
+● Update(tests/test_edge_cases.py)
+  ⎿  Added 1 line                                                        
+      432          """Market emergence with stable roommates matching."""
+      433          pass  # Test skipped - matching_protocol removed from 
+           Simulation
+      434 
+      435 +    @pytest.mark.slow                                         
+      436      def test_market_emergence_with_noisy_info(self):
+      437          """Market emergence with noisy information."""
+      438          config = MarketEmergenceConfig(
+
+● Search(pattern: "def test_full_reproducibility", path:
+        "tests/test_simulation.py", output_mode: "content")
+  ⎿  Found 9 lines (ctrl+o to expand)
+
+● Update(tests/test_simulation.py)
+  ⎿  Added 1 line                                                        
+      170              pos2 = sim2.grid.get_position(a2)
+      171              assert pos1 == pos2
+      172 
+      173 +    @pytest.mark.slow                                         
+      174      def test_full_reproducibility(self):
+      175          """Same seed should produce identical simulation runs 
+           including trades."""
+      176          sim1 = create_simple_economy(n_agents=6, grid_size=8,
+           seed=123)
+
+● Read(tests/test_batch.py)
+  ⎿  Read 50 lines
+
+● Search(pattern: "def test_run_comparison_multiple_seeds|def
+        test_cartesian_product", path: "tests/test_batch.py", output_mode:
+        "content")
+  ⎿  Found 7 lines (ctrl+o to expand)
+
+● Update(tests/test_batch.py)
+  ⎿  Added 1 line                                                        
+      170          protocols = {r.config.protocol_name for r in results}
+      171          assert protocols == {"nash", "rubinstein"}
+      172 
+      173 +    @pytest.mark.slow                                         
+      174      def test_run_comparison_multiple_seeds(self):
+      175          results = run_comparison(
+      176              n_agents=4, grid_size=5, ticks=5, seeds=[1, 2, 3]
+
+● Update(tests/test_batch.py)
+  ⎿  Added 1 line                                                        
+      200  class TestBatchRunnerParameterCombinations:
+      201      """Test complex parameter combinations."""
+      202 
+      203 +    @pytest.mark.slow                                         
+      204      def test_cartesian_product(self):
+      205          runner = BatchRunner(
+      206              base_config={"n_agents": 4, "grid_size": 5},
+
+● Now let me verify the test suite runs quickly without the slow tests.
+
+● Bash(timeout 120 uv run pytest -m "not slow" -q 2>&1 | tail    timeout: 2m 
+      -20)                                                       10s
+  ⎿     protocol = StableRoommatesMatchingProtocol()                     
+
+    tests/test_matching.py::TestStableRoommatesMatchingProtocol::test_dete
+    r
+    … +33 lines (ctrl+o to expand)
+
+● Still slow. Let me check if there are more slow tests I missed.
+
+● Bash(timeout 60 uv run pytest -m "not slow" --ignore=tests/test_batch.py -q
+      --durations=15 2>&1 | tail -30)
+  ⎿  Error: Exit code 143
+     Command timed out after 2m 0s Terminated                 timeout 60 uv run 
+     pytest -m 'not slow' --ignore\=tests/test_batch.py -q --durations\=15 2>&1 <
+      /dev/null | tail -30
+
+● Bash(timeout 30 uv run pytest tests/test_bundle.py tests/test_preferences.py
+      tests/test_grid.py tests/test_agent.py -q 2>&1)
+  ⎿  ................................................................
+       [100%]
+     64 passed in 0.05s
+
+● Bash(timeout 30 uv run pytest tests/test_bargaining.py tests/test_search.py
+      tests/test_information.py -q 2>&1)
+  ⎿  ...........................................................
+       [100%]
+     59 passed in 3.68s
+
+● Bash(timeout 45 uv run pytest tests/test_simulation.py -m "not slow" -q
+      --durations=5 2>&1)
+  ⎿ ..............                                                       
+      [100%]
+    ============================= slowest 5 durations
+    =====================
+    … +12 lines (ctrl+o to expand)
+
+● Bash(timeout 45 uv run pytest tests/scenarios/test_two_agent.py -q
+      --durations=5 2>&1)
+  ⎿ .....................................                                
+      [100%]
+    ============================= slowest 5 durations
+    =====================
+    … +12 lines (ctrl+o to expand)
+
+● Bash(timeout 45 uv run pytest tests/test_batch.py -m "not slow" -q
+      --durations=10 2>&1)
+  ⎿ .............                                                        
+      [100%]
+    ============================= slowest 10 durations
+    ====================
+    … +22 lines (ctrl+o to expand)
+
+● Bash(timeout 45 uv run pytest tests/test_logging.py tests/test_integration.py
+      -m "not slow" -q --durations=5 2>&1)
+  ⎿  Error: Exit code 1
+     ..................F..ssss                                                
+     [100%]
+     =================================== FAILURES 
+     ===================================
+     _____ TestInformationEnvironmentIntegration.test_noisy_info_affects_search 
+     _____
+
+     self = <tests.test_integration.TestInformationEnvironmentIntegration object 
+     at 0x7fd7a7584440>
+
+         def test_noisy_info_affects_search(self):
+             """Noisy information should produce different search valuations than
+      full info.
+         
+
+     … +52 lines (ctrl+o to see all)
+
+● Found a failing test. Let me also check the remaining test files.
+
+● Bash(timeout 45 uv run pytest tests/test_edge_cases.py -m "not slow" -q
+      --durations=5 2>&1)
+  ⎿ .....................s.s........ss...s..                             
+      [100%]
+    ============================= slowest 5 durations
+    =====================
+    … +12 lines (ctrl+o to expand)
+
+● Read(tests/test_integration.py)
+  ⎿  Read 80 lines
+
+● This test is failing due to the same tie-breaking non-determinism we saw earlier. The RationalDecisionProcedure.choose() uses first-occurrence tie-breaking which depends on iteration order through a set.
+
+  Let me check the current state of all tests and then we can discuss approach.
+
+● Bash(timeout 120 uv run pytest -m "not slow" -q --tb=no 2>&1 |   timeout: 2m 
+      tail -10)                                                    10s
+  ⎿ tests/test_matching.py::TestIrvingAlgorithmEdgeCases::test_no_stable_
+    a
+    tching_exists
+      /home/cmf/Work/microecon/tests/test_matching.py:394:
+    DeprecationWarni
+    … +15 lines (ctrl+o to expand)
+
+● Tests passed this time. The non-determinism is intermittent. Let me run that specific test a few times.
+
+● Bash(for i in 1 2 3 4 5; do echo "Run $i:"; uv run pytest          timeout: 
+      tests/test_integration.py::TestInformationEnvironmentIntegrati 1m 0s
+      on::test_noisy_info_affects_search -q --tb=no…)
+  ⎿  Run 1:                       
+     1 passed in 2.12s
+     Run 2:
+     … +7 lines (ctrl+o to expand)
+
+● This test is flaky - 3/5 runs fail. This is the tie-breaking non-determinism issue. Let me mark it as a known issue.
+
+● Read(tests/test_integration.py)
+  ⎿  Read 30 lines
+
+● Update(tests/test_integration.py)
+  ⎿  Added 5 lines                                                       
+      152  class TestInformationEnvironmentIntegration:
+      153      """Test that information environments integrate through th
+           e full pipeline."""
+      154 
+      155 +    @pytest.mark.skip(reason="Flaky: tie-breaking non-determin
+          +ism in RationalDecisionProcedure.choose() - see AGENT-ARCHITEC
+          +TURE.md §7.5")                                                
+      156      def test_noisy_info_affects_search(self):
+      157          """Noisy information should produce different search v
+           aluations than full info.
+      158 
+      159          This is a regression test for CE-1: before the fix, no
+           isy information had no
+      160          behavioral effect because search used true types regar
+           dless of info environment.
+      161 +                                                              
+      162 +        NOTE: Skipped due to flaky non-determinism caused by s
+          +et iteration order in                                         
+      163 +        available_actions() combined with first-occurrence tie
+          +-breaking in choose().                                        
+      164 +        Fix: Add lexicographic tie-breaking to RationalDecisio
+          +nProcedure.choose().                                          
+      165          """
+      166 
+      167          def run_with_info_env(info_env, sim_seed=42):
+
+● Bash(timeout 120 uv run pytest -m "not slow" -q --tb=no 2>&1 |   timeout: 2m 
+      tail -5)                                                     10s
+  ⎿ -- Docs:                                                             
+    https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+    =========================== short test summary info
+    ===================
+    =========
+    … +4 lines (ctrl+o to expand)
+
+● Another tie-breaking test is now failing. This is the same root cause. Let me check if it's also flaky.
+
+● Bash(for i in 1 2 3 4 5; do echo "Run $i:"; uv run pytest          timeout: 
+      tests/scenarios/test_properties.py::TestTieBreakingDeterminism 1m 0s
+      ::test_trade_partner_tie_break_selects_smalle…)
+  ⎿  Run 1:                       
+     1 failed in 0.08s
+     Run 2:
+     … +7 lines (ctrl+o to expand)
+
+● We've identified the core issue: the RationalDecisionProcedure.choose() method uses first-occurrence tie-breaking, but the iteration order through adjacent_agents (a set) is non-deterministic.
+
+  Current state:
+  - 675 passed, 46 skipped, 1 failed (test_trade_partner_tie_break_selects_smallest_id)
+  - Test expects lexicographic tie-breaking (partner_a) but gets non-deterministic result (partner_c)
+
+  Root cause: In decisions.py line 343:
+  best_action, best_value = max(evaluated, key=lambda x: x[1])
+  This breaks ties by first occurrence, but the action list order depends on set iteration.
+
+  The fix would add explicit lexicographic tie-breaking in choose() - same approach the search module uses. This is a correctness fix for the new architecture, not patching an old test.
+
+  Should I:
+  1. Fix the tie-breaking now - targeted fix, ~20 lines, makes system deterministic
+  2. Skip the test and document - defer fix, note as known issue
+
+✻ Baked for 14m 6s
+
+❯ fix it 
+
+● Read(microecon/decisions.py)
+  ⎿  Read 42 lines
+
+● Update(microecon/decisions.py)
+  ⎿  Added 28 lines, removed 4 lines                                     
+      328      ) -> "Action":
+      329          """
+      330          Choose action with maximum expected utility.
+      331 +                                                              
+      332 +        Tie-breaking (when values are equal):                 
+      333 +        - ProposeAction: lexicographically smallest target_id 
+      334 +        - MoveAction: lexicographically smallest target positi
+          +on (row, col)                                                 
+      335 +        - Action type priority: Propose (0) > Move (1) > Wait 
+          +(2)                                                           
+      336          """
+      332 -        from microecon.actions import WaitAction              
+      337 +        from microecon.actions import WaitAction, ProposeActio
+          +n, MoveAction                                                 
+      338 
+      339          actions = self.available_actions(agent, context)
+      340 
+     ...
+      345          # Evaluate all actions
+      346          evaluated = [(action, self.evaluate(agent, action, con
+           text)) for action in actions]
+      347 
+      343 -        # Choose maximum (ties broken by first occurrence)    
+      344 -        best_action, best_value = max(evaluated, key=lambda x:
+          - x[1])                                                        
+      348 +        # Choose maximum with deterministic tie-breaking      
+      349 +        best_action = None                                    
+      350 +        best_value = float('-inf')                            
+      351 +        best_tie_breaker: tuple = ()                          
+      352 
+      346 -        return best_action                                    
+      353 +        for action, value in evaluated:                       
+      354 +            # Compute tie-breaker: (action_type_priority, seco
+          +ndary_key)                                                    
+      355 +            # Lower priority number = preferred when values ar
+          +e equal                                                       
+      356 +            if isinstance(action, ProposeAction):             
+      357 +                tie_breaker = (0, action.target_id)           
+      358 +            elif isinstance(action, MoveAction):              
+      359 +                tie_breaker = (1, (action.target_position.row,
+          + action.target_position.col))                                 
+      360 +            else:                                             
+      361 +                # WaitAction or others                        
+      362 +                tie_breaker = (2, "")                         
+      363 
+      364 +            # Update if better value, or same value with small
+          +er tie-breaker                                                
+      365 +            if value > best_value or (value == best_value and 
+          +tie_breaker < best_tie_breaker):                              
+      366 +                best_action = action                          
+      367 +                best_value = value                            
+      368 +                best_tie_breaker = tie_breaker                
+      369 +                                                              
+      370 +        return best_action if best_action is not None else Wai
+          +tAction()                                                     
+      371 +                                                              
+      372      def evaluate_proposal(
+      373          self,
+      374          agent: "Agent",
+
+● Bash(uv run pytest tests/scenarios/test_properties.py::TestTieBreakingDetermin
+      ism::test_trade_partner_tie_break_selects_smallest_id -v 2>&1)
+  ⎿ ============================= test session starts                    
+    =====================
+    =========
+    platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0 --
+    /home/c
+    … +12 lines (ctrl+o to expand)
+
+● Now let me also re-enable the skipped flaky test and verify it passes.
+
+● Update(tests/test_integration.py)
+  ⎿  Removed 5 lines                                                     
+      152  class TestInformationEnvironmentIntegration:
+      153      """Test that information environments integrate through th
+           e full pipeline."""
+      154 
+      155 -    @pytest.mark.skip(reason="Flaky: tie-breaking non-determin
+          -ism in RationalDecisionProcedure.choose() - see AGENT-ARCHITEC
+          -TURE.md §7.5")                                                
+      155      def test_noisy_info_affects_search(self):
+      156          """Noisy information should produce different search v
+           aluations than full info.
+      157 
+      158          This is a regression test for CE-1: before the fix, no
+           isy information had no
+      159          behavioral effect because search used true types regar
+           dless of info environment.
+      161 -                                                              
+      162 -        NOTE: Skipped due to flaky non-determinism caused by s
+          -et iteration order in                                         
+      163 -        available_actions() combined with first-occurrence tie
+          --breaking in choose().                                        
+      164 -        Fix: Add lexicographic tie-breaking to RationalDecisio
+          -nProcedure.choose().                                          
+      160          """
+      161 
+      162          def run_with_info_env(info_env, sim_seed=42):
+
+● Bash(for i in 1 2 3 4 5; do echo "Run $i:"; uv run pytest          timeout: 
+      tests/test_integration.py::TestInformationEnvironmentIntegrati 1m 0s
+      on::test_noisy_info_affects_search -q --tb=no…)
+  ⎿  Run 1:                       
+     1 passed in 1.82s
+     Run 2:
+     … +7 lines (ctrl+o to expand)
+
+● Still flaky. Let me check what else could cause non-determinism.
+
+● Bash(uv run pytest tests/test_integration.py::TestInformationEnvironmentIntegr
+      ation::test_noisy_info_affects_search -v --tb=short 2>&1 | tail -30)
+  ⎿ ============================= test session starts                    
+    =====================
+    =========
+    platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0 --
+    /home/c
+    … +12 lines (ctrl+o to expand)
+
+● Bash(for i in 1 2 3 4 5 6 7 8; do result=$(uv run pytest           timeout: 
+      tests/test_integration.py::TestInformationEnvironmentIntegrati 1m 0s
+      on::test_noisy_info_affects_search -q --tb=sho…)
+  ⎿  FAILURE on run 1:             
+     F
+       [100%]
+     … +18 lines (ctrl+o to expand)
+
+● The issue is that create_agent() generates random UUIDs for agent IDs. Even with the same seed, different runs create different agent IDs, leading to different tie-breaking behavior. Let me check and fix the test.
+
+● Search(pattern: "def create_agent", path: "microecon/agent.py", output_mode:
+        "content")
+  ⎿  Found 16 lines (ctrl+o to expand)
+
+● Read(tests/test_integration.py)
+  ⎿  Read 50 lines
+
+● Update(tests/test_integration.py)
+  ⎿  Added 3 lines, removed 2 lines                                      
+      161 
+      162          def run_with_info_env(info_env, sim_seed=42):
+      163              """Run simulation and collect search decision chos
+           en_values."""
+      164 +            # Use explicit agent IDs for deterministic tie-bre
+          +aking across runs                                             
+      165              agents = [
+      165 -                create_agent(alpha=0.3, endowment_x=10.0, endo
+          -wment_y=2.0, perception_radius=10.0),                         
+      166 -                create_agent(alpha=0.7, endowment_x=2.0, endow
+          -ment_y=10.0, perception_radius=10.0),                         
+      166 +                create_agent(alpha=0.3, endowment_x=10.0, endo
+          +wment_y=2.0, perception_radius=10.0, agent_id="agent_a"),     
+      167 +                create_agent(alpha=0.7, endowment_x=2.0, endow
+          +ment_y=10.0, perception_radius=10.0, agent_id="agent_b"),     
+      168              ]
+      169              config = SimulationConfig(n_agents=2, grid_size=10
+           , seed=sim_seed, protocol_name="nash")
+      170              logger = SimulationLogger(config=config)
+
+● Bash(for i in 1 2 3 4 5 6 7 8 9 10; do echo -n "Run $i: "; uv run  timeout: 
+      pytest tests/test_integration.py::TestInformationEnvironmentIn 1m 0s
+      tegration::test_noisy_info_affects_se…)
+  ⎿  Run 1: 1 passed in 1.81s     
+     Run 2: 1 passed in 1.79s
+     Run 3: 1 passed in 1.82s
+     … +7 lines (ctrl+o to expand)
+
+● 10/10 passes. Now let me run the full test suite without slow tests to verify everything passes.
+
+● Bash(timeout 150 uv run pytest -m "not slow" -q --tb=no 2>&1 |   timeout: 2m 
+      tail -10)                                                    40s
+  ⎿     protocol = StableRoommatesMatchingProtocol()                     
+
+    tests/test_matching.py::TestIrvingAlgorithmEdgeCases::test_partial_vis
+    i
+    … +14 lines (ctrl+o to expand)
+
+● Another test failing. Let me check it.
+
+● Bash(uv run pytest tests/scenarios/test_two_agent.py::TestTwoAgentNoTradeScena
+      rio::test_no_trade_when_co_located -v --tb=short 2>&1 | tail -30)
+  ⎿ ============================= test session starts                    
+    =====================
+    =========
+    platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0 --
+    /home/c
+    … +103 lines (ctrl+o to expand)
+
+● This is a bug exposed by the tie-breaking fix. When surplus is 0, ProposeAction is still being chosen over WaitAction because of the action type priority. Let me check the code.
+
+● Read(microecon/decisions.py)
+  ⎿  Read 30 lines
+
+● The issue: ProposeAction with value=0 is being chosen over WaitAction with value=0 due to the tie-breaking priority. When there's no benefit, we should prefer waiting. Let me fix the tie-breaking to only prefer action types when values are positive.
+
+● Update(microecon/decisions.py)
+  ⎿  Added 18 lines, removed 7 lines                                     
+      352 
+      353          for action, value in evaluated:
+      354              # Compute tie-breaker: (action_type_priority, seco
+           ndary_key)
+      355 -            # Lower priority number = preferred when values ar
+          -e equal                                                       
+      356 -            if isinstance(action, ProposeAction):             
+      357 -                tie_breaker = (0, action.target_id)           
+      358 -            elif isinstance(action, MoveAction):              
+      359 -                tie_breaker = (1, (action.target_position.row,
+          - action.target_position.col))                                 
+      355 +            # When value > 0: prefer Propose > Move > Wait (ta
+          +ke beneficial action)                                         
+      356 +            # When value <= 0: prefer Wait > Move > Propose (d
+          +on't act without benefit)                                     
+      357 +            if value > 0:                                     
+      358 +                # Positive value: prefer actions over waiting 
+      359 +                if isinstance(action, ProposeAction):         
+      360 +                    tie_breaker = (0, action.target_id)       
+      361 +                elif isinstance(action, MoveAction):          
+      362 +                    tie_breaker = (1, (action.target_position.
+          +row, action.target_position.col))                             
+      363 +                else:                                         
+      364 +                    tie_breaker = (2, "")                     
+      365              else:
+      361 -                # WaitAction or others                        
+      362 -                tie_breaker = (2, "")                         
+      366 +                # Zero or negative value: prefer waiting over 
+          +acting                                                        
+      367 +                if isinstance(action, WaitAction):            
+      368 +                    tie_breaker = (0, "")                     
+      369 +                elif isinstance(action, MoveAction):          
+      370 +                    tie_breaker = (1, (action.target_position.
+          +row, action.target_position.col))                             
+      371 +                else:                                         
+      372 +                    # ProposeAction with no benefit - lowest p
+          +riority                                                       
+      373 +                    tie_breaker = (2, action.target_id if isin
+          +stance(action, ProposeAction) else "")                        
+      374 
+      375              # Update if better value, or same value with small
+           er tie-breaker
+      376              if value > best_value or (value == best_value and
+           tie_breaker < best_tie_breaker):
+
+● Bash(uv run pytest tests/scenarios/test_two_agent.py::TestTwoAgentNoTradeScena
+      rio::test_no_trade_when_co_located -v --tb=short 2>&1)
+  ⎿ ============================= test session starts                    
+    =====================
+    =========
+    platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0 --
+    /home/c
+    … +12 lines (ctrl+o to expand)
+
+● Now let me run the full test suite to verify everything passes.
+
+● Bash(timeout 150 uv run pytest -m "not slow" -q --tb=no 2>&1 |   timeout: 2m 
+      tail -5)                                                     40s
+  ⎿   /home/cmf/Work/microecon/tests/test_matching.py:430:               
+    DeprecationWarni
+    ng: StableRoommatesMatchingProtocol is deprecated. It will be
+    redesigne
+    d to fit the action-budget tick model. See docs/current/ROADMAP.md
+    §7.3
+    … +5 lines (ctrl+o to expand)
+
+● All 677 tests pass.
+
+● Summary of fixes:
+
+  1. Marked slow tests (>5s) with @pytest.mark.slow:
+    - test_market_emergence_with_rubinstein (12.7s)
+    - test_market_emergence_with_noisy_info (13.6s)
+    - test_full_reproducibility (7.3s)
+    - test_run_comparison_multiple_seeds (4.2s)
+    - test_cartesian_product (4.0s)
+  2. Fixed tie-breaking in RationalDecisionProcedure.choose():
+    - Added deterministic lexicographic tie-breaking by target_id/position
+    - When value > 0: Propose > Move > Wait (take beneficial action)
+    - When value ≤ 0: Wait > Move > Propose (don't act without benefit)
+  3. Fixed test with random agent IDs causing flakiness (test_noisy_info_affects_search)
+
+  Current test status:
+  - 677 passed, 45 skipped, 6 deselected (slow)
+  - Runtime: ~2 minutes without slow tests
+  - 12 deprecation warnings for StableRoommatesMatchingProtocol
+
+  Now, regarding the broader architectural review - the tests are passing, but we should discuss what still needs review for the new 3-phase architecture. Want me to document what tests/areas should be reviewed more thoroughly, or is there a specific area you'd like to focus on?
+
+✻ Sautéed for 6m 50s
+
+❯ earlier, we had to fix an issue with tests coding endowments rather than  
+  holdings. this indicates to me that there may be more issues like this,   
+  where the tests "pass" but may be testing the wrong thing. let's do       
+  another deep dive with this in mind and discuss findings.                 
+
+● Good catch. Let me do a thorough investigation of the endowment vs holdings semantics and look for other similar issues where tests may pass but test the wrong thing.
+
+● Bash(git show d80d43a --stat)
+  ⎿  commit d80d43aa75afcc4c23b71da024c4990a142607f0                
+     Author: Christopher Michael Funderburk <cmfunderburk@gmail.com>
+     Date:   Sat Jan 10 00:38:21 2026 -0600
+     … +42 lines (ctrl+o to expand)
+
+● Search(pattern: "\.endowment|\.holdings", path: "tests", output_mode:
+        "content", head_limit: 100)
+  ⎿  Found 100 lines (ctrl+o to expand)
+
+● Read(microecon/agent.py)
+  ⎿  Read 80 lines
+
+● Read(microecon/agent.py)
+  ⎿  Read 100 lines
+
+● Read(tests/scenarios/test_trading_chain.py)
+  ⎿  Read 80 lines
+
+● Let me look for tests that are checking post-trade state specifically.
+
+● Search(pattern: "after.*trade|post.?trade|equilibrium|traded", path:
+        "tests/scenarios")
+  ⎿  Found 4 files (ctrl+o to expand)
+
+● Search(pattern: "\.endowment", path: "tests/scenarios/test_hub_and_spoke.py",
+        output_mode: "content")
+  ⎿  Found 25 lines (ctrl+o to expand)
+
+● Read(tests/scenarios/test_hub_and_spoke.py)
+  ⎿  Read 100 lines
+
+● Search(pattern: "class TestMixedHubAndSpokeStage2|class
+        TestMixedHubAndSpokeStage3", path:
+        "tests/scenarios/test_hub_and_spoke.py", output_mode: "content")
+  ⎿  Found 163 lines (ctrl+o to expand)
+
+● Read(tests/scenarios/test_hub_and_spoke.py)
+  ⎿  Read 120 lines
+
+● Stage2 tests correctly use holdings. Let me now look for other architectural issues - tests that assume old single-tick trade execution or deprecated features.
+
+● Search(pattern: "CommitmentState|matching_protocol|StableRoommates", path:
+        "tests", output_mode: "content", head_limit: 50)
+  ⎿  Found 50 lines (ctrl+o to expand)
+
+● Search(pattern: "sim\.step\(\)|trades = sim\.step|step\(\) ==|len\(trades\)",
+        path: "tests", output_mode: "content", head_limit: 80)
+  ⎿  Found 56 lines (ctrl+o to expand)
+
+● Read(docs/current/AGENT-ARCHITECTURE.md)
+  ⎿  Read 150 lines
+
+● Read(docs/current/AGENT-ARCHITECTURE.md)
+  ⎿  Read 150 lines
+
+● Search(pattern: "def _execute_actions|propose.*accept|same.?tick", path:
+        "microecon/simulation.py", output_mode: "content")
+  ⎿  Found 47 lines (ctrl+o to expand)
+
+● Read(microecon/simulation.py)
+  ⎿  Read 100 lines
+
+● Search(pattern: "class CommitmentState", path: "microecon", output_mode:
+        "content")
+  ⎿  Found 21 lines (ctrl+o to expand)
+
+● Search(pattern: "CommitmentState|commitment_state", path: "microecon",
+        output_mode: "content")
+  ⎿  Found 3 lines (ctrl+o to expand)
+
+● Search(pattern: "InteractionState|interaction_state", path: "microecon")
+  ⎿  Found 5 files (ctrl+o to expand)
+
+● Let me check what the test suite tests for InteractionState to make sure we have coverage.
+
+● Search(pattern: "InteractionState|interaction_state", path: "tests",
+        output_mode: "content", head_limit: 30)
+  ⎿  Found 0 lines 
+
+● No tests for InteractionState at all. Let me compile all findings.
+
+● Bash(echo "=== Files with InteractionState ==="; grep -l "InteractionState"
+      /home/cmf/Work/microecon/microecon/*.py; echo; echo "=== Test coverage
+      check ==="; grep -…)
+  ⎿  === Files with InteractionState ===          
+     /home/cmf/Work/microecon/microecon/actions.py
+     /home/cmf/Work/microecon/microecon/agent.py
+     … +5 lines (ctrl+o to expand)
+
+● ---
+  Deep Dive Findings: Test Suite Architecture Review
+
+  1. Endowment vs Holdings (Previously Fixed)
+
+  The commit d80d43a correctly updated scenario tests to use:
+  - endowment for initial/pre-trade state (disagreement point)
+  - holdings for current/post-trade state (mutable)
+
+  Status: ✅ Already fixed. Spot-checked Stage2/Stage3 tests in hub_and_spoke.py - they correctly use holdings for post-trade AgentType.
+
+  ---
+  2. Architecture Document vs Implementation Gap
+
+  AGENT-ARCHITECTURE.md describes multi-tick trades:
+  Tick T:   Agent A proposes
+  Tick T+1: Agent B observes and decides
+  Tick T+2: Negotiation phase
+  Tick T+3: Trade executes
+
+  Implementation uses same-tick trades:
+  # simulation.py:483-487
+  # Step 2: Process non-mutual proposals with same-tick accept/reject
+  # For non-mutual proposals, the target immediately decides whether to
+  # accept or reject. This avoids the timing problem where targets move
+  # away before they can respond to a proposal.
+
+  Impact: Tests pass because they're written for current (same-tick) implementation. If we ever switch to multi-tick model, most scenario tests would break.
+
+  Recommendation: Decide which model is canonical. Update either docs or implementation to match.
+
+  ---
+  3. CommitmentState vs InteractionState
+  Component: CommitmentState
+  Status: Deprecated (used by deprecated StableRoommatesMatchingProtocol)
+  Test Coverage: 10+ tests in test_matching.py
+  ────────────────────────────────────────
+  Component: InteractionState
+  Status: Active (new architecture, used by simulation)
+  Test Coverage: ZERO tests
+  The new InteractionState state machine (AVAILABLE → PROPOSAL_PENDING → NEGOTIATING) has no direct test coverage. It's only tested implicitly through simulation integration tests.
+
+  ---
+  4. Deprecated but Tested Code
+  ┌─────────────────────────────────┬─────────────┬────────────────────────────┐
+  │              Code               │   Status    │           Tests            │
+  ├─────────────────────────────────┼─────────────┼────────────────────────────┤
+  │                                 │ Deprecated  │ 12 tests in                │
+  │ StableRoommatesMatchingProtocol │ with        │ test_matching.py (run with │
+  │                                 │ warning     │  deprecation warnings)     │
+  ├─────────────────────────────────┼─────────────┼────────────────────────────┤
+  │ CommitmentState                 │ Deprecated  │ 10 tests in                │
+  │                                 │             │ test_matching.py           │
+  ├─────────────────────────────────┼─────────────┼────────────────────────────┤
+  │ Trading chain committed         │ Skipped     │ 36 tests in                │
+  │ scenarios                       │             │ test_trading_chain.py      │
+  └─────────────────────────────────┴─────────────┴────────────────────────────┘
+  The deprecated code still has tests that run (with warnings). These tests pass but test obsolete functionality.
+
+  ---
+  5. Tests That May Test Wrong Thing
+
+  A. No explicit InteractionState tests:
+  - State transitions (AVAILABLE → PROPOSAL_PENDING → NEGOTIATING → AVAILABLE)
+  - Cooldown logic (rejection cooldowns per-partner)
+  - Edge cases (adjacency loss during negotiation)
+
+  B. Implicit assumptions in scenario tests:
+  - All assume same-tick trade execution
+  - None test proposal rejection → cooldown behavior
+  - None test multi-proposal scenarios
+
+  ---
+  Recommended Actions
+
+  1. Add InteractionState unit tests - critical gap
+  2. Decide on tick model - sync docs with implementation
+  3. Consider removing deprecated tests - CommitmentState/StableRoommates tests add noise
+  4. Add negative path tests - proposal rejection, cooldowns, adjacency loss
+
+  Want me to prioritize any of these or explore any finding deeper?
+
+✻ Cogitated for 3m 39s
+
+❯ 2. single tick trades are intended behavior for now, the multi tick idea  
+  is an early stage brainstorm that may or may not end up implemented, tbd  
+  3. we should add tests for interactionstate, and in a later session we'll 
+  fully deprecate commitmentstate                                           
+  4. skip these tests and note that we'll do a cleanup pass on these later  
+  5. we'll need to fill out these tests as well, but may require some       
+  planning so we are sure we test the correct things                        
+
+● Clear direction. Let me execute on these.
+
+● Read(docs/current/AGENT-ARCHITECTURE.md)
+  ⎿  Read 60 lines
+
+● Update(docs/current/AGENT-ARCHITECTURE.md)
+  ⎿  Added 31 lines, removed 19 lines                                    
+      296 
+      297  ### 7.2 Bilateral Exchange Sequence
+      298 
+      299 -Trade requires mutual consent. The default model:             
+      299 +Trade requires mutual consent. **Current implementation: same-
+          +tick resolution.**                                            
+      300 
+      301  ```
+      302 -Bilateral Exchange Sequence                                   
+      302 +Bilateral Exchange Sequence (Current: Same-Tick)              
+      303  │
+      304 -├── Tick T: Agent A chooses Propose(target=B, terms=...)      
+      305 -│   ├── Proposer lock: configurable (locked = default)        
+      306 -│   │   - Locked: A waits for response, cannot act            
+      307 -│   │   - Unlocked: A can continue other activities           
+      308 -│   └── Multiple proposals: protocol-specific                 
+      309 -│       - Exclusive: one active proposal at a time            
+      310 -│       - Broadcast: can propose to multiple; first acceptance
+          - wins                                                         
+      304 +├── Tick T: Agent A chooses Propose(target=B)                 
+      305 +│   ├── B immediately evaluates proposal via DecisionProcedure
+          +.evaluate_proposal()                                          
+      306 +│   ├── If B accepts: bargaining protocol executes, trade comp
+          +letes                                                         
+      307 +│   └── If B rejects: A receives cooldown for B (cannot re-pro
+          +pose for N ticks)                                             
+      308  │
+      312 -├── Tick T+1: Agent B observes proposal                       
+      313 -│   ├── Visibility determined by information environment:     
+      314 -│   │   - Posted price → public within perception radius      
+      315 -│   │   - Targeted offer → private to recipient               
+      316 -│   └── B chooses Accept(A) | Reject | other action           
+      309 +└── Same tick: Trade executes (if accepted)                   
+      310 +    └── Holdings update for both agents                       
+      311 +```                                                           
+      312 +                                                              
+      313 +This same-tick model:                                         
+      314 +- Avoids timing issues where targets move away before respondi
+          +ng                                                            
+      315 +- Simplifies reasoning about trade execution                  
+      316 +- Makes surplus calculations straightforward (state doesn't ch
+          +ange mid-negotiation)                                         
+      317 +                                                              
+      318 +**Future Extension: Multi-Tick Negotiation**                  
+      319 +                                                              
+      320 +For scenarios requiring explicit transaction costs, multi-tick
+          + negotiation may be added:                                    
+      321 +                                                              
+      322 +```                                                           
+      323 +Bilateral Exchange Sequence (Future: Multi-Tick)              
+      324  │
+      318 -├── Tick T+2: Negotiation phase (if accepted)                 
+      319 -│   ├── Bargaining protocol executes                          
+      320 -│   ├── Duration: configurable (1 tick default)               
+      321 -│   └── Can fail (no zone of agreement)                       
+      325 +├── Tick T: Agent A chooses Propose(target=B)                 
+      326 +│   └── A enters PROPOSAL_PENDING state                       
+      327  │
+      328 +├── Tick T+1: Agent B observes proposal, chooses Accept | Reje
+          +ct                                                            
+      329 +│   └── If accept: both enter NEGOTIATING state               
+      330 +│                                                             
+      331 +├── Tick T+2: Negotiation phase                               
+      332 +│   └── Bargaining protocol executes (configurable duration)  
+      333 +│                                                             
+      334  └── Tick T+3: Trade executes (if negotiation succeeds)
+      324 -    └── Holdings update for both agents                       
+      335  ```
+      336 
+      337 +This extension would make transaction costs explicit (proposal
+          + cost, negotiation cost, coordination failure cost) but is not
+          + yet implemented.                                             
+      338 +                                                              
+      339  ### 7.3 Failed Actions Yield Information
+      340 
+      341  When actions fail (e.g., proposal rejected, target moved away)
+           :
+
+● Update(docs/current/AGENT-ARCHITECTURE.md)
+  ⎿  Added 11 lines, removed 1 line                                      
+      346 
+      347  ### 7.4 Transaction Costs Made Explicit
+      348 
+      349 +**Current implementation (same-tick trades):**                
+      350 +                                                              
+      351  | Phase | Tick Cost | What It Represents |
+      352  |-------|-----------|-------------------|
+      353  | Search | Movement ticks | Physical/information search costs
+           |
+      354 +| Proposal + Trade | 0 extra (same tick) | Proposer's action, 
+          +immediate resolution |                                        
+      355 +| Failed proposal | Cooldown (N ticks) | Cannot re-propose to 
+          +rejector |                                                    
+      356 +                                                              
+      357 +**Future extension (multi-tick trades):**                     
+      358 +                                                              
+      359 +| Phase | Tick Cost | What It Represents |                    
+      360 +|-------|-----------|-------------------|                     
+      361 +| Search | Movement ticks | Physical/information search costs 
+          +|                                                             
+      362  | Proposal | 1 tick (+ wait if locked) | Cost of initiating ex
+           change |
+      363  | Negotiation | 1+ ticks (configurable) | Bargaining/contracti
+           ng costs |
+      364  | Failed proposal | Wasted tick(s) | Risk of coordination fail
+           ure |
+      365 
+      356 -This operationalizes transaction cost economics. Different pro
+          -tocols have different tick costs, making institutional compari
+          -son meaningful.                                               
+      366 +The multi-tick model would operationalize transaction cost eco
+          +nomics more fully. Different protocols would have different ti
+          +ck costs, making institutional comparison meaningful.         
+      367 
+      368  ### 7.5 Multilateral Extension Point
+      369 
+
+● Read(tests/test_matching.py)
+  ⎿  Read 60 lines
+
+● Update(tests/test_matching.py)
+  ⎿  Added 8 lines, removed 2 lines                                      
+      38 
+      39 
+      40  # =============================================================
+          ================
+      41 -# CommitmentState Tests                                        
+      41 +# CommitmentState Tests (DEPRECATED - cleanup scheduled)       
+      42  # =============================================================
+          ================
+      43 
+      44 
+      45 +@pytest.mark.skip(reason="CommitmentState deprecated; replaced 
+         +by InteractionState. Cleanup scheduled.")                      
+      46  class TestCommitmentState:
+      46 -    """Tests for CommitmentState tracking."""                  
+      47 +    """Tests for CommitmentState tracking.                     
+      48 
+      49 +    DEPRECATED: CommitmentState was designed for StableRoommate
+         +sMatchingProtocol.                                             
+      50 +    The new architecture uses InteractionState for agent exchan
+         +ge state tracking.                                             
+      51 +    These tests are skipped pending full deprecation of Commitm
+         +entState.                                                      
+      52 +    """                                                        
+      53 +                                                               
+      54      def test_initial_state_empty(self):
+      55          """New commitment state has no commitments."""
+      56          state = CommitmentState()
+
+● Search(pattern: "class TestStableRoommatesMatchingProtocol|class
+        TestIrvingAlgorithmEdgeCases", path: "tests/test_matching.py",
+        output_mode: "content")
+  ⎿  Found 13 lines (ctrl+o to expand)
+
+● Update(tests/test_matching.py)
+  ⎿  Added 2 lines, removed 1 line                                       
+      183 
+      184 
+      185  # ============================================================
+           =================
+      186 -# StableRoommatesMatchingProtocol Tests                       
+      186 +# StableRoommatesMatchingProtocol Tests (DEPRECATED - cleanup 
+          +scheduled)                                                    
+      187  # ============================================================
+           =================
+      188 
+      189 
+      190 +@pytest.mark.skip(reason="StableRoommatesMatchingProtocol depr
+          +ecated; conflicts with action-budget tick model. Cleanup sched
+          +uled.")                                                       
+      191  class TestStableRoommatesMatchingProtocol:
+      192      """Tests for Irving's stable roommates algorithm."""
+      193 
+
+● Read(tests/test_matching.py)
+  ⎿  Read 20 lines
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ wait hold on 
+
+● Pausing. What's up?
+
+❯ the updates you made to the doc about multi-tick are mistaken, we need to 
+  discuss this further. If the current implementation is in fact not using  
+  an action budget, it *should*. The point of the proposal/accept occuring  
+  int he same tick is to prevent agents from missing trade opportunities    
+  while moving. The actual trade itself *should* take an action budget. Am  
+  I missing something here?                                                 
+
+● You're right, let me make sure I understand correctly:
+
+  Same-tick proposal resolution (current):
+  - Agent A uses their action budget to Propose(B)
+  - B immediately evaluates and accepts/rejects (this is B's response, not B's action)
+  - If accepted, trade executes
+
+  The action budget aspect:
+  - A's Propose action consumes A's action budget for that tick
+  - A cannot move AND propose in the same tick
+  - The "same-tick" part is just that B responds immediately, not that trade is "free"
+
+  So the trade itself does cost an action (the propose), it's just that B's acceptance and the bargaining resolution happen within that same tick rather than requiring B to wait until next tick to respond?
+
+  Is that the correct model?
+
+❯ Propose/Accept/Refuse should *not* cost an action. The trade itself is    
+  what costs the action. Propose/Accept/Refuse are more like intermediate   
+  layers between perception and action -- they are coordinating mechanisms  
+  that allow the negotiation to begin.                                      
+
+● That's a key clarification. So:
+
+  Propose/Accept/Refuse = coordination mechanism (like a handshake to establish mutual consent)
+  - No action budget cost
+  - Happens as part of deciding what to do
+
+  Trade execution = the actual action
+  - Consumes action budget for both parties
+  - Holdings update
+
+  So in a tick, an agent who successfully trades cannot also move (trade consumed their budget), but an agent whose proposal was rejected could still move (no trade occurred, budget still available)?
+
+  And this means the current implementation may be wrong if it allows agents to both trade AND move in the same tick? Let me check what actually happens...
+
+
+

@@ -14,6 +14,10 @@ Reference document mapping canonical microeconomic theory to concepts used in th
 | Kreps, *Microeconomic Foundations II: Imperfect Competition and Strategic Interaction* (2023) | **Kreps II** | Game theory, information economics, bargaining, matching, mechanisms |
 | Osborne & Rubinstein, *Bargaining and Markets* (1990) | **O&R-B** | Bilateral bargaining: axiomatic and strategic approaches |
 | Osborne & Rubinstein, *A Course in Game Theory* (1994) | **O&R-G** | Game theory foundations: Nash, extensive form, repeated games |
+| Jaffe, Minton, Mulligan & Murphy, *Chicago Price Theory* (2019) | **CPT** | Applied price theory: market equilibrium, factor markets, durable goods |
+| Jackson, *Social and Economic Networks* (2008) | **Jackson** | Network formation, network games, diffusion, social learning |
+
+**Note on CPT:** Chicago Price Theory explicitly distinguishes itself from "microeconomics" as typically taught. Where Kreps and O&R provide rigorous theoretical foundations (axiomatic utility, game-theoretic equilibrium), CPT emphasizes the scope and practical capabilities of price-theoretic analysis: market equilibrium, competitive analysis, incidence, and measurement. It complements the formal theory with applied intuition and empirical orientation.
 
 ### Supplementary References
 
@@ -126,6 +130,61 @@ PDF files for primary sources are located in `references/`:
 | `14-stable-sets.pdf` | Ch 14: Stable Sets, Bargaining Set, Shapley Value |
 | `15-nash-solution.pdf` | Ch 15: The Nash Solution |
 
+### CPT: Chicago Price Theory
+
+`references/chicago-price-theory/`
+
+| File | Content |
+|------|---------|
+| `00-front-matter.pdf` | Front Matter, Table of Contents |
+| `00-introduction.pdf` | Introduction: Chicago Price Theory |
+| `01-utility-maximization-demand.pdf` | Ch 1: Utility Maximization and Demand |
+| `02-cost-minimization-demand.pdf` | Ch 2: Cost Minimization and Demand |
+| `03-marshallian-hicksian-systems.pdf` | Ch 3: Relating the Marshallian and Hicksian Systems |
+| `04-price-indices.pdf` | Ch 4: Price Indices: Consumer Theory Guides Measurement |
+| `05-nudges-consumer-theory.pdf` | Ch 5: Nudges in Consumer Theory |
+| `06-short-long-run-demand.pdf` | Ch 6: Short- and Long-Run Demand, with an Application to Addiction |
+| `07-discrete-choice-product-quality.pdf` | Ch 7: Discrete Choice and Product Quality |
+| `08-location-choice.pdf` | Ch 8: Location Choice: Equilibrium Compensating Differences |
+| `09-learning-by-doing.pdf` | Ch 9: Learning by Doing and On-the-Job Investment |
+| `10-production-profits-factor-demand.pdf` | Ch 10: Production, Profits, and Factor Demand |
+| `11-industry-model.pdf` | Ch 11: The Industry Model |
+| `12-consequences-of-prohibition.pdf` | Ch 12: The Consequences of Prohibition |
+| `13-price-theoretic-perspective-core.pdf` | Ch 13: A Price-Theoretic Perspective on the Core |
+| `14-multiple-factor-industry-model.pdf` | Ch 14: Multiple-Factor Industry Model |
+| `15-durable-production-factors.pdf` | Ch 15: Durable Production Factors |
+| `16-capital-accumulation-continuous-time.pdf` | Ch 16: Capital Accumulation in Continuous Time |
+| `17-investment-planning-perspective.pdf` | Ch 17: Investment from a Planning Perspective |
+| `18-applied-factor-supply-demand-1.pdf` | Ch 18: Technological Progress and Capital-Income Tax Incidence |
+| `19-applied-factor-supply-demand-2.pdf` | Ch 19: Factor-Biased Technological Progress and Factor Shares |
+| `20-investments-health-value-life.pdf` | Ch 20: Investments in Health and the Value of a Statistical Life |
+| `P1-99-homework.pdf` | Part I Homework Problems |
+| `P2-99-homework.pdf` | Part II Homework Problems |
+| `P3-99-homework.pdf` | Part III Homework Problems |
+| `99-notes.pdf` | Notes |
+| `99-bibliography.pdf` | Bibliography |
+| `99-index.pdf` | Index |
+
+### Jackson: Social and Economic Networks
+
+`references/jackson-social-economic-networks/`
+
+| File | Content |
+|------|---------|
+| `01-introduction.pdf` | Ch 1: Introduction |
+| `02-representing-measuring-networks.pdf` | Ch 2: Representing and Measuring Networks |
+| `03-empirical-background.pdf` | Ch 3: Empirical Background on Social and Economic Networks |
+| `04-random-graph-models.pdf` | Ch 4: Random Graph-Based Models of Networks |
+| `05-growing-random-networks.pdf` | Ch 5: Growing Random Networks |
+| `06-strategic-network-formation.pdf` | Ch 6: Strategic Network Formation |
+| `07-diffusion-through-networks.pdf` | Ch 7: Diffusion through Networks |
+| `08-learning-and-networks.pdf` | Ch 8: Learning and Networks |
+| `09-decisions-behavior-games.pdf` | Ch 9: Decisions, Behavior, and Games on Networks |
+| `10-networked-markets.pdf` | Ch 10: Networked Markets |
+| `11-game-theoretic-network-formation.pdf` | Ch 11: Game-Theoretic Modeling of Network Formation |
+| `12-allocation-rules-cooperative-games.pdf` | Ch 12: Allocation Rules, Networks, and Cooperative Games |
+| `13-observing-measuring-social-interaction.pdf` | Ch 13: Observing and Measuring Social Interaction |
+
 ---
 
 ## Chapter Indices
@@ -189,6 +248,78 @@ PDF files for primary sources are located in `references/`:
 | 14 | Stable Sets, the Bargaining Set, and the Shapley Value |
 | 15 | The Nash Solution |
 
+### CPT: Chicago Price Theory
+
+**Part I: Prices and Substitution Effects**
+
+| Chapter | Title |
+|---------|-------|
+| 1 | Utility Maximization and Demand |
+| 2 | Cost Minimization and Demand |
+| 3 | Relating the Marshallian and Hicksian Systems |
+| 4 | Price Indices: Consumer Theory Guides Measurement |
+| 5 | Nudges in Consumer Theory |
+| 6 | Short- and Long-Run Demand, with an Application to Addiction |
+
+**Part II: Market Equilibrium**
+
+| Chapter | Title |
+|---------|-------|
+| 7 | Discrete Choice and Product Quality |
+| 8 | Location Choice: Equilibrium Compensating Differences |
+| 9 | Learning by Doing and On-the-Job Investment |
+| 10 | Production, Profits, and Factor Demand |
+| 11 | The Industry Model |
+| 12 | The Consequences of Prohibition |
+| 13 | A Price-Theoretic Perspective on the Core |
+| 14 | Multiple-Factor Industry Model |
+
+**Part III: Technological Progress and Markets for Durable Goods**
+
+| Chapter | Title |
+|---------|-------|
+| 15 | Durable Production Factors |
+| 16 | Capital Accumulation in Continuous Time |
+| 17 | Investment from a Planning Perspective |
+| 18 | Technological Progress and Capital-Income Tax Incidence |
+| 19 | Factor-Biased Technological Progress and Factor Shares |
+| 20 | Investments in Health and the Value of a Statistical Life |
+
+### Jackson: Social and Economic Networks
+
+**Part I: Background and Fundamentals**
+
+| Chapter | Title |
+|---------|-------|
+| 1 | Introduction |
+| 2 | Representing and Measuring Networks |
+| 3 | Empirical Background on Social and Economic Networks |
+
+**Part II: Models of Network Formation**
+
+| Chapter | Title |
+|---------|-------|
+| 4 | Random Graph-Based Models of Networks |
+| 5 | Growing Random Networks |
+| 6 | Strategic Network Formation |
+
+**Part III: Implications of Network Structure**
+
+| Chapter | Title |
+|---------|-------|
+| 7 | Diffusion through Networks |
+| 8 | Learning and Networks |
+| 9 | Decisions, Behavior, and Games on Networks |
+| 10 | Networked Markets |
+
+**Part IV: Methods, Tools, and Empirical Analysis**
+
+| Chapter | Title |
+|---------|-------|
+| 11 | Game-Theoretic Modeling of Network Formation |
+| 12 | Allocation Rules, Networks, and Cooperative Games |
+| 13 | Observing and Measuring Social Interaction |
+
 ---
 
 ## Topic Coverage
@@ -227,14 +358,20 @@ PDF files for primary sources are located in `references/`:
 | Consumer's problem (CP) | Kreps I | Ch 3.1 |
 | Existence of solutions | Kreps I | Ch 3.2 |
 | Marshallian demand | Kreps I | Ch 3.3 |
+| Marshallian demand (applied) | CPT | Ch 1 |
 | Calculus approach (Lagrangian) | Kreps I | Ch 3.4 |
 | Revealed preference | Kreps I | Ch 4.1 |
 | GARP and Afriat's theorem | Kreps I | Ch 4.2 |
 | Own-price effects | Kreps I | Ch 4.3 |
 | Expenditure minimization | Kreps I | Ch 10.1-10.3 |
+| Cost minimization and demand | CPT | Ch 2 |
 | Hicksian demand | Kreps I | Ch 10.3 |
+| Hicksian demand (applied) | CPT | Ch 2 |
 | Slutsky equation | Kreps I | Ch 11.1 |
+| Slutsky equation (applied) | CPT | Ch 3 |
 | Income/substitution effects | Kreps I | Ch 11.4 |
+| Price indices | CPT | Ch 4 |
+| Short-run vs long-run demand | CPT | Ch 6 |
 
 **Key theorems:**
 1. **Weierstrass:** Continuous function on compact set attains maximum
@@ -249,9 +386,15 @@ PDF files for primary sources are located in `references/`:
 |-------|--------|-----------|
 | Production-possibility sets | Kreps I | Ch 9.1 |
 | Profit maximization | Kreps I | Ch 9.2-9.3 |
+| Profit maximization (applied) | CPT | Ch 10 |
 | Afriat for firms | Kreps I | Ch 9.4 |
 | Profit function properties | Kreps I | Ch 9.5-9.8 |
 | Cost minimization | Kreps I | Ch 9.9 |
+| Cost minimization (applied) | CPT | Ch 10 |
+| Firm's Slutsky equation | CPT | Ch 10 |
+| Industry model (supply-demand) | CPT | Ch 11 |
+| Multiple-factor industry model | CPT | Ch 14 |
+| Durable production factors | CPT | Ch 15-17 |
 
 **Key theorems:**
 1. **Hotelling's lemma:** ∂π/∂p = y (supply), ∂π/∂w = -x (factor demand)
@@ -267,6 +410,7 @@ PDF files for primary sources are located in `references/`:
 | Contract curve | Kreps I | Ch 8.4 |
 | Edgeworth box | Kreps I | Ch 14.3 |
 | Core of exchange economy | Kreps I | Ch 15.3 |
+| Core (price-theoretic perspective) | CPT | Ch 13 |
 | Nash bargaining solution | Kreps II | Ch 23 |
 | Rubinstein alternating offers | Kreps II | Ch 23 |
 | Bargaining with incomplete info | Kreps II | Ch 23 |
@@ -314,6 +458,54 @@ PDF files for primary sources are located in `references/`:
 1. **Gale-Shapley (1962):** Deferred acceptance yields stable matching
 2. **Roth (1982):** DA is strategy-proof for proposing side
 3. **Law of one price:** Under sufficient competition, prices converge
+
+---
+
+### Networks
+
+| Topic | Source | Reference |
+|-------|--------|-----------|
+| Network representation (graphs, adjacency) | Jackson | Ch 2.1 |
+| Degree distributions | Jackson | Ch 2.2, 3.2.3 |
+| Clustering and transitivity | Jackson | Ch 2.2.3, 3.2.2 |
+| Centrality measures | Jackson | Ch 2.2.4 |
+| Small worlds | Jackson | Ch 3.2.1, 4.1.2 |
+| Homophily | Jackson | Ch 3.2.6 |
+| Strength of weak ties | Jackson | Ch 3.2.7 |
+| Random graph models (Erdős-Rényi) | Jackson | Ch 4.1.1 |
+| Configuration model | Jackson | Ch 4.1.4 |
+| Giant components, phase transitions | Jackson | Ch 4.2.2-4.2.4 |
+| Preferential attachment | Jackson | Ch 5.2 |
+| Pairwise stability | Jackson | Ch 6.1 |
+| Efficient networks | Jackson | Ch 6.2 |
+| Stability vs. efficiency tension | Jackson | Ch 6.6 |
+| Diffusion and contagion | Jackson | Ch 7.2 |
+| SIR/SIS models | Jackson | Ch 7.2.3-7.2.5 |
+| Network navigation and search | Jackson | Ch 7.3 |
+| Social learning (DeGroot model) | Jackson | Ch 8.3 |
+| Bayesian learning on networks | Jackson | Ch 8.2 |
+| Graphical games | Jackson | Ch 9.2 |
+| Strategic complements/substitutes | Jackson | Ch 9.3.2 |
+| Network games equilibria | Jackson | Ch 9.3.3, 9.7 |
+| Networked labor markets | Jackson | Ch 10.2 |
+| Bilateral trading on networks | Jackson | Ch 10.3.2 |
+| Myerson value | Jackson | Ch 12.2.1, 12.3.5 |
+| Core in network settings | Jackson | Ch 12.4.2 |
+
+**Key concepts:**
+
+1. **Pairwise Stability:** A network is pairwise stable if no player wants to delete a link, and no pair of players both want to add a link between them. (Jackson Ch 6.1)
+
+2. **Efficiency vs. Stability:** Under general conditions, efficient networks need not be pairwise stable, and pairwise stable networks need not be efficient—network externalities create fundamental tensions. (Jackson Ch 6.6)
+
+3. **DeGroot Learning:** Agents update beliefs by weighted averaging of neighbors' opinions; convergence to consensus depends on network structure (aperiodicity, strong connectedness). (Jackson Ch 8.3)
+
+4. **Graphical Games:** Games where player payoffs depend only on neighbors' actions; network structure determines equilibrium existence and computation. (Jackson Ch 9.2)
+
+**Key theorems:**
+1. **Phase transition (Erdős-Rényi):** Giant component emerges when average degree exceeds 1
+2. **Myerson (1977):** Unique allocation rule satisfying component balance and equal bargaining power
+3. **Jackson-Wolinsky (1996):** No anonymous, component-balanced allocation rule guarantees efficient pairwise stable networks
 
 ---
 
@@ -387,6 +579,25 @@ PDF files for primary sources are located in `references/`:
 1. **Gibbard-Satterthwaite:** No non-dictatorial voting mechanism is strategy-proof for unrestricted preferences
 2. **Maskin (1999):** Monotonicity is necessary for Nash implementation; with no veto power, it's sufficient
 3. **VCG:** Efficient allocation with dominant strategy incentive compatibility when transfers are allowed
+
+---
+
+### Applied Topics (CPT)
+
+Chicago Price Theory provides extended applications demonstrating the scope of price-theoretic analysis:
+
+| Topic | Reference | Description |
+|-------|-----------|-------------|
+| Behavioral economics / nudges | Ch 5 | Consumer misinformation from price-theoretic perspective |
+| Addiction and habit formation | Ch 6 | Short- vs long-run demand, consumption stocks |
+| Discrete choice and product quality | Ch 7 | Market demand as distribution function, heterogeneous agents |
+| Location choice / compensating differences | Ch 8 | Rent gradients, spatial equilibrium |
+| Learning by doing / human capital | Ch 9 | On-the-job investment, training |
+| Prohibition economics | Ch 12 | Legalization multiplier, enforcement costs |
+| Exclusive dealing / quantity discounts | Ch 13 | Off-Marshallian-curve outcomes |
+| Tax incidence | Ch 18 | Capital-income tax, corporate tax incidence |
+| Factor shares and growth | Ch 19 | Technological bias, Malthusian economy |
+| Health investments / value of statistical life | Ch 20 | Self-protection, VSL measurement |
 
 ---
 

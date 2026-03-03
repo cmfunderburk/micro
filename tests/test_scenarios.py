@@ -13,6 +13,8 @@ from microecon.scenarios import (
     ScenarioLoadError,
 )
 
+pytestmark = pytest.mark.simulation
+
 
 class TestAgentConfig:
     """Tests for AgentConfig dataclass."""
@@ -151,4 +153,4 @@ class TestMarketEmergenceScenario:
         assert result.analysis.n_agents == 10
         assert result.analysis.total_ticks == 20
         assert result.protocol_name == "nashbargaining"
-        assert result.matching_name == "opportunisticmatching"
+        assert result.matching_name == "bilateral_proposal"

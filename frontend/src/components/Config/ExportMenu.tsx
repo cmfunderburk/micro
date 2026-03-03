@@ -36,7 +36,7 @@ export function ExportMenu() {
 
     // Agent data
     lines.push('# Agents');
-    lines.push('id,position_row,position_col,endowment_x,endowment_y,alpha,utility,perception_radius,discount_factor');
+    lines.push('id,position_row,position_col,holdings_x,holdings_y,alpha,utility,perception_radius,discount_factor');
     for (const agent of agents) {
       lines.push(
         [
@@ -62,12 +62,12 @@ export function ExportMenu() {
           trade.tick,
           trade.agent1_id,
           trade.agent2_id,
-          trade.alpha1,
-          trade.alpha2,
-          trade.pre_endowment_1[0],
-          trade.pre_endowment_1[1],
-          trade.pre_endowment_2[0],
-          trade.pre_endowment_2[1],
+          trade.alpha1 ?? '',
+          trade.alpha2 ?? '',
+          trade.pre_holdings_1[0],
+          trade.pre_holdings_1[1],
+          trade.pre_holdings_2[0],
+          trade.pre_holdings_2[1],
           trade.post_allocation_1[0],
           trade.post_allocation_1[1],
           trade.post_allocation_2[0],

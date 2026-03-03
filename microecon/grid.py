@@ -259,6 +259,43 @@ class Grid:
         others.discard(agent.id)
         return others
 
+    def agents_adjacent_to(self, agent: Agent, include_same_position: bool = True) -> set[str]:
+        """
+        Get IDs of agents adjacent to (or at same position as) agent.
+
+        Uses Chebyshev distance <= 1, meaning 8-connected neighbors plus
+        optionally the same position.
+
+        Args:
+            agent: The agent to find neighbors for
+            include_same_position: If True, include agents at exact same position
+
+        Returns:
+            Set of agent IDs (excluding the querying agent)
+        """
+        pos = self.get_position(agent)
+        if pos is None:
+            return set()
+
+        result: set[str] = set()
+
+        # Check same position
+        if include_same_position:
+            result.update(self.agents_at(pos))
+
+        # Check 8-connected neighbors
+        for neighbor_pos in pos.neighbors(include_diagonal=True):
+            # Normalize for wrapping grids
+            neighbor_pos = self._normalize_position(neighbor_pos)
+            # Skip out-of-bounds positions for non-wrapping grids
+            if not self.wrap:
+                if not (0 <= neighbor_pos.row < self.size and 0 <= neighbor_pos.col < self.size):
+                    continue
+            result.update(self.agents_at(neighbor_pos))
+
+        result.discard(agent.id)
+        return result
+
     def _normalize_position(self, position: Position) -> Position:
         """Normalize position for wrapping grid."""
         if not self.wrap:

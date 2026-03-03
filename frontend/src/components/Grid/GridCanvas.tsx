@@ -12,23 +12,18 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useSimulationStore } from '@/store';
 import type { Agent, Trade } from '@/types/simulation';
+import { alphaToColor } from '@/lib/colors';
 
 interface GridCanvasProps {
   width?: number;
   height?: number;
 }
 
-// Map alpha (0-1) to color (red to blue via purple)
-function alphaToColor(alpha: number): string {
-  // HSL interpolation: 0 (red) = hue 0, 1 (blue) = hue 240
-  const hue = alpha * 240;
-  return `hsl(${hue}, 70%, 50%)`;
-}
-
 export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
   const tradeAnimationsRef = useRef<Map<string, { trade: Trade; startTime: number }>>(new Map());
+  const renderRef = useRef<(() => void) | undefined>(undefined);
 
   const agents = useSimulationStore((state) => state.agents);
   const gridSize = useSimulationStore((state) => state.gridSize);
@@ -427,11 +422,24 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
       ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 * opacity})`;
       ctx.lineWidth = 1;
       ctx.stroke();
+
+      // Draw interaction state indicator (inner ring)
+      const state = agent.interaction_state?.state;
+      if (state && state !== 'available') {
+        const stateColor = state === 'negotiating'
+          ? `rgba(34, 197, 94, ${opacity})`  // green-500 for negotiating
+          : `rgba(250, 204, 21, ${opacity})`; // yellow-400 for proposal_pending
+        ctx.strokeStyle = stateColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, drawRadius - 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
 
     // Continue animation loop if there are active trade animations
     if (tradeAnimationsRef.current.size > 0) {
-      animationRef.current = requestAnimationFrame(render);
+      animationRef.current = requestAnimationFrame(() => renderRef.current?.());
     }
   }, [
     agents,
@@ -455,6 +463,10 @@ export function GridCanvas({ width = 600, height = 600 }: GridCanvasProps) {
     showGroundTruth,
     isVisibleFromPerspective,
   ]);
+
+  useEffect(() => {
+    renderRef.current = render;
+  }, [render]);
 
   // Start render loop
   useEffect(() => {

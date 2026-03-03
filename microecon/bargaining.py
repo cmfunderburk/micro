@@ -4,17 +4,25 @@ Bargaining solutions for bilateral exchange.
 This module implements bargaining solutions for two agents with Cobb-Douglas
 preferences in a pure exchange economy:
 
-1. Nash Bargaining Solution (axiomatic approach)
-   - Characterized by Pareto efficiency, symmetry, IIA, scale invariance
+1. Nash Bargaining Solution (symmetric) — O&R Ch 2
+   - Axiomatic: Pareto efficiency, symmetry, IIA, scale invariance
    - Maximizes Nash product: (u1 - d1)(u2 - d2)
-   - Reference: O&R-B Ch 2, Kreps II Ch 23
+   - Power source: None (equal split)
 
-2. Rubinstein Alternating Offers (strategic approach)
-   - Unique Subgame Perfect Equilibrium with immediate agreement
-   - Proposer advantage: first-mover gets larger share
-   - Patience = bargaining power: higher δ → larger share
-   - Converges to Nash as δ → 1
-   - Reference: O&R-B Ch 3
+2. Rubinstein / Nash (Patience) — O&R Ch 3, BRW (1986)
+   - BRW limit of alternating-offers SPE
+   - Power source: Patience (discount factors)
+   - Higher δ → larger share; equal δ → symmetric Nash
+
+3. Asymmetric Nash (Power) — O&R Ch 2.6
+   - Weighted Nash product: (u1 - d1)^β × (u2 - d2)^(1-β)
+   - Power source: Exogenous bargaining_power attribute
+   - β = w1 / (w1 + w2)
+
+4. Take-It-Or-Leave-It (TIOLI) — O&R Ch 3
+   - Proposer extracts all surplus
+   - Power source: Commitment / first-mover advantage
+   - Responder at indifference (utility == disagreement)
 
 The disagreement point is each agent's utility from their endowment
 (no trade = consume own endowment).
@@ -27,6 +35,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional, TYPE_CHECKING
 import math
+import random
 
 from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
@@ -559,6 +568,235 @@ def compute_mutual_surplus(
 
 
 # =============================================================================
+# Take-It-Or-Leave-It (TIOLI) Bargaining
+# =============================================================================
+
+
+def tioli_bargaining_solution(
+    prefs_1: CobbDouglas,
+    endowment_1: Bundle,
+    prefs_2: CobbDouglas,
+    endowment_2: Bundle,
+    proposer: int = 1,
+) -> BargainingOutcome:
+    """
+    Compute the Take-It-Or-Leave-It (TIOLI) bargaining solution.
+
+    In TIOLI bargaining, the proposer makes a single offer that the responder
+    must accept or reject. The optimal strategy for the proposer is to offer
+    the responder exactly their disagreement utility (outside option), extracting
+    all remaining surplus.
+
+    This is a closed-form solution (not asymmetric Nash with extreme β), which:
+    - Ensures responder utility exactly equals disagreement utility
+    - Avoids numerical edge cases with β→1
+    - Is semantically cleaner and more interpretable
+
+    Properties (O&R Ch 3):
+    - Proposer extracts all surplus: No feasible allocation gives proposer more
+      while responder ≥ disagreement
+    - Responder at indifference: responder_utility == disagreement_utility (within 1e-6)
+    - Pareto efficient: Allocation on contract curve
+    - Proposer identity matters: Swapping proposer swaps surplus recipient
+
+    For Cobb-Douglas preferences, we find the point on the responder's disagreement
+    indifference curve that maximizes proposer utility subject to feasibility.
+
+    Reference: Osborne & Rubinstein, Bargaining and Markets, Chapter 3
+
+    Args:
+        prefs_1: Agent 1's Cobb-Douglas preferences
+        endowment_1: Agent 1's initial endowment
+        prefs_2: Agent 2's Cobb-Douglas preferences
+        endowment_2: Agent 2's initial endowment
+        proposer: Which agent proposes (1 or 2). Default is 1.
+
+    Returns:
+        BargainingOutcome with the TIOLI solution
+
+    Raises:
+        ValueError: If proposer not in {1, 2}
+    """
+    if proposer not in (1, 2):
+        raise ValueError(f"proposer must be 1 or 2, got {proposer}")
+
+    # Total endowment (feasibility constraint)
+    W_x = endowment_1.x + endowment_2.x
+    W_y = endowment_1.y + endowment_2.y
+
+    # Disagreement utilities
+    d1 = prefs_1.utility(endowment_1)
+    d2 = prefs_2.utility(endowment_2)
+
+    # Check for degenerate cases
+    if W_x <= 0 or W_y <= 0:
+        return BargainingOutcome(
+            allocation_1=endowment_1,
+            allocation_2=endowment_2,
+            utility_1=d1,
+            utility_2=d2,
+            gains_1=0.0,
+            gains_2=0.0,
+            trade_occurred=False,
+        )
+
+    # Assign proposer and responder
+    if proposer == 1:
+        alpha_p, alpha_r = prefs_1.alpha, prefs_2.alpha
+        d_r = d2  # Responder's disagreement utility
+    else:
+        alpha_p, alpha_r = prefs_2.alpha, prefs_1.alpha
+        d_r = d1  # Responder's disagreement utility
+
+    # Find optimal allocation using golden section search
+    allocation_p, allocation_r = _solve_tioli(alpha_p, alpha_r, W_x, W_y, d_r)
+
+    # Map back to agent 1 and agent 2
+    if proposer == 1:
+        allocation_1, allocation_2 = allocation_p, allocation_r
+    else:
+        allocation_1, allocation_2 = allocation_r, allocation_p
+
+    u1 = prefs_1.utility(allocation_1)
+    u2 = prefs_2.utility(allocation_2)
+
+    # Verify trade is individually rational for BOTH agents
+    # Proposer should gain, responder should be at least at disagreement
+    # This catches edge cases where _solve_tioli returns infeasible fallback
+    if u1 < d1 - 1e-9 or u2 < d2 - 1e-9:
+        # Individual rationality violated - no beneficial trade exists
+        return BargainingOutcome(
+            allocation_1=endowment_1,
+            allocation_2=endowment_2,
+            utility_1=d1,
+            utility_2=d2,
+            gains_1=0.0,
+            gains_2=0.0,
+            trade_occurred=False,
+        )
+
+    return BargainingOutcome(
+        allocation_1=allocation_1,
+        allocation_2=allocation_2,
+        utility_1=u1,
+        utility_2=u2,
+        gains_1=u1 - d1,
+        gains_2=u2 - d2,
+        trade_occurred=True,
+    )
+
+
+def _solve_tioli(
+    alpha_p: float,
+    alpha_r: float,
+    W_x: float,
+    W_y: float,
+    d_r: float,
+) -> tuple[Bundle, Bundle]:
+    """
+    Solve for TIOLI allocation where responder gets exactly disagreement utility.
+
+    The responder's bundle (x_r, y_r) must satisfy:
+        x_r^alpha_r * y_r^(1-alpha_r) = d_r
+
+    The proposer maximizes:
+        (W_x - x_r)^alpha_p * (W_y - y_r)^(1-alpha_p)
+
+    We parameterize by x_r and derive y_r from the indifference curve constraint.
+
+    Args:
+        alpha_p: Proposer's Cobb-Douglas alpha
+        alpha_r: Responder's Cobb-Douglas alpha
+        W_x, W_y: Total endowments
+        d_r: Responder's disagreement utility
+
+    Returns:
+        (proposer_bundle, responder_bundle)
+    """
+    eps = min(1e-9, W_x * 1e-9, W_y * 1e-9)
+
+    def responder_y_from_x(x_r: float) -> float:
+        """Compute y_r from indifference curve: x_r^alpha_r * y_r^(1-alpha_r) = d_r"""
+        if x_r <= 0:
+            return float('inf')
+        # y_r = (d_r / x_r^alpha_r)^(1/(1-alpha_r))
+        ratio = d_r / (x_r ** alpha_r)
+        if ratio <= 0:
+            return float('inf')
+        return ratio ** (1 / (1 - alpha_r))
+
+    def proposer_utility(x_r: float) -> float:
+        """Proposer utility given responder gets x_r (and y_r from indifference curve)."""
+        y_r = responder_y_from_x(x_r)
+        x_p = W_x - x_r
+        y_p = W_y - y_r
+
+        # Check feasibility
+        if x_p <= 0 or y_p <= 0:
+            return -float('inf')
+
+        return (x_p ** alpha_p) * (y_p ** (1 - alpha_p))
+
+    # Find bounds for x_r where a feasible allocation exists
+    #
+    # The responder's indifference curve has y_r decreasing as x_r increases
+    # (downward-sloping). Therefore:
+    # - Small x_r → large y_r → small y_p (may violate y_p > 0)
+    # - Large x_r → small y_r → large y_p but small x_p (may violate x_p > 0)
+    #
+    # Lower bound: y_p = W_y - y_r > 0 => y_r < W_y
+    #   Find x_r where y_r = W_y: x_r_min = (d_r / W_y^(1-alpha_r))^(1/alpha_r)
+    #   For x_r > x_r_min, we have y_r < W_y, so y_p > 0
+    #
+    # Upper bound: x_p = W_x - x_r > 0 => x_r < W_x
+
+    if d_r <= 0:
+        # Responder has zero disagreement utility - they accept anything
+        # Give responder minimal allocation
+        return (Bundle(W_x - eps, W_y - eps), Bundle(eps, eps))
+
+    # x_r where y_r = W_y (lower limit - below this, y_p would be negative)
+    x_r_at_y_limit = (d_r / (W_y ** (1 - alpha_r))) ** (1 / alpha_r) if W_y > 0 else eps
+
+    # Search bounds: x_r from just above y_limit to just below W_x
+    x_lower = max(x_r_at_y_limit + eps, eps)
+    x_upper = W_x - eps
+
+    if x_upper <= x_lower:
+        # No feasible region - return endowment split (no trade beneficial)
+        return (Bundle(W_x / 2, W_y / 2), Bundle(W_x / 2, W_y / 2))
+
+    # Golden section search to maximize proposer utility
+    phi = (1 + math.sqrt(5)) / 2
+    a, b = x_lower, x_upper
+
+    c = b - (b - a) / phi
+    d_pt = a + (b - a) / phi
+
+    for _ in range(60):
+        if proposer_utility(c) > proposer_utility(d_pt):
+            b = d_pt
+        else:
+            a = c
+        c = b - (b - a) / phi
+        d_pt = a + (b - a) / phi
+
+    best_x_r = (a + b) / 2
+    best_y_r = responder_y_from_x(best_x_r)
+
+    x_p = W_x - best_x_r
+    y_p = W_y - best_y_r
+
+    # Clamp to non-negative (numerical precision)
+    x_p = max(0.0, x_p)
+    y_p = max(0.0, y_p)
+    best_x_r = max(0.0, best_x_r)
+    best_y_r = max(0.0, best_y_r)
+
+    return (Bundle(x_p, y_p), Bundle(best_x_r, best_y_r))
+
+
+# =============================================================================
 # Rubinstein Alternating Offers
 # =============================================================================
 
@@ -800,10 +1038,11 @@ class BargainingProtocol(ABC):
         effective_type_2: AgentType | None = None,
     ) -> BargainingOutcome:
         """
-        Execute bargaining and update agent endowments.
+        Execute bargaining and update agent holdings.
 
         This is a convenience method that calls solve() and applies the
-        outcome to the agents' endowments.
+        outcome to the agents' holdings (not endowment - endowment is immutable
+        and defines the disagreement point).
 
         Args:
             agent1: First agent
@@ -818,10 +1057,41 @@ class BargainingProtocol(ABC):
         outcome = self.solve(agent1, agent2, proposer, effective_type_1, effective_type_2)
 
         if outcome.trade_occurred:
-            agent1.endowment = outcome.allocation_1
-            agent2.endowment = outcome.allocation_2
+            agent1.holdings = outcome.allocation_1
+            agent2.holdings = outcome.allocation_2
 
         return outcome
+
+    def select_proposer(
+        self,
+        agent1: Agent,
+        agent2: Agent,
+        rng: random.Random | None = None,
+    ) -> Agent:
+        """
+        Select which agent should propose in this bargaining interaction.
+
+        This method allows protocols to define their own proposer selection
+        semantics. The simulation should call this method to determine the
+        proposer, ensuring consistency between search evaluation and execution.
+
+        Default implementation: Random selection (appropriate for symmetric
+        protocols where proposer identity doesn't affect outcomes).
+
+        Protocols where proposer identity matters (e.g., TIOLI) should override
+        this method to provide deterministic selection.
+
+        Args:
+            agent1: First agent
+            agent2: Second agent
+            rng: Random number generator (uses module-level random if None)
+
+        Returns:
+            The agent who should propose
+        """
+        if rng is None:
+            return random.choice([agent1, agent2])
+        return rng.choice([agent1, agent2])
 
 
 class NashBargainingProtocol(BargainingProtocol):
@@ -848,11 +1118,12 @@ class NashBargainingProtocol(BargainingProtocol):
         effective_type_2: AgentType | None = None,
     ) -> BargainingOutcome:
         """Compute Nash bargaining solution. Proposer is ignored (symmetric)."""
-        # Use effective types if provided, otherwise use agent's true type
+        # Use effective types if provided, otherwise use agent's current holdings
+        # Note: holdings (not endowment) determines what agents have to trade
         prefs_1 = effective_type_1.preferences if effective_type_1 else agent1.preferences
-        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.endowment
+        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.holdings
         prefs_2 = effective_type_2.preferences if effective_type_2 else agent2.preferences
-        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.endowment
+        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.holdings
 
         return nash_bargaining_solution(prefs_1, endow_1, prefs_2, endow_2)
 
@@ -865,9 +1136,9 @@ class NashBargainingProtocol(BargainingProtocol):
         effective_type_2: AgentType | None = None,
     ) -> float:
         """Compute expected surplus for agent1. Proposer is ignored."""
-        # Use effective types if provided, otherwise construct from agent
-        type1 = effective_type_1 or AgentType(agent1.preferences, agent1.endowment)
-        type2 = effective_type_2 or AgentType(agent2.preferences, agent2.endowment)
+        # Use effective types if provided, otherwise construct from agent's holdings
+        type1 = effective_type_1 or AgentType(agent1.preferences, agent1.holdings)
+        type2 = effective_type_2 or AgentType(agent2.preferences, agent2.holdings)
         return compute_nash_surplus(type1, type2)
 
 
@@ -918,11 +1189,12 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
         Returns:
             BargainingOutcome with asymmetric Nash allocation based on patience
         """
-        # Use effective types if provided, otherwise use agent's true type
+        # Use effective types if provided, otherwise use agent's current holdings
+        # Note: holdings (not endowment) determines what agents have to trade
         prefs_1 = effective_type_1.preferences if effective_type_1 else agent1.preferences
-        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.endowment
+        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.holdings
         prefs_2 = effective_type_2.preferences if effective_type_2 else agent2.preferences
-        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.endowment
+        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.holdings
 
         return rubinstein_bargaining_solution(
             prefs_1, endow_1, prefs_2, endow_2,
@@ -954,9 +1226,9 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
         Returns:
             Expected surplus for agent1
         """
-        # Use effective types if provided, otherwise construct from agent
-        type1 = effective_type_1 or AgentType(agent1.preferences, agent1.endowment)
-        type2 = effective_type_2 or AgentType(agent2.preferences, agent2.endowment)
+        # Use effective types if provided, otherwise construct from agent's holdings
+        type1 = effective_type_1 or AgentType(agent1.preferences, agent1.holdings)
+        type2 = effective_type_2 or AgentType(agent2.preferences, agent2.holdings)
 
         return compute_rubinstein_surplus(
             type1,
@@ -964,3 +1236,240 @@ class RubinsteinBargainingProtocol(BargainingProtocol):
             agent1.discount_factor,
             agent2.discount_factor,
         )
+
+
+class TIOLIBargainingProtocol(BargainingProtocol):
+    """
+    Take-It-Or-Leave-It Bargaining Protocol.
+
+    In TIOLI, one agent (the proposer) makes a single offer that the other
+    (the responder) must accept or reject. The optimal strategy is for the
+    proposer to offer the responder exactly their disagreement utility,
+    extracting all remaining surplus.
+
+    **Power source**: Commitment / first-mover advantage. The proposer's ability
+    to commit to a take-it-or-leave-it offer gives them all the bargaining power.
+    Unlike Nash (symmetric) or Rubinstein (patience-based), TIOLI represents
+    extreme proposer advantage.
+
+    **Proposer selection**: By default, the agent with the lexicographically
+    smaller ID proposes. This is deterministic and reproducible. The proposer
+    can be explicitly specified via the `proposer` parameter in solve().
+
+    Future extensions may add:
+    - Random proposer selection
+    - Endogenous proposer selection (e.g., based on outside options)
+    - Alternating proposer across multiple interactions
+
+    Properties (O&R Ch 3):
+    - Proposer extracts full surplus
+    - Responder at indifference (utility == disagreement utility)
+    - Pareto efficient allocation
+    - Proposer identity matters (unlike symmetric Nash)
+
+    Reference: Osborne & Rubinstein, Bargaining and Markets, Chapter 3
+    """
+
+    def solve(
+        self,
+        agent1: Agent,
+        agent2: Agent,
+        proposer: Agent | None = None,
+        effective_type_1: AgentType | None = None,
+        effective_type_2: AgentType | None = None,
+    ) -> BargainingOutcome:
+        """
+        Compute TIOLI bargaining solution.
+
+        Args:
+            agent1: First agent
+            agent2: Second agent
+            proposer: Which agent proposes. If None, uses lexicographic ID comparison
+                (smaller ID proposes). Must be either agent1 or agent2 if specified.
+            effective_type_1: Override type for agent1 (for belief-based bargaining)
+            effective_type_2: Override type for agent2 (for belief-based bargaining)
+
+        Returns:
+            BargainingOutcome with the TIOLI solution
+        """
+        # Determine proposer
+        if proposer is None:
+            # Default: lexicographically smaller ID proposes
+            proposer_is_1 = agent1.id < agent2.id
+        elif proposer is agent1:
+            proposer_is_1 = True
+        elif proposer is agent2:
+            proposer_is_1 = False
+        else:
+            raise ValueError("proposer must be agent1 or agent2")
+
+        proposer_int = 1 if proposer_is_1 else 2
+
+        # Use effective types if provided, otherwise use agent's current holdings
+        # Note: holdings (not endowment) determines what agents have to trade
+        prefs_1 = effective_type_1.preferences if effective_type_1 else agent1.preferences
+        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.holdings
+        prefs_2 = effective_type_2.preferences if effective_type_2 else agent2.preferences
+        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.holdings
+
+        return tioli_bargaining_solution(prefs_1, endow_1, prefs_2, endow_2, proposer_int)
+
+    def compute_expected_surplus(
+        self,
+        agent1: Agent,
+        agent2: Agent,
+        proposer: Agent | None = None,
+        effective_type_1: AgentType | None = None,
+        effective_type_2: AgentType | None = None,
+    ) -> float:
+        """
+        Compute expected surplus for agent1 under TIOLI.
+
+        The surplus depends critically on who proposes:
+        - If agent1 proposes: agent1 gets all surplus
+        - If agent2 proposes: agent1 gets zero surplus (at disagreement)
+
+        Args:
+            agent1: Evaluating agent
+            agent2: Potential trade partner
+            proposer: Which agent would propose. If None, uses lexicographic ID.
+            effective_type_1: Override type for agent1 (for belief-based evaluation)
+            effective_type_2: Override type for agent2 (for belief-based evaluation)
+
+        Returns:
+            Expected surplus for agent1
+        """
+        outcome = self.solve(agent1, agent2, proposer, effective_type_1, effective_type_2)
+        return outcome.gains_1
+
+    def select_proposer(
+        self,
+        agent1: Agent,
+        agent2: Agent,
+        rng: random.Random | None = None,
+    ) -> Agent:
+        """
+        Select proposer using lexicographic ID comparison.
+
+        For TIOLI, proposer identity determines who captures all surplus,
+        so deterministic selection is essential for consistency between
+        search evaluation and execution.
+
+        The agent with the lexicographically smaller ID proposes.
+        The rng parameter is ignored (deterministic selection).
+
+        Args:
+            agent1: First agent
+            agent2: Second agent
+            rng: Ignored (deterministic selection)
+
+        Returns:
+            The agent with the smaller ID
+        """
+        return agent1 if agent1.id < agent2.id else agent2
+
+
+class AsymmetricNashBargainingProtocol(BargainingProtocol):
+    """
+    Asymmetric Nash Bargaining Protocol using institutional bargaining power.
+
+    This protocol implements the asymmetric Nash bargaining solution where
+    bargaining power comes from the agent's `bargaining_power` attribute
+    (an exogenous institutional parameter), NOT from patience/discount factors.
+
+    **Power source**: Institutional / exogenous bargaining power (w_i attribute).
+    The bargaining weights are computed as:
+        β = w1 / (w1 + w2)
+
+    This maximizes the weighted Nash product:
+        (u1 - d1)^β × (u2 - d2)^(1-β)
+
+    **Contrast with other protocols**:
+    - Nash (Symmetric): Equal bargaining power (β = 0.5)
+    - Rubinstein/Nash (Patience): Power from discount factors via BRW formula
+    - Nash (Power): Power from explicit bargaining_power attribute (THIS PROTOCOL)
+    - TIOLI: Extreme asymmetry where proposer has all power
+
+    This enables studying how different sources of bargaining power
+    (patience vs institutional endowment) affect outcomes, a key goal
+    of the platform's institutional visibility methodology.
+
+    Properties (O&R Ch 2):
+    - When w1 == w2: Reduces to symmetric Nash
+    - Higher bargaining_power → higher utility share
+    - Maximizes weighted Nash product
+    - Individual rationality (both ≥ disagreement)
+
+    Reference: Osborne & Rubinstein, Bargaining and Markets, Chapter 2
+    """
+
+    def solve(
+        self,
+        agent1: Agent,
+        agent2: Agent,
+        proposer: Agent | None = None,
+        effective_type_1: AgentType | None = None,
+        effective_type_2: AgentType | None = None,
+    ) -> BargainingOutcome:
+        """
+        Compute asymmetric Nash solution using agents' bargaining_power attributes.
+
+        Args:
+            agent1: First agent (with bargaining_power attribute)
+            agent2: Second agent (with bargaining_power attribute)
+            proposer: Ignored (asymmetric Nash is proposer-independent)
+            effective_type_1: Override type for agent1 (for belief-based bargaining)
+            effective_type_2: Override type for agent2 (for belief-based bargaining)
+
+        Returns:
+            BargainingOutcome with the asymmetric Nash allocation
+        """
+        # Use effective types if provided, otherwise use agent's current holdings
+        # Note: holdings (not endowment) determines what agents have to trade
+        prefs_1 = effective_type_1.preferences if effective_type_1 else agent1.preferences
+        endow_1 = effective_type_1.endowment if effective_type_1 else agent1.holdings
+        prefs_2 = effective_type_2.preferences if effective_type_2 else agent2.preferences
+        endow_2 = effective_type_2.endowment if effective_type_2 else agent2.holdings
+
+        # Compute weights from bargaining_power attributes
+        w1 = agent1.bargaining_power
+        w2 = agent2.bargaining_power
+
+        # Validate individual weights are positive (Nash axioms require positive weights)
+        if w1 <= 0 or w2 <= 0:
+            raise ValueError(
+                f"bargaining_power must be positive for both agents, got w1={w1}, w2={w2}"
+            )
+
+        total_power = w1 + w2
+
+        weight_1 = w1 / total_power
+        weight_2 = w2 / total_power
+
+        return asymmetric_nash_bargaining_solution(
+            prefs_1, endow_1, prefs_2, endow_2, weight_1, weight_2
+        )
+
+    def compute_expected_surplus(
+        self,
+        agent1: Agent,
+        agent2: Agent,
+        proposer: Agent | None = None,
+        effective_type_1: AgentType | None = None,
+        effective_type_2: AgentType | None = None,
+    ) -> float:
+        """
+        Compute expected surplus for agent1 under asymmetric Nash with bargaining_power.
+
+        Args:
+            agent1: Evaluating agent
+            agent2: Potential trade partner
+            proposer: Ignored (asymmetric Nash is proposer-independent)
+            effective_type_1: Override type for agent1 (for belief-based evaluation)
+            effective_type_2: Override type for agent2 (for belief-based evaluation)
+
+        Returns:
+            Expected surplus for agent1
+        """
+        outcome = self.solve(agent1, agent2, proposer, effective_type_1, effective_type_2)
+        return outcome.gains_1

@@ -8,7 +8,13 @@ institutional rules.
 
 from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
-from microecon.agent import Agent, AgentPrivateState, AgentType
+from microecon.agent import (
+    Agent,
+    AgentPrivateState,
+    AgentType,
+    InteractionState,
+    AgentInteractionState,
+)
 from microecon.grid import Grid, Position
 from microecon.information import InformationEnvironment, FullInformation, NoisyAlphaInformation
 from microecon.bargaining import (
@@ -17,17 +23,34 @@ from microecon.bargaining import (
     rubinstein_share,
     rubinstein_bargaining_solution,
     compute_rubinstein_surplus,
+    tioli_bargaining_solution,
+    asymmetric_nash_bargaining_solution,
     BargainingProtocol,
     NashBargainingProtocol,
     RubinsteinBargainingProtocol,
+    TIOLIBargainingProtocol,
+    AsymmetricNashBargainingProtocol,
 )
-from microecon.matching import (
-    MatchingProtocol,
-    OpportunisticMatchingProtocol,
-    StableRoommatesMatchingProtocol,
-    CommitmentState,
-)
+# NOTE: MatchingProtocol removed - matching now handled via propose/accept/reject actions
+# See microecon/matching.py for documentation
 from microecon.simulation import Simulation, create_simple_economy
+from microecon.actions import (
+    Action,
+    ActionType,
+    ActionTag,
+    ActionContext,
+    ActionResult,
+    MoveAction,
+    ProposeAction,
+    AcceptAction,
+    RejectAction,
+    WaitAction,
+)
+from microecon.decisions import (
+    DecisionProcedure,
+    DecisionContext,
+    RationalDecisionProcedure,
+)
 from microecon.beliefs import (
     # Memory structures
     TradeMemory,
@@ -54,6 +77,8 @@ __all__ = [
     "Agent",
     "AgentPrivateState",
     "AgentType",
+    "InteractionState",
+    "AgentInteractionState",
     "Grid",
     "Position",
     # Information environments
@@ -63,22 +88,38 @@ __all__ = [
     # Bargaining - Nash (axiomatic)
     "nash_bargaining_solution",
     "compute_nash_surplus",
+    "asymmetric_nash_bargaining_solution",
     # Bargaining - Rubinstein (strategic)
     "rubinstein_share",
     "rubinstein_bargaining_solution",
     "compute_rubinstein_surplus",
+    # Bargaining - TIOLI
+    "tioli_bargaining_solution",
     # Bargaining protocols (institutional abstraction)
     "BargainingProtocol",
     "NashBargainingProtocol",
     "RubinsteinBargainingProtocol",
-    # Matching protocols (institutional abstraction)
-    "MatchingProtocol",
-    "OpportunisticMatchingProtocol",
-    "StableRoommatesMatchingProtocol",
-    "CommitmentState",
+    "TIOLIBargainingProtocol",
+    "AsymmetricNashBargainingProtocol",
+    # NOTE: MatchingProtocol removed - see microecon/matching.py
     # Simulation
     "Simulation",
     "create_simple_economy",
+    # Actions (ADR-001)
+    "Action",
+    "ActionType",
+    "ActionTag",
+    "ActionContext",
+    "ActionResult",
+    "MoveAction",
+    "ProposeAction",
+    "AcceptAction",
+    "RejectAction",
+    "WaitAction",
+    # Decision procedures (ADR-001)
+    "DecisionProcedure",
+    "DecisionContext",
+    "RationalDecisionProcedure",
     # Beliefs - Memory structures
     "TradeMemory",
     "PriceObservation",

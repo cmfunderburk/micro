@@ -145,21 +145,33 @@ def evaluate_targets(
             visible_agents=0,
         )
 
-    # Observer knows their own true type (no noise applied to self)
+    # Observer knows their own true type with current holdings (no noise applied to self)
     from microecon.agent import AgentType
-    observer_type = AgentType.from_private_state(agent.private_state)
+    observer_type = AgentType(
+        preferences=agent.preferences,
+        endowment=agent.holdings,  # Use current holdings, not initial endowment
+    )
 
     best_target_id: Optional[str] = None
     best_target_pos: Optional[Position] = None
     best_value = 0.0
     visible_count = 0
 
-    # Find all agents within perception radius
+    # Find all agents within perception radius (including co-located for Propose actions)
     for target_id, target_pos, distance in grid.agents_within_radius(
-        agent_pos, agent.perception_radius, exclude_center=True
+        agent_pos, agent.perception_radius, exclude_center=False
     ):
         target = agents_by_id.get(target_id)
         if target is None:
+            continue
+
+        # Skip self (can't target yourself)
+        if target_id == agent.id:
+            continue
+
+        # Skip targets on cooldown (FEAT-006: cooldown exclusion from search)
+        # Per AGENT-ARCHITECTURE.md 7.2: cooldown targets excluded from utility calculations
+        if target_id in agent.interaction_state.cooldowns:
             continue
 
         # Check if we can observe this target
@@ -255,9 +267,12 @@ def evaluate_targets_detailed(
             [],
         )
 
-    # Observer knows their own true type (no noise applied to self)
+    # Observer knows their own true type with current holdings (no noise applied to self)
     from microecon.agent import AgentType
-    observer_type = AgentType.from_private_state(agent.private_state)
+    observer_type = AgentType(
+        preferences=agent.preferences,
+        endowment=agent.holdings,  # Use current holdings, not initial endowment
+    )
 
     best_target_id: Optional[str] = None
     best_target_pos: Optional[Position] = None
@@ -265,12 +280,21 @@ def evaluate_targets_detailed(
     visible_count = 0
     evaluations: list[TargetEvaluationResult] = []
 
-    # Find all agents within perception radius
+    # Find all agents within perception radius (including co-located for Propose actions)
     for target_id, target_pos, distance in grid.agents_within_radius(
-        agent_pos, agent.perception_radius, exclude_center=True
+        agent_pos, agent.perception_radius, exclude_center=False
     ):
         target = agents_by_id.get(target_id)
         if target is None:
+            continue
+
+        # Skip self (can't target yourself)
+        if target_id == agent.id:
+            continue
+
+        # Skip targets on cooldown (FEAT-006: cooldown exclusion from search)
+        # Per AGENT-ARCHITECTURE.md 7.2: cooldown targets excluded from utility calculations
+        if target_id in agent.interaction_state.cooldowns:
             continue
 
         # Check if we can observe this target

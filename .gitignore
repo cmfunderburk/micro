@@ -13,5 +13,9 @@ venv/
 
 # Project-specific
 references/
-.archived/
+.archived/*
+!.archived/docs/
+!.archived/docs/2026-02-09-doc-consolidation/
+!.archived/docs/2026-02-09-doc-consolidation/**
 docs/alpha/.old/
+output/

@@ -43,7 +43,7 @@ def main():
             for trade in trades:
                 print(
                     f"  Tick {tick}: Trade between {trade.agent1_id} and {trade.agent2_id} "
-                    f"(gains: {trade.outcome.total_gains:.2f})"
+                    f"(gains: {trade.gains[0] + trade.gains[1]:.2f})"
                 )
 
     sim.run(50, callback=tick_callback)

@@ -24,11 +24,6 @@ from microecon.bargaining import (
     RubinsteinBargainingProtocol,
     BargainingProtocol,
 )
-from microecon.matching import (
-    OpportunisticMatchingProtocol,
-    StableRoommatesMatchingProtocol,
-    MatchingProtocol,
-)
 from microecon.logging import SimulationLogger, SimulationConfig
 from microecon.analysis.emergence import analyze_market_emergence, MarketEmergenceReport
 
@@ -83,9 +78,9 @@ class MarketEmergenceResult:
     """
     config: MarketEmergenceConfig
     protocol_name: str
-    matching_name: str
-    run_data: any  # RunData from logging
-    analysis: MarketEmergenceReport
+    matching_name: str = "bilateral_proposal"  # Current default matching mechanism
+    run_data: any = None  # RunData from logging
+    analysis: MarketEmergenceReport = None
 
 
 def create_heterogeneous_agents(
@@ -170,7 +165,6 @@ def place_agents_randomly(
 def run_market_emergence(
     config: MarketEmergenceConfig,
     bargaining_protocol: Optional[BargainingProtocol] = None,
-    matching_protocol: Optional[MatchingProtocol] = None,
     info_env: Optional[InformationEnvironment] = None,
 ) -> MarketEmergenceResult:
     """Run a market emergence simulation with specified protocols.
@@ -180,7 +174,6 @@ def run_market_emergence(
     Args:
         config: Scenario configuration
         bargaining_protocol: Protocol for bargaining (default: Nash)
-        matching_protocol: Protocol for matching (default: Opportunistic)
         info_env: Information environment (default: FullInformation)
 
     Returns:
@@ -189,8 +182,6 @@ def run_market_emergence(
     # Defaults
     if bargaining_protocol is None:
         bargaining_protocol = NashBargainingProtocol()
-    if matching_protocol is None:
-        matching_protocol = OpportunisticMatchingProtocol()
     if info_env is None:
         info_env = FullInformation()
 
@@ -202,7 +193,6 @@ def run_market_emergence(
 
     # Determine protocol names for logging
     protocol_name = type(bargaining_protocol).__name__.replace("Protocol", "").lower()
-    matching_name = type(matching_protocol).__name__.replace("Protocol", "").lower()
     info_env_name = type(info_env).__name__.lower()
 
     # Get info_env params
@@ -210,14 +200,14 @@ def run_market_emergence(
     if isinstance(info_env, NoisyAlphaInformation):
         info_env_params = {"noise_std": info_env.noise_std}
 
-    # Create SimulationConfig for logging (LA-1: include institutional metadata)
+    # Create SimulationConfig for logging
+    # matching_protocol_name defaults to "bilateral_proposal" in SimulationConfig
     sim_config = SimulationConfig(
         n_agents=config.n_agents,
         grid_size=config.grid_size,
         seed=config.seed,
         protocol_name=protocol_name,
         perception_radius=config.perception_radius,
-        matching_protocol_name=matching_name,
         info_env_name=info_env_name,
         info_env_params=info_env_params,
     )
@@ -230,7 +220,6 @@ def run_market_emergence(
     sim = Simulation(
         grid=grid,
         bargaining_protocol=bargaining_protocol,
-        matching_protocol=matching_protocol,
         info_env=info_env,
         logger=logger,
     )
@@ -254,7 +243,6 @@ def run_market_emergence(
     return MarketEmergenceResult(
         config=config,
         protocol_name=protocol_name,
-        matching_name=matching_name,
         run_data=run_data,
         analysis=analysis,
     )
@@ -268,30 +256,24 @@ def compare_protocols(
     This demonstrates the core value proposition: same initial conditions,
     different protocols, observe how institutions shape outcomes.
 
+    Currently compares bargaining protocols only. Matching uses the default
+    bilateral_proposal mechanism (propose/accept/reject actions).
+
     Returns:
         Dict mapping protocol name to result
     """
     results = {}
 
-    # Nash bargaining with opportunistic matching (baseline)
-    results['nash_opportunistic'] = run_market_emergence(
+    # Nash bargaining (baseline)
+    results['nash'] = run_market_emergence(
         config,
         bargaining_protocol=NashBargainingProtocol(),
-        matching_protocol=OpportunisticMatchingProtocol(),
     )
 
-    # Rubinstein bargaining with opportunistic matching
-    results['rubinstein_opportunistic'] = run_market_emergence(
+    # Rubinstein bargaining
+    results['rubinstein'] = run_market_emergence(
         config,
         bargaining_protocol=RubinsteinBargainingProtocol(),
-        matching_protocol=OpportunisticMatchingProtocol(),
-    )
-
-    # Nash bargaining with stable roommates matching
-    results['nash_stable'] = run_market_emergence(
-        config,
-        bargaining_protocol=NashBargainingProtocol(),
-        matching_protocol=StableRoommatesMatchingProtocol(),
     )
 
     return results

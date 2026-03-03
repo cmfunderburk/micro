@@ -9,6 +9,8 @@ from microecon.batch import BatchRunner, run_comparison
 from microecon.bargaining import NashBargainingProtocol, RubinsteinBargainingProtocol
 from microecon.logging import load_run
 
+pytestmark = pytest.mark.simulation
+
 
 class TestBatchRunner:
     """Test BatchRunner functionality."""
@@ -168,6 +170,7 @@ class TestRunComparison:
         protocols = {r.config.protocol_name for r in results}
         assert protocols == {"nash", "rubinstein"}
 
+    @pytest.mark.slow
     def test_run_comparison_multiple_seeds(self):
         results = run_comparison(
             n_agents=4, grid_size=5, ticks=5, seeds=[1, 2, 3]
@@ -194,9 +197,58 @@ class TestRunComparison:
                 assert r.log_path is not None
 
 
+def test_batch_run_does_not_mutate_global_rng():
+    """A-005: Batch runs must not mutate global random state."""
+    import random
+
+    state_before = random.getstate()
+
+    runner = BatchRunner(
+        base_config={"n_agents": 4, "grid_size": 5, "seed": 42},
+    )
+    runner.run(ticks=5)
+
+    state_after = random.getstate()
+    assert state_before == state_after, "BatchRunner mutated global random state"
+
+
+def test_batch_runner_honors_info_env():
+    """A-002: BatchRunner must pass configured info_env to simulation."""
+    from microecon.information import NoisyAlphaInformation
+
+    info_env = NoisyAlphaInformation(noise_std=0.2)
+    runner = BatchRunner(
+        base_config={
+            "n_agents": 4,
+            "grid_size": 5,
+            "seed": 42,
+            "info_env": info_env,
+        },
+    )
+
+    # Patch _create_simulation to capture the simulation before it runs
+    original = runner._create_simulation
+    created_sims = []
+    def capturing_create(config, logger):
+        sim = original(config, logger)
+        created_sims.append(sim)
+        return sim
+    runner._create_simulation = capturing_create
+
+    runner.run(ticks=5)
+
+    assert len(created_sims) == 1
+    sim = created_sims[0]
+    assert isinstance(sim.info_env, NoisyAlphaInformation), (
+        f"Expected NoisyAlphaInformation, got {type(sim.info_env)}"
+    )
+    assert sim.info_env.noise_std == 0.2
+
+
 class TestBatchRunnerParameterCombinations:
     """Test complex parameter combinations."""
 
+    @pytest.mark.slow
     def test_cartesian_product(self):
         runner = BatchRunner(
             base_config={"n_agents": 4, "grid_size": 5},
@@ -234,3 +286,43 @@ class TestBatchRunnerParameterCombinations:
         assert ("rubinstein", 1, 5.0) in configs
         assert ("rubinstein", 2, 3.0) in configs
         assert ("rubinstein", 2, 5.0) in configs
+
+
+class TestBatchRunnerMatchingProtocol:
+    """Test BatchRunner matching_protocol support."""
+
+    def test_matching_protocol_passed_to_simulation(self):
+        """matching_protocol in config is used by the simulation."""
+        from microecon.matching import BilateralProposalMatching, CentralizedClearingMatching
+
+        runner = BatchRunner(
+            base_config={"n_agents": 4, "grid_size": 5, "seed": 42},
+            variations={"matching_protocol": [
+                BilateralProposalMatching(),
+                CentralizedClearingMatching(),
+            ]},
+            keep_in_memory=True,
+        )
+        results = runner.run(ticks=5)
+        assert len(results) == 2
+        assert results[0].config.matching_protocol_name == "bilateral_proposal"
+        assert results[1].config.matching_protocol_name == "centralized_clearing"
+
+    def test_matching_protocol_in_run_name(self):
+        """Run name includes matching protocol name."""
+        from microecon.matching import CentralizedClearingMatching
+
+        runner = BatchRunner(
+            base_config={"n_agents": 4, "grid_size": 5, "seed": 42},
+            variations={"matching_protocol": [
+                CentralizedClearingMatching(),
+            ]},
+            keep_in_memory=True,
+            output_dir=None,
+        )
+        run_name = runner._generate_run_name(
+            {"seed": 42, "matching_protocol": CentralizedClearingMatching(),
+             "protocol": NashBargainingProtocol()},
+            0,
+        )
+        assert "centralized_clearing" in run_name

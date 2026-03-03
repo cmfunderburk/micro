@@ -78,7 +78,7 @@ interface SimulationState {
   setPerspectiveAgentId: (id: string | null) => void;
   setShowGroundTruth: (show: boolean) => void;
 
-  // Overlays (all default to off per VISUALIZATION.md)
+  // Overlays (default to off for a neutral simulation baseline)
   overlays: {
     trails: boolean;
     perceptionRadius: boolean;
@@ -173,7 +173,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   setPerspectiveAgentId: (id) => set({ perspectiveAgentId: id }),
   setShowGroundTruth: (show) => set({ showGroundTruth: show }),
 
-  // Overlays (all default to off per VISUALIZATION.md)
+  // Overlays (default to off for a neutral simulation baseline)
   overlays: {
     trails: false,
     perceptionRadius: false,

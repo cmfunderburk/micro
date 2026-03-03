@@ -5,6 +5,8 @@ from microecon.bundle import Bundle
 from microecon.preferences import CobbDouglas
 from microecon.agent import Agent, AgentPrivateState, AgentType, create_agent
 
+pytestmark = pytest.mark.core
+
 
 class TestAgentPrivateState:
     """Test agent private state."""
@@ -88,11 +90,27 @@ class TestAgent:
         agent = create_agent(alpha=0.5, endowment_x=4.0, endowment_y=4.0)
         assert agent.utility() == pytest.approx(4.0)
 
-    def test_agent_endowment_update(self):
+    def test_agent_holdings_update(self):
+        """Holdings can be updated (e.g., after trade), utility reflects holdings."""
         agent = create_agent(alpha=0.5, endowment_x=4.0, endowment_y=4.0)
-        agent.endowment = Bundle(8.0, 8.0)
-        assert agent.endowment == Bundle(8.0, 8.0)
+        # Initial state: holdings == endowment
+        assert agent.holdings == Bundle(4.0, 4.0)
+        assert agent.endowment == Bundle(4.0, 4.0)
+
+        # Update holdings (simulates a trade)
+        agent.holdings = Bundle(8.0, 8.0)
+        assert agent.holdings == Bundle(8.0, 8.0)
         assert agent.utility() == pytest.approx(8.0)
+
+        # Endowment remains unchanged (immutable)
+        assert agent.endowment == Bundle(4.0, 4.0)
+
+    def test_agent_endowment_immutable(self):
+        """Endowment is read-only after construction - no setter."""
+        agent = create_agent(alpha=0.5, endowment_x=4.0, endowment_y=4.0)
+        # Endowment should not have a setter
+        with pytest.raises(AttributeError):
+            agent.endowment = Bundle(8.0, 8.0)
 
     def test_would_gain_from(self):
         agent = create_agent(alpha=0.5, endowment_x=1.0, endowment_y=9.0)

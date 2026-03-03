@@ -7,6 +7,7 @@ This module provides:
 """
 
 from .events import (
+    SCHEMA_VERSION,
     AgentSnapshot,
     BeliefSnapshot,
     CommitmentBrokenEvent,
@@ -38,6 +39,7 @@ from .logger import (
 
 __all__ = [
     # Events
+    "SCHEMA_VERSION",
     "AgentSnapshot",
     "BeliefSnapshot",
     "CommitmentBrokenEvent",

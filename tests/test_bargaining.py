@@ -20,6 +20,8 @@ from microecon.bargaining import (
     RubinsteinBargainingProtocol,
 )
 
+pytestmark = pytest.mark.bargaining
+
 
 class TestNashBargainingSolution:
     """Test Nash bargaining solution computation."""
@@ -439,21 +441,27 @@ class TestBargainingProtocol:
         # Proposer identity doesn't affect outcome under BRW
         assert outcome1.gains_1 == pytest.approx(outcome2.gains_1, rel=0.01)
 
-    def test_protocol_execute_updates_endowments(self, agents):
-        """Protocol.execute() should update agent endowments."""
+    def test_protocol_execute_updates_holdings(self, agents):
+        """Protocol.execute() should update agent holdings (not endowment)."""
         agent1, agent2 = agents
         protocol = RubinsteinBargainingProtocol()
 
         initial_endow1 = agent1.endowment
         initial_endow2 = agent2.endowment
+        initial_holdings1 = agent1.holdings
+        initial_holdings2 = agent2.holdings
 
         outcome = protocol.execute(agent1, agent2, proposer=agent1)
 
         assert outcome.trade_occurred
-        assert agent1.endowment == outcome.allocation_1
-        assert agent2.endowment == outcome.allocation_2
-        assert agent1.endowment != initial_endow1
-        assert agent2.endowment != initial_endow2
+        # Holdings updated to allocation
+        assert agent1.holdings == outcome.allocation_1
+        assert agent2.holdings == outcome.allocation_2
+        assert agent1.holdings != initial_holdings1
+        assert agent2.holdings != initial_holdings2
+        # Endowment remains unchanged (immutable)
+        assert agent1.endowment == initial_endow1
+        assert agent2.endowment == initial_endow2
 
     def test_protocols_produce_different_outcomes(self):
         """Nash and Rubinstein differ when agents have unequal patience.
@@ -471,12 +479,8 @@ class TestBargainingProtocol:
         nash = NashBargainingProtocol()
         rubinstein = RubinsteinBargainingProtocol()
 
+        # solve() doesn't modify agents, so we can call both without reset
         nash_outcome = nash.solve(agent1, agent2)
-
-        # Reset endowments for Rubinstein
-        agent1.endowment = Bundle(8.0, 2.0)
-        agent2.endowment = Bundle(2.0, 8.0)
-
         rub_outcome = rubinstein.solve(agent1, agent2)
 
         # Nash is symmetric regardless of patience

@@ -14,6 +14,7 @@ uv run pytest -m "not slow"               # Skip slow tests
 uv run pytest -m contract                 # Schema contract conformance
 uv run pytest -m determinism              # Deterministic rerun equivalence
 uv run pytest -m theory                   # Bargaining theory verification
+uv run pytest -m orchestrator             # Manifest/orchestrator service tests
 uv run pytest --cov=microecon             # Coverage
 
 # Frontend

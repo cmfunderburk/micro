@@ -1,7 +1,7 @@
 # Microecon Platform Vision
 
 **Status:** Source of truth  
-**Last Updated:** 2026-02-09
+**Last Updated:** 2026-03-02
 
 ## 1. Purpose
 Microecon is a research platform for computational microeconomics.
@@ -44,22 +44,24 @@ It is a mechanism-comparison laboratory for microeconomic institutions, centered
 ## 4. Current Scope
 Current implemented domain:
 - two-good exchange economy
-- bilateral trade
+- bilateral trade with swappable matching protocols
 - spatial search on discrete grid
 - action-based tick model
-- protocol-comparison workflows via tests, analysis, and web UI
+- protocol-comparison workflows via tests, analysis, research scripts, and web UI
 
 Current implemented institutional flexibility:
 - bargaining: Nash, Rubinstein (BRW mapping), Asymmetric Nash, TIOLI
+- matching: BilateralProposalMatching, CentralizedClearingMatching (swappable via MatchingProtocol ABC)
 - information: full and noisy-alpha observation
 - decision procedure: rational baseline with opportunity-cost acceptance logic
 
 ## 5. Direction of Expansion
-Priority expansion areas:
-1. Make matching/clearing as explicit and swappable as bargaining.
-2. Strengthen benchmark interpretation (e.g., equilibrium/reference comparisons).
-3. Move from finite exchange episodes toward sustained economies (consumption/replenishment loops).
-4. Increase belief/information causality in decisions and acceptance behavior.
+Priority expansion areas (see `docs/VISION/VISION-WORKFLOW-MASTER-SPEC.md` for full target state):
+1. Experiment manifest service and execution orchestrator (Gate B).
+2. Research and educational track UI workflows (Gate B).
+3. Publication bundles with audit and reproduction support (Gate C).
+4. Strengthen benchmark interpretation (e.g., equilibrium/reference comparisons).
+5. Increase belief/information causality in decisions and acceptance behavior.
 
 ## 6. Design Principles
 1. **Institutional visibility over hidden assumptions**
@@ -96,8 +98,11 @@ The platform is successful when it can reliably support:
 ## 9. Documentation Hierarchy
 Primary active documents:
 1. `VISION.md` (this file): identity, scope, and design principles
-2. `docs/current/AGENT-ARCHITECTURE.md`: implemented architecture and invariants
-3. `STATUS.md`: operational capabilities and known limitations
-4. `theoretical-foundations.md`: theory mappings and references
+2. `docs/VISION/VISION-WORKFLOW-MASTER-SPEC.md`: finished-product target state
+3. `docs/VISION/VISION-WORKFLOW-EXECUTION-BOARD.md`: issue-ready backlog (Gates A/B/C)
+4. `docs/current/AGENT-ARCHITECTURE.md`: implemented architecture and invariants
+5. `STATUS.md`: operational capabilities and known limitations
+6. `theoretical-foundations.md`: theory mappings and references
+7. `docs/contracts/`: schema, compatibility, and determinism policies
 
 Historical, exploratory, and date-stamped docs belong in `.archived/`.

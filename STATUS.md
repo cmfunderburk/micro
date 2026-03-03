@@ -1,10 +1,10 @@
 # Current Project Status
 
-**Version:** 0.4.0
-**Date:** 2026-01-10
+**Version:** 0.5.0 (Gate A complete)
+**Date:** 2026-03-02
 **Purpose:** Definitive reference for current capabilities
 
-This document describes what exists and works today. For the long-term vision, see VISION.md. For implementation semantics, see docs/current/AGENT-ARCHITECTURE.md.
+This document describes what exists and works today. For the long-term vision, see `docs/VISION/VISION-WORKFLOW-MASTER-SPEC.md`. For implementation semantics, see `docs/current/AGENT-ARCHITECTURE.md`.
 
 ---
 
@@ -23,10 +23,12 @@ A complete simulation engine for bilateral exchange in a spatial economy:
 | `information.py` | Information environment abstraction (`FullInformation`, `NoisyAlphaInformation`) |
 | `beliefs.py` | Agent memory, type beliefs, price beliefs, Bayesian and heuristic update rules |
 | `bargaining.py` | Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI) with belief-aware surplus |
+| `matching.py` | Swappable matching protocols (`BilateralProposalMatching`, `CentralizedClearingMatching`) |
 | `search.py` | Target evaluation (discounted surplus), movement decisions, belief integration |
 | `actions.py` | Action ABC and types: MoveAction, ProposeAction, AcceptAction, RejectAction, WaitAction |
 | `decisions.py` | DecisionProcedure interface, RationalDecisionProcedure implementation |
 | `simulation.py` | Three-phase tick loop (Perceive-Decide-Execute), `create_simple_economy()` factory |
+| `batch.py` | `BatchRunner` for parameter sweeps with matching protocol support |
 
 ### Bargaining Protocols
 
@@ -39,93 +41,76 @@ Four complete implementations with theoretical grounding (O&R = Osborne & Rubins
 
 **Rubinstein Alternating Offers** (`RubinsteinBargainingProtocol`) — O&R Ch 3
 - Uses BRW (1986) limit: patience determines bargaining power, not proposer identity
-- More patient agent (higher δ) captures larger share of surplus
+- More patient agent (higher delta) captures larger share of surplus
 - Equal discount factors → symmetric Nash outcome
-- Future: ClassicRubinsteinProtocol with finite-round first-mover advantage
 
 **Asymmetric Nash Bargaining** (`AsymmetricNashBargainingProtocol`) — O&R Ch 2.6
-- Weighted Nash product: (u₁-d₁)^β × (u₂-d₂)^(1-β)
-- β = w₁/(w₁+w₂) where w = `agent.bargaining_power` attribute
+- Weighted Nash product: (u1-d1)^beta x (u2-d2)^(1-beta)
+- beta = w1/(w1+w2) where w = `agent.bargaining_power` attribute
 - Equal weights → symmetric Nash outcome
 - Distinct from Rubinstein: power comes from exogenous attribute, not patience
 
-**Take-It-Or-Leave-It** (`TIOLIBargainingProtocol`) — O&R §2.8
+**Take-It-Or-Leave-It** (`TIOLIBargainingProtocol`) — O&R S2.8
 - Proposer extracts all surplus; responder receives exactly disagreement utility
 - Lexicographic proposer selection (smaller agent ID proposes by default)
 - Closed-form solution via golden section search on responder's indifference curve
-- Theory tests verify proposer identity matters and responder is at indifference (1e-6 tolerance)
 
-### Matching Mechanism (Bilateral Proposal)
+### Matching Protocols
 
-Matching is handled through the action-based propose/accept/reject system:
+Matching is a first-class swappable component via the `MatchingProtocol` ABC (see ADR-006). Implementations receive all proposals and return a `MatchResult` with three disjoint sets: trades, rejections, and non-selections.
 
-**ProposeAction** — Agent initiates trade with adjacent partner
-- Selected during Decide phase based on surplus evaluation
-- Carries a fallback action (what to do if proposal fails)
-- Target must be adjacent (distance ≤ 1)
+**BilateralProposalMatching** (default)
+- Decentralized propose/accept/reject model
+- Step 1: Mutual proposals (both agents propose to each other) trade immediately
+- Step 2: Remaining proposals evaluated by target against opportunity cost
+- Rejections add per-partner cooldowns (3 ticks); non-selections do not
+- Deterministic: sorted agent ID iteration, lexicographic tie-breaking
 
-**Acceptance Logic** — During Execute phase
-- Target evaluates proposal against their opportunity cost
-- Opportunity cost = value of their own chosen action
-- Accept if trade surplus > opportunity cost
+**CentralizedClearingMatching**
+- Centralized welfare-maximizing auctioneer
+- Computes bilateral surplus for all adjacent proposer-target pairs
+- Greedy assignment by descending surplus (each agent matched at most once)
+- No rejections — unmatched proposals are non-selections (no cooldowns)
 
-**RejectAction** — Proposal declined
-- Proposer receives per-partner cooldown (default: 3 ticks)
-- Proposer executes their fallback action instead
-- Prevents repeated proposals to unwilling partners
+Both protocols satisfy the `MatchingProtocol` contract: deterministic, pure (no state mutation), and produce disjoint coverage of all proposers. Conformance tests enforce these properties.
 
-**InteractionState** — Agent state machine
-- AVAILABLE: Can propose or accept proposals
-- PROPOSAL_PENDING: (Reserved for future multi-tick negotiation)
-- NEGOTIATING: Trade in progress
+### Schema and Contracts
 
-This decentralized, agent-autonomous approach replaces the old centralized MatchingProtocol abstraction. The current implementation is ad-hoc and not grounded in matching theory.
+Canonical schema versioning (Gate A, A-101 through A-107):
 
-**Future work**: Design theory-based matching protocols (stable matching, deferred acceptance) compatible with the action-budget tick model. See §2 Known Limitations.
+| Artifact | Description |
+|----------|-------------|
+| `logging/events.py` | Canonical dataclasses: `SimulationConfig`, `TradeEvent`, `TickRecord`, `RunSummary` |
+| `SCHEMA_VERSION` | Currently `"1.0"`. Persisted in every run's `config.json` |
+| `logging/formats.py` | Version validation on load (N/N-1 policy) |
+| `scripts/generate_ts_types.py` | Auto-generates `frontend/src/types/canonical.ts` from Python schema |
+| `docs/contracts/schema-v1.md` | Canonical schema specification |
+| `docs/contracts/compatibility-policy.md` | Read/write compatibility rules |
+| `docs/contracts/determinism-policy.md` | Seeded rerun equivalence policy |
 
-### Agent Belief System (Phase 1)
+Run provenance fields: `run_id` (UUID4, auto-generated), `manifest_id` and `treatment_arm` (stubs for Gate B).
+
+### Agent Belief System
 
 Complete belief architecture enabling agent learning:
 
-**Memory System**
-- Trade history: Records trades with partner ID, bundles exchanged, tick
-- Price observations: Observed exchange rates from trades
-- Partner interaction history: Encounters and trade outcomes by partner
-- Configurable memory depth (bounded or unlimited)
+- **Memory**: Trade history, price observations, partner interaction history (configurable depth)
+- **Type Beliefs**: Beliefs about partner preference parameters (alpha), confidence tracking
+- **Price Beliefs**: Mean-variance representation of expected exchange rate (deferred from decision logic)
+- **Update Rules**: `BayesianUpdateRule` (conjugate prior), `HeuristicUpdateRule` (exponential moving average)
+- **Integration**: Beliefs wire into search (surplus calculation) and bargaining (effective types). Snapshots logged each tick.
 
-**Type Beliefs**
-- Beliefs about trading partners' preference parameters (alpha)
-- Confidence tracking based on number of interactions
-- Updated after trades via configurable update rules
-
-**Price Beliefs**
-- Mean-variance representation of expected exchange rate
-- Updated from observed trades (own and others')
-- Currently deferred from decision logic (Phase 2)
-
-**Update Rules**
-- `BayesianUpdateRule`: Conjugate prior updates (optimal learning)
-- `HeuristicUpdateRule`: Exponential moving average (bounded rationality)
-- Extensible interface for custom rules
-
-**Integration**
-- Beliefs wire into search: agents use believed types for surplus calculation
-- Beliefs wire into bargaining: protocols accept effective types
-- Beliefs update during simulation: trades trigger belief updates
-- Belief snapshots logged each tick for trajectory analysis
-
-### Batch Runs & Logging
-
-Infrastructure for systematic experiments:
+### Batch Runs & Research Workflow
 
 | Module | Capability |
 |--------|------------|
-| `batch.py` | `BatchRunner` for parameter sweeps, bargaining protocol comparisons |
-| `logging/events.py` | Structured event types (`TickRecord`, `TradeEvent`, `SearchDecision`) |
-| `logging/logger.py` | `SimulationLogger` captures full simulation state |
-| `logging/formats.py` | JSON lines format for human-readable logs |
+| `batch.py` | `BatchRunner` for parameter sweeps across bargaining and matching protocols |
+| `scripts/research_workflow.py` | End-to-end research reproducibility flow (A-250) |
+| `logging/events.py` | Versioned event types with schema compatibility |
+| `logging/logger.py` | `SimulationLogger` with run_id generation |
+| `logging/formats.py` | JSON lines format with version validation on load |
 
-**Note:** Batch runs require explicit seeds for reproducibility.
+Batch runs require explicit seeds. The research workflow (`scripts/research_workflow.py`) demonstrates a complete protocol comparison: configure experiment, run batch, compute comparison outputs, produce evidence artifact.
 
 ### Analysis
 
@@ -137,101 +122,44 @@ Post-hoc analysis of logged runs:
 | `analysis/timeseries.py` | Welfare and trade counts over time |
 | `analysis/distributions.py` | Cross-run statistical comparisons |
 | `analysis/tracking.py` | Agent-level outcome tracking |
+| `analysis/emergence.py` | Market emergence metrics |
 
 ### Web Frontend (Primary UI)
 
-React/Vite browser-based visualization with FastAPI/WebSocket backend:
+React 19 + Zustand + Vite. Three modes: Normal, Comparison, Replay. Shadcn-style Radix UI components.
 
 ```bash
-# Start both server and frontend
-./scripts/dev.sh
-
-# Or manually:
-# Terminal 1: Server
-uv run uvicorn server.app:create_app --factory --port 8000
-
-# Terminal 2: Frontend
-cd frontend && npm run dev
-# Open http://localhost:5173
+./scripts/dev.sh                # Backend (:8000) + frontend (:5173)
 ```
 
-**Live Mode**
-- Real-time WebSocket updates from simulation
-- Three-column layout: metrics/overlays | grid | charts
-- Play/pause/step/reset controls with speed slider
-- Configuration modal for simulation parameters:
-  - Agent count, grid size, seed
-  - Bargaining protocol (Nash/Rubinstein/Asymmetric Nash/TIOLI) with tooltips
-  - Bargaining power distribution (Uniform/Gaussian/Bimodal) for Asymmetric Nash
-  - Perception radius, discount factor, use_beliefs toggle
-- Agent tooltips on hover with detailed state
-- Click-to-select with perception radius overlay
-- Keyboard shortcuts: Space (play/pause), Arrow keys (step), R (reset)
+**Live Mode**: Real-time WebSocket, config modal (agents, grid, seed, bargaining protocol, bargaining power distribution, info env, perception radius, discount factor, beliefs toggle), play/pause/step/reset, keyboard shortcuts.
 
-**Overlays** (toggleable)
-- Movement trails (agent path history)
-- Perception radius visualization
-- Trade connections (recent trade pairs)
-- Belief connections (agents with beliefs about each other)
+**Comparison Mode**: Side-by-side dual grids, same seed + different protocols, synchronized controls, overlaid welfare/trade charts, real-time difference metrics.
 
-**Charts**
-- Welfare over time (line chart)
-- Trade count over time (bar chart)
+**Replay Mode**: Load saved runs, timeline slider, step forward/backward, playback controls.
 
-**Comparison Mode**
-- Side-by-side dual grids for protocol comparison
-- Same seed, different protocols
-- Synchronized controls (play/pause affects both)
-- Comparison welfare/trade charts with both protocols overlaid
-- Real-time difference metrics
+**Visualization**: Agent tooltips, perception radius overlay, movement trails, trade connections, belief connections, agent perspective mode, Edgeworth box trade inspection, D3 trade network panel, scenario browser.
 
-**Replay Mode**
-- Load saved runs from disk
-- Timeline slider for seeking to any tick
-- Step forward/backward through history
-- Playback controls (play/pause, speed)
-
-**Belief System Visualization**
-- Belief panel shows selected agent's beliefs
-- Price beliefs (mean, variance, n)
-- Type beliefs about other agents
-- Belief connections overlay on grid
-
-**Agent Perspective Mode**
-- View simulation from any agent's perspective
-- Shows what agent can see (dims others outside perception)
-- Ground truth toggle to compare believed vs actual types
-- Noisy observations visualization
-
-**Trade Inspection**
-- Trade history panel (scrollable list)
-- Click any trade to open Edgeworth box modal
-- Edgeworth box shows: endowments, indifference curves, contract curve, trade outcome
-- Pre/post utility values with gains
-
-**Trade Network Panel**
-- D3 force-directed graph visualization
-- Node color encodes alpha, edge thickness encodes frequency
-- Statistics (density, node count, edge count)
-
-**Scenario Browser**
-- Browse pre-defined YAML scenarios by complexity level
-- Star rating for complexity (1-4 stars)
-- One-click scenario loading
-
-**Export Capabilities**
-- PNG/SVG frame export
-- GIF recording
-- CSV export (agent states, trades)
-- JSON export (full tick data)
-
-### Archived: DearPyGui Visualization
-
-The original desktop GUI has been archived to `.archived/visualization-dearpygui/`. See the README there for restoration instructions if needed. The web frontend now provides all equivalent functionality.
+**Export**: PNG/SVG frames, GIF recording, CSV (agent states, trades), JSON (full tick data).
 
 ### Test Coverage
 
-716 tests covering all core modules including theory verification, belief system, bilateral bargaining protocols, and action-budget model. Run with: `uv run pytest`
+848 tests (835 passing, 15 skipped) covering all core modules. Key test markers:
+
+| Marker | Count | Scope |
+|--------|-------|-------|
+| `contract` | 48 | Schema conformance (4 levels: round-trip, persist/load, replay API, live WS) |
+| `determinism` | 10 | Seeded rerun equivalence (all protocols + matching + noisy info + beliefs) |
+| `theory` | ~100 | Bargaining theory verification (Nash product, Rubinstein limits, TIOLI extraction) |
+| `matching` | ~80 | Matching protocol unit + conformance tests |
+| `integration` | ~10 | Full pipeline tests |
+
+```bash
+uv run pytest                    # All tests
+uv run pytest -m contract        # Schema conformance
+uv run pytest -m determinism     # Determinism gate
+uv run pytest -m theory          # Theory verification
+```
 
 ---
 
@@ -239,16 +167,10 @@ The original desktop GUI has been archived to `.archived/visualization-dearpygui
 
 ### Architectural
 
-**Matching mechanism not theory-grounded**
-- Current propose/accept/reject system is ad-hoc, not derived from matching theory
-- Classic matching algorithms (stable roommates, deferred acceptance) assume centralized coordination
-- Designing theory-based matching for agent-autonomous action-budget model is non-trivial future work
-- See `microecon/matching.py` for documentation of current approach
-
-**Search uses protocol-specific surplus**
-- Agents evaluate potential partners using the actual bargaining protocol's surplus calculation
-- When beliefs are enabled, agents use believed types (not true types) for surplus calculation
-- Search is now institution-aware
+**Matching protocols not yet theory-grounded**
+- `BilateralProposalMatching` and `CentralizedClearingMatching` are functional but not derived from formal matching theory (stable roommates, deferred acceptance, etc.)
+- The `MatchingProtocol` abstraction makes it straightforward to add theory-based implementations
+- See ADR-006 for design rationale
 
 **2-good economy only**
 - `Bundle(x, y)` is hardcoded for 2 goods
@@ -256,277 +178,185 @@ The original desktop GUI has been archived to `.archived/visualization-dearpygui
 - Visualization color encoding assumes 2 goods
 
 **Belief system limitations**
-- Price beliefs exist but are not yet consumed by decision logic (deferred to Phase 2)
+- Price beliefs exist but are not yet consumed by decision logic
 - Type beliefs track alpha only (not full AgentType with endowments)
 - No reinforcement learning or evolutionary dynamics beyond belief updates
+
+**No manifest/orchestrator services**
+- Experiment manifests, execution orchestration, and artifact bundling are Gate B work
+- Current batch runs are script-driven, not product-service-driven
 
 ### Scale Boundaries
 
 **Recommended agent count: 2-200**
-- Minimum: 2 agents (need at least a pair for trade)
 - Optimal: 50-100 agents (market emergence visible, reasonable runtime)
-- Maximum tested: 200 agents (runs but slower; ~5 minutes for 100 ticks)
-- Not recommended: >500 agents (untested, may be slow)
+- Maximum tested: 200 agents (~5 minutes for 100 ticks)
 
 **Grid size relative to agents**
-- Minimum: grid_size >= 5 (smaller grids work but limited movement)
 - Recommended: grid_size >= sqrt(n_agents) to avoid excessive crowding
-- Crowding is allowed (multiple agents per cell) but affects dynamics
-
-### Edge Cases Handled
-
-**Degenerate economic cases:**
-- Zero utility (one endowment component = 0) → trades still compute, returns 0 gains
-- No gains from trade (identical preferences + endowments) → graceful no-op
-- Extreme endowment imbalance (1000:0.01) → handles correctly
-
-**Invalid configurations:**
-- alpha ∉ (0, 1) → clear ValueError with message
-- negative endowments → clear ValueError with message
-- grid_size < 1 → clear ValueError with message
-- noise_std < 0 → clear ValueError with message
-
-### Visualization
-
-**No scenario editor GUI**
-- YAML scenario files can be loaded but not created/edited in UI
-- Must edit YAML files manually for custom scenarios
-
-**No MP4/video export**
-- GIF export available but no MP4/video format
-- For video, must screen-record or convert GIF externally
-
-**No bargaining sequence replay**
-- Edgeworth box shows final trade outcome only
-- Cannot step through offer/counter-offer sequence (Rubinstein)
 
 ---
 
 ## 3. Architecture Notes
-
-### Agent State Separation
-
-Agents have architecturally distinct components:
-
-```
-AgentPrivateState     AgentType (Observable)
-├── preferences       ├── preferences*
-├── endowment         ├── endowment*
-└── discount_factor   └── discount_factor*
-
-* Currently identical (FullInformation)
-  Future: type may differ from private state
-```
-
-This separation exists specifically to support future information asymmetry work.
-
-### Bargaining Protocol Interface
-
-```python
-class BargainingProtocol(ABC):
-    @abstractmethod
-    def execute(self, agent_a, agent_b, info_env) -> TradeResult | None:
-        """Execute bargaining between two agents."""
-        pass
-```
-
-New protocols (TIOLI, posted prices, double auction) implement this interface.
 
 ### Simulation Phases (Three-Phase Tick)
 
 Each tick executes in order (per ADR-001):
 
 1. **Perceive**: All agents observe frozen state (simultaneous snapshot)
-   - Perception radius and information environment apply
-   - No agent sees another's pending decision
+2. **Decide**: All agents select ONE action (MoveAction, ProposeAction, WaitAction)
+3. **Execute**: Matching protocol resolves proposals, trades execute, cooldowns apply, fallback actions run
 
-2. **Decide**: All agents select ONE action from available_actions()
-   - DecisionProcedure.choose() executes for each agent
-   - Decisions are simultaneous; no agent observes another's choice
-   - Actions: MoveAction, ProposeAction, WaitAction
+### Key Interfaces
 
-3. **Execute**: Conflict resolution and state transitions
-   - Proposals evaluated against target's opportunity cost
-   - Accepted proposals trigger bargaining and trade
-   - Rejected proposals trigger cooldowns and fallback execution
-   - All state changes applied atomically
+```python
+class BargainingProtocol(ABC):
+    def solve(self, agent_a, agent_b, ...) -> BargainingSolution | None: ...
+    def execute(self, agent_a, agent_b, info_env, rng) -> TradeResult | None: ...
 
-**Key properties**:
-- Simultaneous decision: All agents decide based on same frozen state
-- Explicit action selection: Agents choose from enumerated action set
-- Transaction costs as ticks: Proposals, rejections, movement all cost time
+class MatchingProtocol(ABC):
+    def resolve(self, propose_actions, agents, positions,
+                decision_procedure, bargaining_protocol,
+                action_context) -> MatchResult: ...
+```
+
+### Agent State Separation
+
+```
+AgentPrivateState     AgentType (Observable)
++-- preferences       +-- preferences*
++-- endowment         +-- endowment*
++-- discount_factor   +-- discount_factor*
+
+* Controlled by InformationEnvironment
+  FullInformation: identical to private state
+  NoisyAlphaInformation: alpha + noise
+```
 
 ---
 
 ## 4. Entry Points
 
 ```bash
-# Run web frontend (recommended)
+# Web frontend (recommended)
 ./scripts/dev.sh
-# Or manually:
-uv run uvicorn server.app:create_app --factory --port 8000  # Terminal 1
-cd frontend && npm run dev                                   # Terminal 2
-# Open http://localhost:5173
 
-# Run batch comparison (bargaining protocols)
-uv run python -c "
-from microecon.batch import run_comparison
-results = run_comparison(n_agents=10, ticks=100, seeds=range(5))
-for r in results:
-    print(f'{r.config.protocol_name}: {r.summary}')
-"
+# Research workflow (protocol comparison)
+uv run python scripts/research_workflow.py
 
-# Run market emergence analysis
-uv run python -c "
-from microecon.scenarios import run_demonstration
-run_demonstration(n_agents=30, ticks=100)
-"
-
-# Run tests
-uv run pytest
-
-# Run tests with coverage
-uv run pytest --cov=microecon
+# Tests
+uv run pytest                        # All
+uv run pytest -m contract            # Schema conformance
+uv run pytest -m determinism         # Determinism gate
+uv run pytest -m theory              # Theory verification
+uv run pytest --cov=microecon        # Coverage
 ```
 
 ---
 
-## 5. Gaps vs Vision Documents
+## 5. Gaps vs Vision
 
-### vs VISION.md
+Status relative to `docs/VISION/VISION-WORKFLOW-MASTER-SPEC.md`:
 
 | Vision Goal | Status |
 |-------------|--------|
-| Institutional visibility (swap protocols) | **Implemented** for bargaining; matching via actions (not swappable yet) |
-| Equilibrium benchmarks | Bargaining only; no Walrasian/GE |
+| Institutional visibility (swap protocols) | **Implemented** for bargaining and matching |
 | Information regimes | **Implemented** (FullInformation, NoisyAlphaInformation) |
-| Search/matching mechanisms | **Partial** (bilateral proposal via actions; theory-based matching is future work) |
-| Agent sophistication levels | **Implemented** (belief-enabled vs simple agents, Bayesian vs heuristic updates) |
-| Agent beliefs and learning | **Implemented** (type beliefs, memory, belief updates during trade) |
-| Market emergence metrics | **Implemented** (trade networks, welfare efficiency, spatial clustering) |
-
-### vs Archived Visualization Specifications
-
-| Design Element | Status |
-|----------------|--------|
-| Web frontend (React/Vite) | **Implemented** (primary UI) |
-| Grid + agents + tooltips | **Implemented** |
-| Play/pause/speed controls | **Implemented** |
-| Movement trails | **Implemented** (toggleable) |
-| Trade animations | **Implemented** |
-| Replay mode | **Implemented** |
-| Dual viewport comparison | **Implemented** |
-| Timeline event markers | **Implemented** (trades, commitments) |
-| Comparison mode entry points | **Implemented** (bargaining + matching) |
-| Time-series charts | **Implemented** (welfare, trades over time) |
-| Setup/Run/Analyze modes | Partial (config modal for setup) |
-| Overlay toggles | **Implemented** (trails, perception, heatmap, network) |
-| Trade zoom (Edgeworth box) | **Implemented** |
-| Agent perspective mode | **Implemented** |
-| Export (PNG/GIF/CSV/JSON) | **Implemented** (no MP4) |
-| Config files (YAML/JSON) | **Implemented** (YAML scenarios) |
-| Scenario browser | **Implemented** (YAML loading) |
-| Trade Network Panel | **Implemented** (separate window) |
-| Live config modal | **Implemented** (institutional params) |
-
-### vs DESIGN_dashboard_integration.md
-
-| Phase | Status |
-|-------|--------|
-| Phase 1: Comparison View MVP | **Complete** |
-| Phase 2: Scenario Pipeline | **Complete** (YAML scenarios, run_market_emergence) |
-| Phase 3: Timeline & Charts | **Complete** (time-series panels) |
-| Phase 4: Polish & Export | **Complete** (export capabilities, Edgeworth box, overlays) |
+| Agent beliefs and learning | **Implemented** (type beliefs, memory, Bayesian/heuristic updates) |
+| Matching/clearing abstraction | **Implemented** (MatchingProtocol ABC, 2 implementations) |
+| Schema contracts and versioning | **Implemented** (v1.0, compatibility policy, conformance tests) |
+| Deterministic reproducibility | **Implemented** (seeded reruns, tolerance policy, 10 determinism tests) |
+| Research workflow proof | **Implemented** (scripted end-to-end, A-250) |
+| Experiment manifest service | **Not started** (Gate B) |
+| Execution orchestrator | **Not started** (Gate B) |
+| Research/education track UIs | **Not started** (Gate B) |
+| Narrative record and traceability | **Not started** (Gate B) |
+| Publication bundles and audit | **Not started** (Gate C) |
 
 ---
 
 ## 6. File Structure
 
 ```
-microecon/                   # Core simulation library (Python)
-├── __init__.py
-├── bundle.py                # 2-good bundles
-├── preferences.py           # Utility functions (Cobb-Douglas)
-├── agent.py                 # Agent with private state, InteractionState, cooldowns
-├── grid.py                  # Spatial grid and positions
-├── information.py           # Information environments (Full, NoisyAlpha)
-├── beliefs.py               # Agent memory, type/price beliefs, update rules
-├── bargaining.py            # Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI)
-├── search.py                # Target evaluation and movement
-├── actions.py               # Action ABC: Move, Propose, Accept, Reject, Wait
-├── decisions.py             # DecisionProcedure interface, RationalDecisionProcedure
-├── matching.py              # Documentation only (matching via actions.py)
-├── simulation.py            # Main simulation engine (three-phase tick)
-├── batch.py                 # BatchRunner for parameter sweeps
-├── logging/
-│   ├── events.py            # TickRecord, TradeEvent, SearchDecision, BeliefSnapshot
-│   ├── logger.py            # SimulationLogger captures full state
-│   └── formats.py           # JSON lines format
-├── analysis/
-│   ├── loader.py            # Load runs from disk
-│   ├── timeseries.py        # Welfare/trades over time
-│   ├── distributions.py     # Cross-run statistical comparisons
-│   ├── tracking.py          # Agent-level outcome tracking
-│   └── emergence.py         # Market emergence metrics
-└── scenarios/
-    ├── schema.py            # YAML scenario schema
-    ├── loader.py            # Scenario loading utilities
-    └── market_emergence.py  # MarketEmergenceConfig, run_market_emergence
+microecon/                   # Core simulation library
++-- bundle.py                # 2-good bundles
++-- preferences.py           # Cobb-Douglas utility
++-- agent.py                 # Agent with private state, InteractionState, cooldowns
++-- grid.py                  # NxN toroidal grid, positions, movement
++-- information.py           # Information environments (Full, NoisyAlpha)
++-- beliefs.py               # Agent memory, type/price beliefs, update rules
++-- bargaining.py            # Bargaining protocols (Nash, Rubinstein, Asymmetric Nash, TIOLI)
++-- matching.py              # MatchingProtocol ABC, BilateralProposalMatching, CentralizedClearingMatching
++-- search.py                # Target evaluation and movement
++-- actions.py               # Action types: Move, Propose, Accept, Reject, Wait
++-- decisions.py             # DecisionProcedure interface, RationalDecisionProcedure
++-- simulation.py            # Three-phase tick engine, create_simple_economy() factory
++-- batch.py                 # BatchRunner for parameter sweeps
++-- logging/
+|   +-- events.py            # Canonical schema: SimulationConfig, TradeEvent, TickRecord, RunSummary
+|   +-- logger.py            # SimulationLogger with run_id generation
+|   +-- formats.py           # JSON lines format, version validation
++-- analysis/
+|   +-- loader.py            # Load runs from disk
+|   +-- timeseries.py        # Welfare/trades over time
+|   +-- distributions.py     # Cross-run statistical comparisons
+|   +-- tracking.py          # Agent-level outcome tracking
+|   +-- emergence.py         # Market emergence metrics
++-- scenarios/
+    +-- schema.py            # YAML scenario schema
+    +-- loader.py            # Scenario loading utilities
+    +-- market_emergence.py  # MarketEmergenceConfig
 
 server/                      # FastAPI WebSocket server
-├── app.py                   # Application factory
-├── websocket.py             # WebSocket handlers
-├── simulation_manager.py    # Simulation lifecycle, multi-sim support
-└── routes.py                # REST API (scenarios, runs)
++-- app.py                   # Application factory
++-- websocket.py             # WebSocket handlers
++-- simulation_manager.py    # Simulation lifecycle, config conversion
++-- routes.py                # REST API (config, scenarios, runs, replay)
 
-frontend/                    # React/Vite web UI
-└── src/
-    ├── App.tsx              # Main application layout
-    ├── components/
-    │   ├── Grid/            # GridCanvas, AgentTooltip
-    │   ├── Charts/          # WelfareChart, TradeCountChart
-    │   ├── Controls/        # OverlayToggles, PerspectiveMode
-    │   ├── Config/          # ConfigModal, ExportMenu
-    │   ├── Beliefs/         # BeliefPanel
-    │   ├── Network/         # NetworkPanel, TradeNetwork
-    │   ├── TradeInspection/ # TradeHistoryPanel, EdgeworthBox
-    │   ├── Comparison/      # DualGridView, ComparisonControls, ComparisonChart
-    │   ├── Replay/          # ReplayLoader, TimelineSlider, ReplayView
-    │   └── Scenarios/       # ScenarioBrowser
-    ├── hooks/
-    │   ├── useSimulationSocket.ts  # WebSocket connection
-    │   └── useKeyboardShortcuts.ts # Keyboard shortcuts
-    └── store/               # Zustand state management
-        ├── index.ts         # Main simulation store
-        ├── comparisonStore.ts
-        └── replayStore.ts
+scripts/
++-- generate_ts_types.py     # Python schema -> TypeScript types
++-- research_workflow.py     # End-to-end protocol comparison workflow
 
-scenarios/                   # YAML scenario definitions
-├── two_agent_baseline.yaml
-├── hub_and_spoke.yaml
-└── trading_chain.yaml
+frontend/src/                # React 19 + Zustand + Vite
++-- App.tsx
++-- components/
+|   +-- Grid/                # GridCanvas, AgentTooltip
+|   +-- Charts/              # WelfareChart, TradeCountChart
+|   +-- Controls/            # OverlayToggles, PerspectiveMode
+|   +-- Config/              # ConfigModal, ExportMenu
+|   +-- Beliefs/             # BeliefPanel
+|   +-- Network/             # NetworkPanel, TradeNetwork
+|   +-- TradeInspection/     # TradeHistoryPanel, EdgeworthBox, EdgeworthModal
+|   +-- Comparison/          # DualGridView, ComparisonControls, ComparisonChart
+|   +-- Replay/              # ReplayLoader, TimelineSlider, ReplayView
+|   +-- Scenarios/           # ScenarioBrowser
+|   +-- Layout/              # MainLayout
+|   +-- ui/                  # Shadcn-style Radix primitives
++-- hooks/                   # useSimulationSocket, useKeyboardShortcuts, useContainerSize
++-- store/                   # Zustand: index, comparisonStore, replayStore
++-- types/                   # canonical.ts (auto-generated), simulation.ts
++-- lib/                     # chartConfig, colors, gridUtils, utils
 
 tests/
-├── theory/                  # Theory verification tests
-│   ├── test_nash_bargaining.py
-│   ├── test_rubinstein_bargaining.py
-│   ├── test_asymmetric_nash_protocol.py  # Weighted Nash product
-│   ├── test_tioli_bargaining.py          # Take-it-or-leave-it
-│   ├── test_action_budget_theory.py      # Action budget model theory verification
-│   ├── test_action_budget_scenarios.py   # Action budget model scenarios
-│   ├── test_action_budget_edge_cases.py  # Action budget model edge cases
-│   ├── test_preferences.py
-│   ├── test_gains_from_trade.py
-│   └── test_pareto_efficiency.py
-├── test_beliefs.py          # Belief system tests
-├── test_matching.py         # Matching mechanism documentation tests
-└── ...                      # Other test modules
++-- theory/                  # Bargaining theory verification
++-- scenarios/               # Scenario-based integration tests
++-- test_contract_conformance.py  # 4-level schema conformance
++-- test_determinism.py      # Seeded rerun equivalence
++-- test_matching.py         # Matching protocol tests
++-- test_matching_conformance.py  # Protocol contract conformance
++-- test_simulation.py       # Simulation engine tests
++-- ...                      # 44 test files total
 
-.archived/                   # Archived implementations
-└── visualization-dearpygui/ # Original DearPyGui desktop app
+docs/
++-- VISION/                  # Master spec, implementation plan, execution board
++-- adr/                     # 6 architectural decision records (ADR-001 through ADR-006)
++-- contracts/               # Schema v1, compatibility policy, determinism policy
++-- current/                 # AGENT-ARCHITECTURE.md (implementation reference)
++-- plans/                   # Active implementation plans
++-- CONTRIBUTING.md          # Schema change protocol, PR checklist
 ```
 
 ---
 
-**Document Version:** 0.4.0
-**Last Updated:** 2026-01-10 (action-budget tick model, propose/accept/reject matching)
+**Document Version:** 0.5.0
+**Last Updated:** 2026-03-02 (Gate A: Foundation Coherence complete)

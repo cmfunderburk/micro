@@ -1,10 +1,13 @@
 # Vision Workflow Execution Board
 
-**Status:** Draft  
-**Version:** 0.1  
-**Date:** 2026-02-18  
-**Upstream Plan:** `docs/VISION/VISION-WORKFLOW-IMPLEMENTATION-PLAN.md`  
+**Status:** Active
+**Version:** 0.2
+**Date:** 2026-03-02
+**Upstream Plan:** `docs/VISION/VISION-WORKFLOW-IMPLEMENTATION-PLAN.md`
 **Target Spec:** `docs/VISION/VISION-WORKFLOW-MASTER-SPEC.md`
+
+> **Gate A: COMPLETE** (merged 2026-03-02, PR #5). 848 tests, 48 contract, 10 determinism. All 4 epics done.
+> **Gate B: Next.** Priority: B-E1 (Manifest/Orchestrator) then B-E3 (Research Workflow).
 
 ---
 
@@ -58,11 +61,15 @@ Use these labels consistently:
 
 ---
 
-## 4. Gate A Board (Foundation Coherence)
+## 4. Gate A Board (Foundation Coherence) — COMPLETE
+
+> All 22 issues across 4 epics completed and merged into `main` (PR #5, 2026-03-02).
+> Evidence: 835 tests passing, 48 contract conformance, 10 determinism gate, frontend lint clean, frontend build passes.
+> Implementation plans archived to `.archived/docs/gate-a-completion/`.
 
 ### EPIC A-E1: Stabilization and Trust Restoration
-**Labels:** `gate:A`, `priority:P0`, `type:epic`  
-**Depends On:** none  
+**Labels:** `gate:A`, `priority:P0`, `type:epic`
+**Depends On:** none
 **Definition of Done:** A-001 through A-007 complete.
 
 ### A-001: Replay loader schema mismatch fix
@@ -646,33 +653,29 @@ Priority order for Gate B execution:
 
 ---
 
-## 7. Immediate Sprint Candidate (Next 2 Weeks)
+## 7. Immediate Sprint Candidate
 
-Create first sprint from these issues:
-1. A-001
-2. A-002
-3. A-003
-4. A-005
-5. A-006
-6. A-004
-7. A-101 (draft-only scope: schema proposal doc + review)
-8. A-007 (backend contract + config-path slice)
+Gate B, starting with B-E1 (Manifest and Orchestrator Services):
+1. B-101: Manifest schema MVP
+2. B-102: Manifest validator and compatibility checker
+3. B-103: Manifest persistence API
+4. B-104: Execution orchestrator API
 
 Sprint exit criteria:
-- Core P0 correctness issues closed (A-001 through A-006)
-- A-007 backend contract slice merged and test-covered
-- Gate A contract work kicked off with approved schema design draft
+- Manifest schema defined and validated
+- Manifests persist and retrieve via API
+- Orchestrator can launch single/batch runs from manifests
 
 ---
 
 ## 8. Gate Promotion Checklist
 
-### Promote Gate A
-- A-E1 complete
-- A-E2 complete
-- A-E3 complete
-- A-E4 complete
-- Determinism and contract CI evidence attached
+### Promote Gate A — PROMOTED 2026-03-02
+- [x] A-E1 complete
+- [x] A-E2 complete
+- [x] A-E3 complete
+- [x] A-E4 complete
+- [x] Determinism and contract CI evidence attached (PR #5)
 
 ### Promote Gate B
 - B-E1 complete

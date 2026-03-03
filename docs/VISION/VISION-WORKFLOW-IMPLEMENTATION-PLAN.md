@@ -1,9 +1,11 @@
 # Vision Workflow Implementation Plan
 
-**Status:** Draft  
-**Version:** 0.1  
-**Date:** 2026-02-18  
+**Status:** Active
+**Version:** 0.2
+**Date:** 2026-03-02
 **Primary Target:** `docs/VISION/VISION-WORKFLOW-MASTER-SPEC.md` (v0.2, 2026-02-13)
+
+> **Gate A completed 2026-03-02** (PR #5). Evidence baseline refreshed below. Gate B is next.
 
 ---
 
@@ -37,15 +39,18 @@ This is an implementation plan, not a product vision replacement.
 
 ---
 
-## 3. Evidence Baseline (Current State)
+## 3. Evidence Baseline (Current State — refreshed 2026-03-02)
 
-This plan is grounded in direct code and test validation:
-- `uv run pytest -q` passed (`716 passed, 15 skipped`)
+Post-Gate A validation:
+- `uv run pytest -q`: 835 passed, 15 skipped (848 collected)
+- `uv run pytest -m contract`: 48 passed (4-level schema conformance)
+- `uv run pytest -m determinism`: 10 passed (all protocols + matching + noisy info + beliefs)
 - `frontend` build passes (`npm run build`)
-- `frontend` lint fails (`npm run lint`: 5 errors, 2 warnings)
-- Replay endpoint currently breaks on current log schema (`/api/runs/{run}` path mapping mismatch)
-- Matching remains embedded (non-swappable)
-- No manifest/artifact service stack exists at master-spec level
+- `frontend` lint clean (`npm run lint`)
+- Replay endpoint functional against current log schema
+- Matching is swappable via `MatchingProtocol` ABC (BilateralProposalMatching, CentralizedClearingMatching)
+- Schema versioned at 1.0 with N/N-1 compatibility policy
+- No manifest/artifact service stack exists at master-spec level (Gate B scope)
 
 Key implementation sources:
 - `microecon/simulation.py`

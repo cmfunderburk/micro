@@ -1,4 +1,4 @@
-"""Tests for experiment manifest data model (B-101)."""
+"""Tests for experiment manifest data model (B-101) and validation (B-102)."""
 
 import pytest
 
@@ -8,6 +8,7 @@ from microecon.manifest import (
     TreatmentArm,
     SeedPolicy,
     MANIFEST_SCHEMA_VERSION,
+    validate_manifest,
 )
 
 
@@ -104,3 +105,93 @@ class TestManifestSerialization:
         d = arm.to_dict()
         restored = TreatmentArm.from_dict(d)
         assert restored == arm
+
+
+@pytest.mark.orchestrator
+class TestManifestValidation:
+    """Test manifest validation rules (B-102)."""
+
+    def test_valid_manifest_passes(self):
+        m = _make_manifest()
+        errors = validate_manifest(m)
+        assert errors == []
+
+    def test_too_few_treatments(self):
+        m = _make_manifest(treatments=[
+            TreatmentArm(name="only_one", description="solo", overrides={}),
+        ], run_budget=3)
+        errors = validate_manifest(m)
+        assert any("at least 2" in e for e in errors)
+
+    def test_empty_seeds(self):
+        m = _make_manifest(seed_policy=SeedPolicy(seeds=[]), run_budget=0)
+        errors = validate_manifest(m)
+        assert any("seed" in e.lower() for e in errors)
+
+    def test_wrong_run_budget(self):
+        m = _make_manifest(run_budget=999)
+        errors = validate_manifest(m)
+        assert any("run_budget" in e for e in errors)
+
+    def test_invalid_n_agents(self):
+        m = _make_manifest(base_config=BaseConfig(n_agents=0, grid_size=15, ticks=100))
+        errors = validate_manifest(m)
+        assert any("n_agents" in e for e in errors)
+
+    def test_invalid_grid_size(self):
+        m = _make_manifest(base_config=BaseConfig(n_agents=10, grid_size=-1, ticks=100))
+        errors = validate_manifest(m)
+        assert any("grid_size" in e for e in errors)
+
+    def test_invalid_ticks(self):
+        m = _make_manifest(base_config=BaseConfig(n_agents=10, grid_size=15, ticks=0))
+        errors = validate_manifest(m)
+        assert any("ticks" in e for e in errors)
+
+    def test_unknown_bargaining_protocol(self):
+        m = _make_manifest(treatments=[
+            TreatmentArm(name="a", description="a", overrides={"bargaining_protocol": "unknown"}),
+            TreatmentArm(name="b", description="b", overrides={"bargaining_protocol": "nash"}),
+        ])
+        errors = validate_manifest(m)
+        assert any("bargaining_protocol" in e for e in errors)
+
+    def test_unknown_matching_protocol(self):
+        m = _make_manifest(treatments=[
+            TreatmentArm(name="a", description="a", overrides={"matching_protocol": "invalid"}),
+            TreatmentArm(name="b", description="b", overrides={}),
+        ])
+        errors = validate_manifest(m)
+        assert any("matching_protocol" in e for e in errors)
+
+    def test_duplicate_treatment_names(self):
+        m = _make_manifest(treatments=[
+            TreatmentArm(name="same", description="a", overrides={"bargaining_protocol": "nash"}),
+            TreatmentArm(name="same", description="b", overrides={"bargaining_protocol": "rubinstein"}),
+        ])
+        errors = validate_manifest(m)
+        assert any("unique" in e.lower() or "duplicate" in e.lower() for e in errors)
+
+    def test_duplicate_seeds(self):
+        m = _make_manifest(seed_policy=SeedPolicy(seeds=[1, 1, 2]), run_budget=6)
+        errors = validate_manifest(m)
+        assert any("duplicate" in e.lower() or "unique" in e.lower() for e in errors)
+
+    def test_unknown_override_key(self):
+        m = _make_manifest(treatments=[
+            TreatmentArm(name="a", description="a", overrides={"nonexistent_field": 42}),
+            TreatmentArm(name="b", description="b", overrides={}),
+        ])
+        errors = validate_manifest(m)
+        assert any("nonexistent_field" in e for e in errors)
+
+    def test_multiple_errors_returned(self):
+        """Validation should return ALL errors, not just the first."""
+        m = _make_manifest(
+            base_config=BaseConfig(n_agents=0, grid_size=-1, ticks=0),
+            treatments=[TreatmentArm(name="only", description="solo", overrides={})],
+            seed_policy=SeedPolicy(seeds=[]),
+            run_budget=999,
+        )
+        errors = validate_manifest(m)
+        assert len(errors) >= 4

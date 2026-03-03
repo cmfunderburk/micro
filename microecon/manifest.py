@@ -147,3 +147,88 @@ class ExperimentManifest:
             seed_policy=SeedPolicy.from_dict(d["seed_policy"]),
             run_budget=d["run_budget"],
         )
+
+
+# ---------------------------------------------------------------------------
+# Manifest validation (B-102)
+# ---------------------------------------------------------------------------
+
+_VALID_BARGAINING_PROTOCOLS = {"nash", "rubinstein", "tioli", "asymmetric_nash"}
+_VALID_MATCHING_PROTOCOLS = {"bilateral_proposal", "centralized_clearing"}
+_VALID_INFO_ENVS = {"full", "full_information", "noisy_alpha"}
+_VALID_OVERRIDE_KEYS = {
+    "bargaining_protocol", "matching_protocol",
+    "info_env_name", "info_env_params",
+    "perception_radius", "discount_factor", "use_beliefs",
+    "n_agents", "grid_size", "ticks",
+    "bargaining_power_distribution",
+}
+
+
+def validate_manifest(manifest: ExperimentManifest) -> list[str]:
+    """Validate a manifest and return a list of error messages.
+
+    Returns an empty list if the manifest is valid.
+    """
+    errors: list[str] = []
+
+    # Treatment count
+    if len(manifest.treatments) < 2:
+        errors.append(
+            f"Manifest must have at least 2 treatment arms, got {len(manifest.treatments)}"
+        )
+
+    # Seed policy
+    if len(manifest.seed_policy.seeds) < 1:
+        errors.append("seed_policy must contain at least 1 seed")
+
+    if len(manifest.seed_policy.seeds) != len(set(manifest.seed_policy.seeds)):
+        errors.append("seed_policy contains duplicate seeds")
+
+    # Run budget
+    expected_budget = len(manifest.treatments) * len(manifest.seed_policy.seeds)
+    if manifest.run_budget != expected_budget:
+        errors.append(
+            f"run_budget ({manifest.run_budget}) does not match "
+            f"treatments ({len(manifest.treatments)}) x seeds ({len(manifest.seed_policy.seeds)}) "
+            f"= {expected_budget}"
+        )
+
+    # Base config bounds
+    bc = manifest.base_config
+    if bc.n_agents <= 0:
+        errors.append(f"n_agents must be > 0, got {bc.n_agents}")
+    if bc.grid_size <= 0:
+        errors.append(f"grid_size must be > 0, got {bc.grid_size}")
+    if bc.ticks <= 0:
+        errors.append(f"ticks must be > 0, got {bc.ticks}")
+
+    # Treatment arm names
+    arm_names = [t.name for t in manifest.treatments]
+    if len(arm_names) != len(set(arm_names)):
+        errors.append("Treatment arm names must be unique")
+
+    # Override validation
+    for arm in manifest.treatments:
+        for key, value in arm.overrides.items():
+            if key not in _VALID_OVERRIDE_KEYS:
+                errors.append(
+                    f"Treatment '{arm.name}': unknown override key '{key}'"
+                )
+            if key == "bargaining_protocol" and value not in _VALID_BARGAINING_PROTOCOLS:
+                errors.append(
+                    f"Treatment '{arm.name}': invalid bargaining_protocol '{value}'. "
+                    f"Valid: {sorted(_VALID_BARGAINING_PROTOCOLS)}"
+                )
+            if key == "matching_protocol" and value not in _VALID_MATCHING_PROTOCOLS:
+                errors.append(
+                    f"Treatment '{arm.name}': invalid matching_protocol '{value}'. "
+                    f"Valid: {sorted(_VALID_MATCHING_PROTOCOLS)}"
+                )
+            if key == "info_env_name" and value not in _VALID_INFO_ENVS:
+                errors.append(
+                    f"Treatment '{arm.name}': invalid info_env_name '{value}'. "
+                    f"Valid: {sorted(_VALID_INFO_ENVS)}"
+                )
+
+    return errors
